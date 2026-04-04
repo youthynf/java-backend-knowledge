@@ -1,0 +1,22 @@
+[
+  {
+    "title": "MySQL 数据库",
+    "file": "mysql/README.md",
+    "dir": "mysql"
+  },
+  {
+    "title": "MySQL 索引与查询优化",
+    "file": "mysql/index-optimization.md",
+    "dir": "mysql"
+  },
+  {
+    "title": "Redis 缓存",
+    "file": "redis/README.md",
+    "dir": "redis"
+  },
+  {
+    "title": "Redis 数据类型详解",
+    "file": "redis/data-structures.md",
+    "dir": "redis"
+  }
+]

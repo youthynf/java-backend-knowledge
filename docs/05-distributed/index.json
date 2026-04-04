@@ -1,0 +1,12 @@
+[
+  {
+    "title": "分布式锁详解",
+    "file": "distributed-lock.md",
+    "dir": ""
+  },
+  {
+    "title": "分布式理论",
+    "file": "theory/README.md",
+    "dir": "theory"
+  }
+]
