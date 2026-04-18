@@ -1,5 +1,40 @@
 [
   {
+    "title": "Java 基础",
+    "file": "basics/README.md",
+    "dir": "basics"
+  },
+  {
+    "title": "BigDecimal 金额计算",
+    "file": "basics/bigdecimal.md",
+    "dir": "basics"
+  },
+  {
+    "title": "equals 与 hashCode",
+    "file": "basics/equals-hashcode.md",
+    "dir": "basics"
+  },
+  {
+    "title": "String 池化机制",
+    "file": "basics/string-pool.md",
+    "dir": "basics"
+  },
+  {
+    "title": "String.intern 方法",
+    "file": "basics/string-intern.md",
+    "dir": "basics"
+  },
+  {
+    "title": "深拷贝与浅拷贝",
+    "file": "basics/deep-copy-shallow-copy.md",
+    "dir": "basics"
+  },
+  {
+    "title": "序列化与 transient",
+    "file": "basics/serialization-transient.md",
+    "dir": "basics"
+  },
+  {
     "title": "Java 并发编程",
     "file": "concurrency/README.md",
     "dir": "concurrency"
