@@ -1,0 +1,22 @@
+# Tomcat的类加载机制是怎么样的？
+
+Tomcat的类加载机制是怎么样的？
+为什么Tomcat的类加载器也不是双亲委派模型
+我们知道，Java默认的类加载机制是通过双亲委派模型来实现的，而Tomcat实现的方式又和双亲委派模型有所区别。原因在于一个Tomcat容器允许同时运行多个Web程序，每个Web程序依赖的类又必须是相互隔离的。因此，如果Tomcat使用双亲委派模式来加载类的话，将导致Web程序依赖的类变为共享的。
+举个例子，假如我们有两个Web程序，一个依赖A库的1.0版本，另一个依赖A库的2.0版本，他们都使用了类xxx.xx.Clazz，其实现的逻辑因类库版本的不同而结构完全不同。那么这两个Web程序的其中一个必然因为加载的Clazz不是所使用的Clazz而出现问题！而这对于开发来说是非常致命的！
+Tomcat类加载器
+Bootstrap ClassLoader：启动类加载器
+Extension ClassLoader：扩展类加载器
+Application ClassLoader：应用程序类加载器
+Common ClassLoader：Common类加载器
+4.1 CataLina ClassLoader：CataLina类加载器
+4.2 Shared ClassLoader：Shared类加载器→WebApp ClassLoader → JasperLoader
+
+除了Jdk自带的类加载器，我们尤其关心Tomcat自身持有的类加载器。仔细一点我们很容易发现：Catalina类加载器和Shared类加载器，他们并不是父子关系，而是兄弟关系。为啥这样设计，我们得分析一下每个类加载器的用途：
+Common类加载器：负责加载Tomcat和Web应用都复用的类
+Catalina类加载器：负责加载Tomcat专用的类，而这些被加载的类在Web应用中将不可见；
+Shared类加载器：负责加载Tomcat下所有的Web应用程序都复用的类，而这些被加载的类在Tomcat中将不可见；
+WebApp类加载器：负责加载具体的某个Web应用程序所使用到的类，而这些被加载的类在Tomcat和其他的Web应用程序都将不可见；
+Jsp类加载器：每个jsp页面一个类加载器，不同的jsp页面有不同的类加载器，方便实现jsp页面的热插拔；
+
+同样的，我们可以看到通过ContextClassLoader（上下文类加载器）的setContextClassLoader来传入自己实现的类加载器。

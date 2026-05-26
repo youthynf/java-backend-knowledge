@@ -1,0 +1,14 @@
+# ThreadPoolExecutor线程池有哪些拒绝策略？
+
+ThreadPoolExecutor线程池有哪些拒绝策略？
+四种预置的拒绝策略：
+AbortPolicy（默认策略）：直接抛出RejectedExecutionException异常，阻止系统继续运行。
+CallerRunsPolicy：由调用线程（提交任务的线程）来执行被拒绝的任务，这样做会降低新任务的提交速度，给线程池一定时间来处理积压的任务。
+DiscardOldestPolicy：丢弃任务队列中最旧的（也就是最早进入队列的）那个任务，然后尝试重新提交当前被拒绝的任务。
+DiscardPolicy：直接丢弃被拒绝的新任务，不做任何处理，也不会抛出异常。
+自定义拒绝策略：通过实现RejectedExecutionHandler接口，实现rejectedExecution()方法来自定义拒绝策略；
+
+自定义拒绝策略步骤
+实现RejectedExecutionHandler接口：该接口只有一个方法rejectedExecution(Runnable r, ThreadPoolExecutor executor)，在这个方法中定义当任务被拒绝时的具体处理逻辑；
+实现rejectedExecution()方法：可以根据业务需求进行不同的处理，比如将被拒绝的任务记录到日志中、存储到其他的备份队列等待后续处理、发送通知等操作；
+助记：四种预设策略：抛RejectedExecutionException异常、提交线程执行、抛弃最久、抛弃新任务； 自定义拒绝策略：实现RejectedExecutionHandler接口，实现rejectedExecution方法。

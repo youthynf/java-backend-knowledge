@@ -1,0 +1,33 @@
+# Java有哪些引用类型？
+
+Java有哪些引用类型？
+引用类型氛围强软弱虚四种：
+强引用：
+代码中普遍存在的赋值方式，比如A a = new A()这种。强引用关联的对象，永远不会被GC回收；
+
+Object obj = new Object();
+
+软引用：
+可以使用SoftReference来描述，指那些有用但是不是必须要的对象，系统发生内存溢出前会对这类引用的对象进行回收；
+
+Object obj = new Object();
+SoftReference<Object> sf = new SoftReference<Object>(obj);
+obj = null;  // 使对象只被软引用关联
+
+弱引用：
+可以使用WeakReference来描述，它的强度比软引用更低一些，弱引用的对象下一次GC的时候一定会被回收，而不管内存是否足够；
+
+Object obj = new Object();
+WeakReference<Object> wf = new WeakReference<Object>(obj);
+obj = null;
+常见使用场景：
+•  缓存系统：弱引用常用来实现缓存，特别是当缓存想能够在内存压力大的情况下自动释放；
+•  对象池：避免一些对象不再被强引用时，能够被垃圾回收，释放内存；
+•  避免内存泄露：当一个对象不应该被长期应用时，防止该对象被长期地意外保留，避免内存泄露；
+
+虚引用：
+又称为幽灵引用，一个对象是否有虚引用，完全不会对其生存时间构成影响，无法通过虚引用来取得一个对象。为一个对象设置虚引用关联的唯一目的是能在这个对象被回收时收到一个系统通知。可以使用PhantomReference来描述，发生GC时也会被回收，主要用在对象回收前的一些操作；
+
+Object obj = new Object();
+PhantomReference<Object> pf = new PhantomReference<Object>(obj);
+obj = null;

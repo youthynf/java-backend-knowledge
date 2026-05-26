@@ -1,0 +1,12 @@
+# Spring Boot核心注解和类
+
+Spring Boot核心注解和类
+@EnableAutoConfiguration：这个注解是实现自动装配的核心注解
+·  @AutoConfigurationPackage：将项目src中main包下的所有组件注册到容器中，例如标注了@Component注解的类等；
+·  @Import{AutoConfigurationImportSelector.class}：自动装配的核心，AutoConfigurationImportSelector是SpringBoot中一个重要的类，实现了ImportSelector接口，负责自动加载和注册符合条件的自动配置类（Auto-Configuration Classes），它通过分析项目类路径和条件决定应该导入哪些自动配置类；
+
+AutoConfigurationImportSelector的主要工作：
+扫描类路径：在应用程序启动时，AutoConfigurationImportSelector会扫描类路径上的META-INF/spring.factories文件，这个文件包含了各种Spring配置和扩展的定义，这里它会查找所有实现了AutoConfiguration接口的类（包括所有引入的starter包下的spring.factories，SpringFactoriesLoader负责加载并合并它们的内容），即自动装配类；
+条件判断：对于每一个被发现的自动配置类，AutoConfigurationImportSelector会使用条件判断机制（通常使用@ConditionOnxxx注解）来确定是否满足导入条件。这些条件可以是配置属性、类是否存在、Bean是否存在等；
+根据条件导入自动配置类：满足条件的自动配置类将被导入到应用程序的上下文中，意味着这些自动配置类会被实例化并应用于应用程序的配置。
+注：自动装配类的本质作用就是执行一些默认的配置操作或者一些功能的基本设定。

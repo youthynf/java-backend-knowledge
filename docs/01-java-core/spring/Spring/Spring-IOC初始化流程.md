@@ -1,0 +1,10 @@
+# Spring IOC初始化流程
+
+Spring IOC初始化流程
+Spring IOC容器初始化的基本步骤：
+初始化入口：初始化的入口在容器的实现中refresh()调用来完成；
+载入Bean定义：对Bean定义载入IOC容器使用的方法是loadBeanDefinition()，执行过程如下：
+•  定位资源文件：通过ResourceLoader来完成资源文件位置的定位，DefaultResourceLoader是默认实现，同时ApplicationContext本身就给出了ResourceLoader的实现，可以从类路径、文件系统、URL等方式来定位资源的位置。如果是XmlBeanFactory作为IOC容器，那么需要为它指定 bean 定义的资源，也就是说 bean 定义文件时通过抽象成 Resource 来被 IOC 容器处理的。
+•  解析资源文件：通过BeanDefinitionReader来完成定义信息的解析和Bean信息的注册。往往使用XmlBeanDefinitionReader来解析Bean的xml定义文件，实际的处理过程是委托给BeanDefinitionParserDelegate完成，从而得到Bean的定义信息，这些信息在Spring中使用BeanDefinition对象来表示。
+•  注册Bean：容器解析得到BeanDefinition后，需要把它在IOC容器中注册，这由IOC实现的BeanDefinitionRegistry接口来实现。注册的过程就是在IOC容器内部维护一个HashMap来保护得到的BeanDefinition的过程。这个HashMap是IOC容器持有Bean信息的场所。
+使用IOC容器对象：可以通过BeanFactory和ApplicationContext来享受到Spring IOC的服务

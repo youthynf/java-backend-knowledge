@@ -1,0 +1,78 @@
+# Redis布隆过滤器如何使用？
+
+Redis布隆过滤器如何使用？
+布隆过滤器原理：
+布隆过滤器由「初始值都为0的位图数组」和「N 个哈希函数」两部分组成。当我们在写入数据库数据时，在布隆过滤器里做个标记，这样下次査询数据是否在数据库时，只需要査询布隆过滤器，如果查询到数据没有被标记，说明不在数据库中。
+布隆过滤器会通过3个操作完成标记：
+使用 N 个哈希函数分别对数据做哈希计算，得到N个哈希值；
+将第一步得到的 N 个哈希值对位图数组的长度取模，得到每个哈希值���位图数组的对应位置；
+将每个哈希值在位图数组的对应位置的值设置为1；
+
+布隆过滤器使用过程：
+在数据库写入数据 x 后，把数据 x 标记在布降过滤器时，数据 x 会被若干个哈希函数分别计算出若干个哈希值，然后在对这些哈希值对数组长度取模，然后把位图数组的对应位置的值设置为 1。当应用要查询数据 x 是否数据库时，通过布隆过滤器只要查到位图数组的这些对应位置的值是否全为1，只要有一个为 0，就认为数据 x 不在数据库中，
+
+布隆过滤器数据准确性说明：
+布降过滤器由于是基于哈希函数实现査找的，高效査找的同时存在哈希冲突的可能性，所以，查询布隆过滤器说数据存在，并不一定证明数据库中存在这个数据，但是查询到数据不存在，数据库中一定就不存在这个数据。
+
+Redis 实现布隆过滤器：
+初始化位图数组：
+
+# 创建足够大的位数组（示例使用2^23=8388608位≈1MB）
+SETBIT bf:filter 8388607 0
+添加元素
+
+# 使用两个哈希函数模拟（实际需要更多）
+HASH1=$(echo -n "item1" | md5sum | cut -c1-8)
+HASH2=$(echo -n "item1" | sha1sum | cut -c1-8)
+DEC1=$((0x$HASH1 % 8388608))
+DEC2=$((0x$HASH2 % 8388608))
+SETBIT bf:filter $DEC1 1
+SETBIT bf:filter $DEC2 1
+检查元素
+
+GETBIT bf:filter $DEC1  # 返回1
+GETBIT bf:filter $DEC2  # 返回1
+# 两个位都为1则认为"可能存在"
+lua 脚本添加元素
+
+local key = KEYS[1]
+local item = ARGV[1]
+local size = tonumber(ARGV[2])
+local k = tonumber(ARGV[3])
+
+local function hash(str, seed)
+    local h = 0
+    for i = 1, #str do
+        h = h * 31 + string.byte(str, i) + seed
+    end
+    return h % size
+end
+
+for i = 1, k do
+    redis.call('SETBIT', key, hash(item, i), 1)
+end
+return 1
+lua 脚本检查元素
+
+local key = KEYS[1]
+local item = ARGV[1]
+local size = tonumber(ARGV[2])
+local k = tonumber(ARGV[3])
+
+local function hash(str, seed)
+    -- 同添加脚本的hash函数
+end
+
+for i = 1, k do
+    if redis.call('GETBIT', key, hash(item, i)) == 0 then
+        return 0
+    end
+end
+return 1
+lua 脚本使用示例
+
+# 添加元素
+redis-cli --eval bloom_add.lua bf:filter , "user123" 8388608 3
+
+# 检查元素
+redis-cli --eval bloom_check.lua bf:filter , "user123" 8388608 3

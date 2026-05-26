@@ -1,0 +1,17 @@
+# synchronized与volatile比较
+
+synchronized与volatile比较
+volatile关键字的作用
+保证变量对所有线程的可见性：volatile变量的读写操作会直接操作主内存，而不是线程的本地缓存。这意味着一个线程对volatile变量的修改对其他线程立即可见。
+禁止指令重排序：编译器和CPU在执行程序时，为了提高性能，可能会对指令进行重排序。volatile关键字通过内存屏障（Memory Barrier）来禁止这种重排序。
+
+内存屏障：
+内存屏障又称为内存栅栏，是一个CPU指令。通过插入特定类型的内存屏障来禁止特定类型的编译器重排序和处理器重排序，告诉编译器和CPU不管什么指令都不能和这条内存屏障指令重排序。
+•  在每个volatile写操作前面插入一个StoreStore屏障：禁止上面的普通写和下面的volatile写重排序；
+•  在每个volatile写操作后面插入一个StoreLoad屏障：禁止上面的volatile写于下面可能有的volatile读写重排序；
+•  在每个volatile读操作后面插入一个LoadStore屏障：禁止下面所有的普通写和上面的volatile读重排序；
+•  在每个volatile读操作后面插入一个LoadLoad屏障：禁止下面所有的普通读和上面的volatile读重排序；
+
+volatile和synchronized比较：
+•  synchronized：一种排他性的同步机制，保证了多个现成范围共享资源时的互斥性，即同一时刻只允许一个线程访问共享资源，通过对代码块或者方法添加synchronized关键字来实现同步。
+•  volatile：一种轻量级的同步机制，用来保证变量的可见性和禁止指令重排序。当一个变量被声明为volatile后，线程在读取该变量时会直接从内存读取，而不会使用缓存，同时对该变量的写操作，会立即刷会主内存，而不是缓存在本地内存中。

@@ -1,0 +1,26 @@
+# Redis哨兵机制如何实现选新的主节点？
+
+Redis哨兵机制如何实现选新的主节点？
+当redis集群的主节点故障时，Sentinel集群将从剩余的从节点中选举一个新的主节点，有以下步骤:
+故障节点主观下线；
+故障节点客观下线；
+Sentinel集群选举Leader；
+Sentinel Leader决定新主节点；
+
+故障节点主观下线
+Sentinel集群的每一个Sentinel节点会定时对redis集群的所有节点发心跳包检测节点是否正常。如果一个节点在down-after-miliseconds时间内没有回复Sentinel节点的心跳包，则该redis节点被该Sentinel节点主观下线。
+
+故障节点客观下线
+当节点被一个Sentinel节点记为主观下线时，并不意味着该节点肯定故障了，还需要Sentinel集群的其他Sentinel节点共同判断为主观下线才行。该Sentinel节点会询问其他Sentinel节点，如果Sentinel集群中超过quorum数量的Sentinel节点认为该redis节点主观下线，则该redis客观下线。
+如果客观下线的redis节点是从节点或者是Sentinel节点，则只会将其标记为下线，并更新本地和集群的拓扑信息，操作到此为止，没有后续的操作了；
+如果客观下线的redis节点为主节点，则开始故障转移，从从节点中选举一个节点升级为主节点。
+
+Sentinel集群选举Leader（Raft分布式共识算法）
+如果需要从redis集群选举一个节点为主节点，首先需要从Sentinel集群中选举一个Sentinel节点作为Leader。每一个Sentinel节点都可以成为Leader，当一个Sentinel节点确认redis集群的主节点主观下线后，会请求其他Sentinel节点要求将自己选举为Leader。被请求的Sentinel节点如果没有同意过其他Sentinel节点的选举请求，则同意该请求(选举票数+1)，否则不同意。如果一个Sentinel节点获得的选举票数达到Leader最低票数(quorum和Sentinel节点数/2+1的最大值)，则该Sentinel节点选举为Leader，否则重新进行选举。
+
+Sentinel Leader决定新主节点
+当Sentinel集群选举出Sentinel Leader后，由Sentinel Leader从redis从节点中选择一个redis节点作为主节点：
+过滤故障的节点，先过滤下线节点，后过滤网络不好的节点；
+选择优先级slave-priority最大的从节点作为主节点，如不存在则继续；
+选择复制偏移量最大的从节点作为主节点，如不存在则继续；
+选择runid最小的从节点作为主节点，runid是redis每次启动的时候生成随机的作为redis的标识。

@@ -1,0 +1,18 @@
+TCP三次握手SYN报文什么情况下会被丢弃？
+SYN报文被丢弃的两种场景：
+开启了tcp_tw_recycle参数，并且在NAT环境下，造成SYN报文被丢弃；
+TCP半连接和全连接两个队列满了，造成SYN报文被丢弃；
+
+开启tcp_tw_recycle造成的SYN报文丢失
+Linux中提供了两个系统参数来快速回收处于TIME_WAIT状态的连接，这两个参数都是默认关闭的：
+net.ipv4.tcp_tw_reuse：如果开启该选项的话，客户端连接在调用connect函数时，如果内核选择的端口，已经被相同四元组的连接占用时，就会判断该连接是否处于TIME_WAIT状态，如果该连接处于TIME_WAIT状态并且该状态已经持续超过了1秒，那么就会重用这个连接，然后就可以正常使用该端口了，所以选项只适用于发起方。
+net.ipv4.tcp_tw_recycle：如果开启该选项的话，允许处于TIME_WAIT状态的连接被快速回收。
+这两个选项的前提是需要打开TCP时间戳，即net.ipv4.tcp_timestamps=1（默认即为1）。
+
+tcp_tw_recyle在使用了NAT的网络下是不安全的
+对于服务器来说，如果同时开启了recycle和timestramps选项，则会启用一种称之为「per-host的PAWS机制」。其中PAWS机制是指为了避免序号回绕导致的数据错乱问题，在开启了tcp_timestamps选项情况下，一台机器发的所有TCP包都会带上发送时间戳，PAWS要求连接双方维护最近一次数据包的时间戳（Recent TSval），每收到一个新的数据包都会读取数据包中的时间戳值跟Recent TSval进行比较，如果发现收到的数据包中的事件戳不是递增的，则表示该数据包数据是过期的，就会直接丢弃这个数据包。而所谓的「per-host的PAWS机制」的per-host是对对端IP做PAWS检查，而非对IP+端口四元组做PSWS检查，而NAT网络环境下，客户端环境的每一台机器通过NAT网关后，都会是相同的IP地址，在服务端看来是跟同一个客户端通信，「per-host的PAWS机制」利用TCP的timestamps字段的增长来判断串扰数据，而timestamp是根据客户端各自的CPU tick得出的值，如果两个客户端同时与服务端进行通信，那么timestamps算出来小的值的报文将会被错误认为过期而被丢弃。
+
+因此，tcp_tw_recycle在使用了NAT的网络下是存在问题的，如果它是对TCP四元组做PAWS检查，而不是对相同IP做PAWS检查，那么就不会存在这个问题了。该参数在Linux4.12版本后被取消了。
+TCP半连接和全连接两个队列满了，造成SYN报文被丢弃
+当服务器受到SYN攻击，就有可能导致TCP半连接队列满了，这时后面来的SYN包都会被丢弃；
+在服务端并发处理大量请求时，如果TCP accept队列过小，或者应用程序调用accept不够及时，就会造成accept队列满了，这时后续的连接就会被丢弃，就会出现服务端请求数量上不去的现象。

@@ -1,0 +1,69 @@
+# GC日志怎么看？
+
+GC日志怎么看？
+一、如何开户GC日志记录
+在开始解读之前，先确保你的应用已经正确配置了GC日志记录。以下是常见的JVM参数：
+
+# JDK 8及之前版本-XX:+PrintGCDetails -XX:+PrintGCDateStamps -Xloggc:/path/to/gc.log
+# JDK 9+版本-Xlog:gc*:file=/path/to/gc.log:time:filecount=5,filesize=10M
+
+二、GC日志解读
+我们先看一个最简单的Young GC日志
+
+2023-05-01T10:00:00.123+0800: 1.234: [GC (Allocation Failure) [PSYoungGen: 65536K->8192K(76288K)] 65536K->8192K(251392K), 0.0023456 secs] [Times: user=0.00 sys=0.00, real=0.00 secs]
+•  2023-05-01T10:00:00.123+0800：GC发生的时间戳
+•  1.234：JVM启动后经过的秒数
+•  GC (Allocation Failure)：触发GC的原因（这里是分配失败）
+•  PSYoungGen：使用的年轻代收集器（Parallel Scavenge）
+•  65536K->8192K(76288K)：65536K是GC前年轻代使用量，8192K是GC后年轻代使用量，76288K是年轻代总容量
+•  65536K->8192K(251392K)：同样模式，但针对整个堆
+•  0.0023456 secs：GC持续时间
+•  [Times:...]：CPU时间消耗
+
+从上面的日志，我们应该关注：
+•  GC类型：Young GC还是Full GC？
+•  触发原因：是分配失败？系统调用？还是主动触发？
+•  内存变化：回收前/后的使用量，以及总容量
+•  耗时：GC暂停时间（直接影响应用响应）
+•  频率：结合时间戳看GC发生的间隔
+
+Full GC日志示例
+
+2023-05-01T10:05:00.456+0800: 301.567: [Full GC (Metadata GC Threshold) [PSYoungGen: 10240K->0K(143360K)] [ParOldGen: 297876K->289123K(307200K)] 308116K->289123K(450560K), [Metaspace: 178543K->178543K(182272K)], 1.234567 secs] [Times: user=2.34 sys=0.12, real=1.23 secs]
+•  Full GC：这是一次全局回收，会暂停所有应用线程（Stop-The-World）
+•  Metadata GC Threshold：触发原因是元空间达到阈值
+•  各部分内存区域的变化：PSYoungGen年轻代、ParOldGen老年代（Parallel Old收集器）、Metaspace元空间；
+注意这次GC耗时1.23秒！这对延迟敏感应用是灾难性的
+
+三、GC日志模式识别
+健康模式
+•  Young GC频率稳定，每次回收效率高（如回收80%以上）
+•  Full GC极少发生（如几天一次）
+•  单次GC耗时短（Young GC<100ms，Full GC<1s）
+
+内存泄漏迹象
+•  老年代使用量随时间持续增长，即使Full GC后也不下降
+•  Full GC频率逐渐增加
+
+年经代配置不合理
+•  Young GC非常频繁（如每分钟几次）
+•  每次Young GC后存活对象过多，导致过早晋升到老年代
+
+四、GC日志查看工具
+GCeasy
+特点：基于AI的智能分析，支持自动检测内存泄漏、GC暂停原因分析，并提供JVM优化建议。支持几乎所有GC算法和JDK版本，可视化报告详细（含吞吐量、暂停时间分布等）。
+适用场景：快速分析生产环境日志，无需本地安装，适合非敏感数据环境。
+
+2. GCViewer
+特点：开源工具，支持可视化GC日志（如堆内存变化、暂停时间统计），可生成CSV报告和图表。支持多日志文件合并分析。
+适用场景：本地深度分析，适合安全要求高的环境
+
+VisualVM（含GC插件）
+特点：图形化界面，可实时监控GC活动，需安装插件。
+适用场景：开发环境实时调试。
+
+jstat
+命令示例：
+
+jstat -gcutil <pid> 1000 10（每1秒输出1次GC统计，共10次）。
+特点：实时监控GC状态，适合快速排查
