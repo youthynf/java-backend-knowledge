@@ -1,3 +1,3 @@
 # spring
 
-- [ioc-aop](ioc-aop.md)
+- [ioc-aop](./ioc-aop.md)

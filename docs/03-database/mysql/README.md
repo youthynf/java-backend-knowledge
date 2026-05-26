@@ -1,3 +1,3 @@
 # mysql
 
-- [index-optimization](index-optimization.md)
+- [index-optimization](./index-optimization.md)

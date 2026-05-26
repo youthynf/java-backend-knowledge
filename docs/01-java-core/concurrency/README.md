@@ -1,3 +1,3 @@
 # concurrency
 
-- [thread-pool](thread-pool.md)
+- [thread-pool](./thread-pool.md)
