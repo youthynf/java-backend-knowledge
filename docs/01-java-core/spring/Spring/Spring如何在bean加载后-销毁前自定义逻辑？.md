@@ -1,8 +1,0 @@
-# Spring如何在bean加载后/销毁前自定义逻辑？
-
-Spring如何在bean加载后/销毁前自定义逻辑？
-Spring中，如果需要在Bean加载后（即实例化、属性赋值、初始化等过程完成后）或销毁前执行某些逻辑，可以通过以下方式实现：
-xml的bean标签使用init-method和destroy-method属性，并分别新增对应指定方法；
-实现InitializingBean和DisposableBean接口，并分别重写afterPropertiseSet和destory方法；
-分别使用@PostConstruct和@PreDestory注解；
-使用@Bean注解的initMethod和destoryMethod属性指定对应方法；
