@@ -1,3 +1,3 @@
 # 01-java-core
 
-- [elegant-parameter-validation](./elegant-parameter-validation.md)
+- [elegant-parameter-validation](01-java-core/elegant-parameter-validation.md)

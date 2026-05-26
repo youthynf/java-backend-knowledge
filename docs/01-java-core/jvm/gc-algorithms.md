@@ -198,4 +198,4 @@ PhantomReference<Object> phantom = new PhantomReference<>(obj, queue); // 虚引
 
 ---
 
-[← 返回 JVM 目录](./README.md)
+[← 返回 JVM 目录](README.md)

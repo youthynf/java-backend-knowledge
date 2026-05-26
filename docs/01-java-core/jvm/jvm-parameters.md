@@ -177,4 +177,4 @@ java -Xms16g -Xmx16g \
 
 ---
 
-[← 返回 JVM 目录](./README.md)
+[← 返回 JVM 目录](README.md)

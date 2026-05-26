@@ -277,4 +277,4 @@ ByteBuffer heapBuffer = ByteBuffer.allocate(1024 * 1024 * 100); // 100MB 堆内�
 
 ---
 
-[← 返回 JVM 目录](./README.md)
+[← 返回 JVM 目录](README.md)

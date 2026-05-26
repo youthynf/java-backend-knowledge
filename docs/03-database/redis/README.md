@@ -1,3 +1,3 @@
 # redis
 
-- [data-structures](./data-structures.md)
+- [data-structures](03-database/redis/data-structures.md)

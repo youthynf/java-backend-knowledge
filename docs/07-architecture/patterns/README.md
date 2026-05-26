@@ -1,6 +1,6 @@
 # patterns
 
-- [proxy](./proxy.md)
-- [singleton](./singleton.md)
-- [strategy](./strategy.md)
-- [template-method](./template-method.md)
+- [proxy](07-architecture/patterns/proxy.md)
+- [singleton](07-architecture/patterns/singleton.md)
+- [strategy](07-architecture/patterns/strategy.md)
+- [template-method](07-architecture/patterns/template-method.md)

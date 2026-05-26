@@ -1,4 +1,4 @@
 # design-patterns
 
-- [factory](./factory.md)
-- [singleton](./singleton.md)
+- [factory](07-architecture/design-patterns/factory.md)
+- [singleton](07-architecture/design-patterns/singleton.md)
