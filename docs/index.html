@@ -11,154 +11,196 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify-plugin-carbon@1/index.css">
   
-  <!-- Custom styles -->
+  <!-- Custom styles - MUST load after theme CSS to override -->
   <style>
     :root {
       --theme-color: #42b983;
       --theme-color-dark: #2d8c5c;
+      --sidebar-width: 260px;
     }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif; }
     .sidebar-nav > ul > li > p { font-weight: 600; margin-top: 1rem; }
 
-    /* 文章排版核心样式 - 即使 CDN 失效也能正常显示 */
+    /* ========== 文章排版核心样式 ========== */
+    /* 覆盖 Docsify vue.css 默认样式 */
+
+    /* h1 - 文章大标题，绿色粗底线 */
     .markdown-section h1 {
-      color: var(--theme-color, #42b983);
-      font-size: 2rem;
-      font-weight: 700;
-      margin: 1.5rem 0 1rem;
-      padding-bottom: 0.5rem;
-      border-bottom: 2px solid var(--theme-color, #42b983);
+      color: var(--theme-color) !important;
+      font-size: 2rem !important;
+      font-weight: 700 !important;
+      margin: 0.5rem 0 1.5rem !important;
+      padding-bottom: 0.5rem !important;
+      border-bottom: 3px solid var(--theme-color) !important;
+      letter-spacing: 0.5px;
     }
+
+    /* h2 - 章节标题，深色细底线 */
     .markdown-section h2 {
-      font-size: 1.5rem;
-      font-weight: 600;
-      margin: 1.5rem 0 0.8rem;
-      padding-bottom: 0.4rem;
-      border-bottom: 1px solid #eee;
+      font-size: 1.5rem !important;
+      font-weight: 600 !important;
+      color: #2c3e50 !important;
+      margin: 2rem 0 1rem !important;
+      padding-bottom: 0.4rem !important;
+      border-bottom: 1px solid #ddd !important;
     }
+
+    /* h3 - 小节标题，无底线 */
     .markdown-section h3 {
-      font-size: 1.25rem;
-      font-weight: 600;
-      margin: 1.2rem 0 0.6rem;
-      color: #34495e;
+      font-size: 1.25rem !important;
+      font-weight: 600 !important;
+      color: #34495e !important;
+      margin: 1.5rem 0 0.8rem !important;
+      border-bottom: none !important;
     }
+
+    /* h4 */
     .markdown-section h4 {
-      font-size: 1.1rem;
-      font-weight: 600;
-      margin: 1rem 0 0.5rem;
-      color: #555;
+      font-size: 1.1rem !important;
+      font-weight: 600 !important;
+      color: #555 !important;
+      margin: 1.2rem 0 0.6rem !important;
     }
+
+    /* 段落 */
     .markdown-section p {
-      margin: 0.8rem 0;
-      line-height: 1.8;
+      margin: 0.8rem 0 !important;
+      line-height: 1.8 !important;
     }
+
+    /* 加粗 - 关键修复！Docsify 默认 font-weight: 400 */
     .markdown-section strong {
-      font-weight: 700;
-      color: #2c3e50;
+      font-weight: 700 !important;
+      color: #2c3e50 !important;
     }
+
+    /* 斜体 */
     .markdown-section em {
-      font-style: italic;
-      color: #555;
+      font-style: italic !important;
+      color: #555 !important;
     }
-    .markdown-section ul, .markdown-section ol {
-      margin: 0.8rem 0;
-      padding-left: 1.5rem;
-    }
+
+    /* 列表 - 关键修复！Docsify 默认 list-style: none */
     .markdown-section ul {
-      list-style: disc;
+      list-style: disc !important;
+      padding-left: 1.5rem !important;
+      margin: 0.8rem 0 !important;
     }
     .markdown-section ol {
-      list-style: decimal;
+      list-style: decimal !important;
+      padding-left: 1.5rem !important;
+      margin: 0.8rem 0 !important;
     }
     .markdown-section li {
-      margin: 0.3rem 0;
-      line-height: 1.7;
+      margin: 0.4rem 0 !important;
+      line-height: 1.7 !important;
     }
-    .markdown-section li > ul, .markdown-section li > ol {
-      margin: 0.2rem 0;
+    .markdown-section li > ul,
+    .markdown-section li > ol {
+      margin: 0.2rem 0 !important;
     }
+
+    /* 链接 */
     .markdown-section a {
-      color: var(--theme-color, #42b983);
-      text-decoration: none;
-      border-bottom: 1px solid transparent;
+      color: var(--theme-color) !important;
+      text-decoration: none !important;
+      border-bottom: 1px solid transparent !important;
       transition: border-color 0.2s;
     }
     .markdown-section a:hover {
-      border-bottom-color: var(--theme-color, #42b983);
+      border-bottom-color: var(--theme-color) !important;
     }
+
+    /* 引用块 */
     .markdown-section blockquote {
-      margin: 1rem 0;
-      padding: 0.5rem 1rem;
-      border-left: 4px solid var(--theme-color, #42b983);
-      background: #f8f8f8;
-      color: #666;
+      margin: 1rem 0 !important;
+      padding: 0.8rem 1.2rem !important;
+      border-left: 4px solid var(--theme-color) !important;
+      background: #f0faf5 !important;
+      color: #555 !important;
     }
     .markdown-section blockquote p {
-      margin: 0.3rem 0;
+      margin: 0.3rem 0 !important;
     }
+
+    /* 行内代码 */
     .markdown-section code {
-      background: #f8f8f8;
-      padding: 2px 6px;
-      border-radius: 3px;
-      font-size: 0.9em;
-      color: #e96900;
+      background: #fff3e0 !important;
+      padding: 2px 6px !important;
+      border-radius: 3px !important;
+      font-size: 0.9em !important;
+      color: #e65100 !important;
     }
+
+    /* 代码块 */
     .markdown-section pre {
-      background: #f8f8f8;
-      border-radius: 4px;
-      padding: 1rem;
-      margin: 1rem 0;
-      overflow-x: auto;
+      background: #1e1e1e !important;
+      border-radius: 6px !important;
+      padding: 1rem 1.2rem !important;
+      margin: 1.2rem 0 !important;
+      overflow-x: auto !important;
+      border: 1px solid #333 !important;
     }
     .markdown-section pre code {
-      background: none;
-      padding: 0;
-      color: inherit;
+      background: none !important;
+      padding: 0 !important;
+      color: #d4d4d4 !important;
+      font-size: 0.9em !important;
     }
+
+    /* 表格 */
     .markdown-section table {
-      border-collapse: collapse;
-      width: 100%;
-      margin: 1rem 0;
-    }
-    .markdown-section th, .markdown-section td {
-      border: 1px solid #ddd;
-      padding: 0.6rem 1rem;
-      text-align: left;
+      border-collapse: collapse !important;
+      width: 100% !important;
+      margin: 1rem 0 !important;
+      display: table !important;
     }
     .markdown-section th {
-      background: #f5f5f5;
-      font-weight: 600;
+      background: #f5f5f5 !important;
+      font-weight: 600 !important;
+      border: 1px solid #ddd !important;
+      padding: 0.6rem 1rem !important;
+      text-align: left !important;
+    }
+    .markdown-section td {
+      border: 1px solid #ddd !important;
+      padding: 0.6rem 1rem !important;
     }
     .markdown-section tr:nth-child(even) {
-      background: #fafafa;
+      background: #fafafa !important;
     }
+
+    /* 分隔线 */
     .markdown-section hr {
-      border: none;
-      border-top: 1px solid #eee;
-      margin: 2rem 0;
+      border: none !important;
+      border-top: 1px solid #eee !important;
+      margin: 2rem 0 !important;
     }
+
+    /* 图片 */
     .markdown-section img {
-      max-width: 100%;
-      border-radius: 4px;
+      max-width: 100% !important;
+      border-radius: 4px !important;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
 
-    /* 手机适配增强 */
-    @media (max-width: 768px) {
-      .markdown-section { padding: 16px; }
-      .markdown-section h1 { font-size: 1.5rem; }
-      .markdown-section h2 { font-size: 1.3rem; }
-      .markdown-section h3 { font-size: 1.15rem; }
-      .markdown-section pre { font-size: 0.85rem; }
-      .markdown-section table { font-size: 0.9rem; }
-      .markdown-section th, .markdown-section td { padding: 0.4rem 0.6rem; }
-    }
-
-    /* 来源标签样式 */
+    /* 来源标签 */
     .source-tag { display: inline-block; font-size: 0.75rem; color: #999; margin-top: 1rem; }
 
     /* 侧边栏美化 */
     .sidebar { padding-top: 0; }
     .app-name-link { font-weight: 700; }
+
+    /* 手机适配 */
+    @media (max-width: 768px) {
+      .markdown-section { padding: 16px !important; }
+      .markdown-section h1 { font-size: 1.5rem !important; }
+      .markdown-section h2 { font-size: 1.3rem !important; }
+      .markdown-section h3 { font-size: 1.15rem !important; }
+      .markdown-section pre { font-size: 0.85rem !important; }
+      .markdown-section table { font-size: 0.9rem !important; }
+      .markdown-section th, .markdown-section td { padding: 0.4rem 0.6rem !important; }
+    }
   </style>
 </head>
 <body>
