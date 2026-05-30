@@ -348,5 +348,22 @@ public void createOrder(OrderMessage message) {
         order.setProductId(message.getProductId());
         order.setUserId(message.getUserId());
         orderMapper.insert(order);
-        
-        //
+
+        // 2. 扣减库存（幂等检查）
+        // ...
+    } catch (Exception e) {
+        // 重试或进入死信队列
+        throw e;
+    }
+}
+```
+
+### 6. 总结
+
+秒杀系统设计的核心要点：
+
+- **限流**：在入口处拦截大部分请求
+- **缓存**：Redis 预扣减库存，避免数据库压力
+- **异步**：消息队列削峰填谷
+- **兜底**：熔断降级，保护核心链路
+- **一致性**：消息 + 重试 + 补偿保证最终一致

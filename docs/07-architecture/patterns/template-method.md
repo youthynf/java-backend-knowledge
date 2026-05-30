@@ -321,4 +321,13 @@ public final void process() {
 // 子类可选覆盖
 public class MyProcessor extends DataProcessor {
     @Override
-    protected
+    protected void beforeProcess() {
+        System.out.println("自定义前置处理");
+    }
+
+    @Override
+    protected void afterProcess() {
+        System.out.println("自定义后置处理");
+    }
+}
+```
