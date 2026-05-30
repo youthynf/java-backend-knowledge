@@ -1,4 +1,4 @@
-<!-- _sidebar.md -->
+<!-- sidebar.md -->
 
 - **首页**
   - [首页](/)
@@ -47,11 +47,12 @@
   - [Kafka](04-mq/Kafka/)
   - [RocketMQ](04-mq/rocketmq/)
   - [RabbitMQ](04-mq/rabbitmq/)
-  - [Zookeeper](04-mq/Zookeeper/)
-  - [Tomcat](04-mq/Tomcat/)
-  - [Nginx](04-mq/Nginx/)
-  - [ElasticSearch](04-mq/ElasticSearch/)
-  - [ClickHouse](04-mq/ClickHouse/)
+
+- **分布式**
+  - [分布式基础](05-distributed/)
+
+- **微服务**
+  - [微服务](06-microservice/)
 
 - **架构设计**
   - [设计模式](07-architecture/patterns/)
@@ -63,3 +64,16 @@
   - [传输层](08-network/transport-layer/)
   - [应用层](08-network/application-layer/)
   - [网络安全](08-network/network-security/)
+
+- **算法**
+  - [算法](09-algorithm/)
+
+- **DevOps**
+  - [DevOps](devops/)
+
+- **中间件**
+  - [Zookeeper](04-mq/Zookeeper/)
+  - [Nginx](04-mq/Nginx/)
+  - [ElasticSearch](04-mq/ElasticSearch/)
+  - [ClickHouse](04-mq/ClickHouse/)
+  - [Tomcat](04-mq/Tomcat/)

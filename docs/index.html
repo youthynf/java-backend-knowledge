@@ -7,8 +7,9 @@
   <meta name="description" content="个人知识库 - 技术、读书、收藏">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
   
-  <!-- Theme -->
-  <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css">
+  <!-- Theme - 使用国内可访问的 CDN -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify-plugin-carbon@1/index.css">
   
   <!-- Custom styles -->
   <style>
@@ -18,18 +19,146 @@
     }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif; }
     .sidebar-nav > ul > li > p { font-weight: 600; margin-top: 1rem; }
-    .markdown-section h1 { color: var(--theme-color); }
-    .markdown-section h2 { border-bottom: 1px solid #eee; padding-bottom: 0.5rem; }
-    .markdown-section a { text-decoration: none; }
+
+    /* 文章排版核心样式 - 即使 CDN 失效也能正常显示 */
+    .markdown-section h1 {
+      color: var(--theme-color, #42b983);
+      font-size: 2rem;
+      font-weight: 700;
+      margin: 1.5rem 0 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid var(--theme-color, #42b983);
+    }
+    .markdown-section h2 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin: 1.5rem 0 0.8rem;
+      padding-bottom: 0.4rem;
+      border-bottom: 1px solid #eee;
+    }
+    .markdown-section h3 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin: 1.2rem 0 0.6rem;
+      color: #34495e;
+    }
+    .markdown-section h4 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin: 1rem 0 0.5rem;
+      color: #555;
+    }
+    .markdown-section p {
+      margin: 0.8rem 0;
+      line-height: 1.8;
+    }
+    .markdown-section strong {
+      font-weight: 700;
+      color: #2c3e50;
+    }
+    .markdown-section em {
+      font-style: italic;
+      color: #555;
+    }
+    .markdown-section ul, .markdown-section ol {
+      margin: 0.8rem 0;
+      padding-left: 1.5rem;
+    }
+    .markdown-section ul {
+      list-style: disc;
+    }
+    .markdown-section ol {
+      list-style: decimal;
+    }
+    .markdown-section li {
+      margin: 0.3rem 0;
+      line-height: 1.7;
+    }
+    .markdown-section li > ul, .markdown-section li > ol {
+      margin: 0.2rem 0;
+    }
+    .markdown-section a {
+      color: var(--theme-color, #42b983);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.2s;
+    }
+    .markdown-section a:hover {
+      border-bottom-color: var(--theme-color, #42b983);
+    }
+    .markdown-section blockquote {
+      margin: 1rem 0;
+      padding: 0.5rem 1rem;
+      border-left: 4px solid var(--theme-color, #42b983);
+      background: #f8f8f8;
+      color: #666;
+    }
+    .markdown-section blockquote p {
+      margin: 0.3rem 0;
+    }
+    .markdown-section code {
+      background: #f8f8f8;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 0.9em;
+      color: #e96900;
+    }
+    .markdown-section pre {
+      background: #f8f8f8;
+      border-radius: 4px;
+      padding: 1rem;
+      margin: 1rem 0;
+      overflow-x: auto;
+    }
+    .markdown-section pre code {
+      background: none;
+      padding: 0;
+      color: inherit;
+    }
+    .markdown-section table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1rem 0;
+    }
+    .markdown-section th, .markdown-section td {
+      border: 1px solid #ddd;
+      padding: 0.6rem 1rem;
+      text-align: left;
+    }
+    .markdown-section th {
+      background: #f5f5f5;
+      font-weight: 600;
+    }
+    .markdown-section tr:nth-child(even) {
+      background: #fafafa;
+    }
+    .markdown-section hr {
+      border: none;
+      border-top: 1px solid #eee;
+      margin: 2rem 0;
+    }
+    .markdown-section img {
+      max-width: 100%;
+      border-radius: 4px;
+    }
+
     /* 手机适配增强 */
     @media (max-width: 768px) {
       .markdown-section { padding: 16px; }
       .markdown-section h1 { font-size: 1.5rem; }
       .markdown-section h2 { font-size: 1.3rem; }
+      .markdown-section h3 { font-size: 1.15rem; }
       .markdown-section pre { font-size: 0.85rem; }
+      .markdown-section table { font-size: 0.9rem; }
+      .markdown-section th, .markdown-section td { padding: 0.4rem 0.6rem; }
     }
+
     /* 来源标签样式 */
     .source-tag { display: inline-block; font-size: 0.75rem; color: #999; margin-top: 1rem; }
+
+    /* 侧边栏美化 */
+    .sidebar { padding-top: 0; }
+    .app-name-link { font-weight: 700; }
   </style>
 </head>
 <body>
@@ -73,25 +202,25 @@
     }
   </script>
   
-  <!-- Docsify -->
-  <script src="//cdn.jsdelivr.net/npm/docsify@4/lib/docsify.min.js"></script>
+  <!-- Docsify - 显式 HTTPS -->
+  <script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/docsify.min.js"></script>
   
   <!-- Plugins -->
-  <script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/search.min.js"></script>
-  <script src="//cdn.jsdelivr.net/npm/docsify-copy-code@2/dist/docsify-copy-code.min.js"></script>
-  <script src="//cdn.jsdelivr.net/npm/docsify-pagination@2/dist/docsify-pagination.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/docsify/lib/plugins/search.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/docsify-copy-code@2/dist/docsify-copy-code.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/docsify-pagination@2/dist/docsify-pagination.min.js"></script>
   
   <!-- Syntax highlighting -->
-  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-java.min.js"></script>
-  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-python.min.js"></script>
-  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-javascript.min.js"></script>
-  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-typescript.min.js"></script>
-  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-sql.min.js"></script>
-  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-bash.min.js"></script>
-  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-yaml.min.js"></script>
-  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-json.min.js"></script>
-  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-go.min.js"></script>
-  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-docker.min.js"></script>
-  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-markdown.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-javascript.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-typescript.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-sql.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-bash.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-yaml.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-json.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-go.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-docker.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-markdown.min.js"></script>
 </body>
 </html>

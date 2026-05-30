@@ -6,17 +6,16 @@
 
 | 分类 | 说明 |
 |------|------|
-| [☕ Java 后端](/java/) | JVM、并发、集合、框架、Spring |
-| [🎨 前端](/frontend/) | React、Vue、CSS、TypeScript |
-| [💾 数据库](/database/) | MySQL、Redis、MongoDB |
-| [📨 消息队列](/mq/) | Kafka、RocketMQ、RabbitMQ |
-| [🌐 分布式](/distributed/) | 理论、锁、事务、ID |
-| [🏗 架构设计](/architecture/) | 设计模式、高并发、系统设计 |
-| [🔧 DevOps](/devops/) | Docker、K8s、CI/CD、Linux |
-| [🤖 AI](/ai/) | LLM、Prompt Engineering、Agents |
-| [🛠 工具](/tools/) | Git、IDE、效率工具 |
-| [📖 读书笔记](/reading/) | 书籍、文章笔记 |
-| [⭐ 收藏](/favorites/) | 待分类的好文章 |
+| [☕ Java 核心](/01-java-core/basics/) | JVM、并发、集合、IO、设计模式 |
+| [🔧 框架](/02-frameworks/spring/) | Spring、MyBatis、Spring Cloud |
+| [💾 数据库](/03-database/mysql/basics/) | MySQL、Redis |
+| [📨 消息队列](/04-mq/basics/) | Kafka、RocketMQ、RabbitMQ |
+| [🌐 分布式](/05-distributed/) | 理论、锁、事务、ID |
+| [🏗 微服务](/06-microservice/) | 治理、网关、追踪 |
+| [📐 架构设计](/07-architecture/patterns/) | 设计模式、系统设计 |
+| [🔗 网络](/08-network/network-model/) | HTTP、TCP/IP、网络安全 |
+| [🧮 算法](/09-algorithm/) | 数据结构与算法 |
+| [🐳 DevOps](/devops/) | Docker、K8s、Linux |
 
 ## 📌 说明
 
