@@ -11,7 +11,7 @@
 └── scripts/    # 同步和维护脚本
 ```
 
-旧目录 `/opt/services/java-knowledge-site` 已降级为 legacy，仅保留回溯，不再作为主入口维护。
+旧目录 `/opt/services/java-knowledge-site` 已按精简要求归档到 `/opt/services/archive/cleanup-*`，不再作为主入口维护。
 
 ### 常用命令
 
