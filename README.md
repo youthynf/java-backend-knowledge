@@ -1,5 +1,34 @@
 # Java 后端面试知识库
 
+## 项目结构
+
+这是知识库唯一主项目，已合并原独立站点目录 `java-knowledge-site`。
+
+```text
+/opt/services/java-backend-knowledge/
+├── docs/       # 知识库内容源，线上 wiki 当前由 nginx 直接服务这里
+├── site/       # Node/Express 站点壳，来自旧 java-knowledge-site
+└── scripts/    # 同步和维护脚本
+```
+
+旧目录 `/opt/services/java-knowledge-site` 已降级为 legacy，仅保留回溯，不再作为主入口维护。
+
+### 常用命令
+
+```bash
+# 查看内容仓库状态
+git status --short --branch
+
+# 可选：启动集成后的 Node 站点壳
+cd site
+npm install
+npm start
+
+# 可选：同步 docs 到 site/public/docs
+npm run sync
+```
+
+
 > 系统化的 Java 后端面试知识点，涵盖八股文、实战场景、架构设计
 
 ## 📚 知识模块

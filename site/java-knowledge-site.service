@@ -1,0 +1,15 @@
+[Unit]
+Description=Java Knowledge Static Site
+After=network.target
+
+[Service]
+Type=simple
+User=youth
+WorkingDirectory=/opt/services/java-backend-knowledge/site
+ExecStart=/usr/bin/node /opt/services/java-backend-knowledge/site/server.js
+Restart=on-failure
+RestartSec=10
+Environment=PORT=3888
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,13 @@
+{
+  "name": "java-backend-knowledge-site",
+  "version": "1.0.0",
+  "description": "Integrated site shell for java-backend-knowledge",
+  "scripts": {
+    "start": "node server.js",
+    "sync": "node ../scripts/sync-articles.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "marked": "^11.0.0"
+  }
+}

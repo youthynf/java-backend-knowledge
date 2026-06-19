@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Java 后端知识库</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <!-- 遮罩层 -->
+  <div id="overlay" class="overlay"></div>
+  
+  <!-- 阅读进度条 -->
+  <div class="progress-bar" id="progressBar"></div>
+  
+  <!-- 顶部导航 -->
+  <nav class="top-nav">
+    <div class="logo" onclick="location.hash=''">
+      <span>☕</span>
+      <span class="logo-text">Java 后端知识库</span>
+    </div>
+    <div class="nav-right">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" class="search-input" id="searchInput" placeholder="搜索文章...">
+        <div class="search-results" id="searchResults"></div>
+      </div>
+    </div>
+    <button class="menu-toggle" id="menuToggle">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+  </nav>
+  
+  <!-- 布局容器 -->
+  <div class="layout">
+    <!-- 侧边栏 -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-content"></div>
+    </aside>
+    
+    <!-- 主内容区 -->
+    <main class="main-content" id="mainContent">
+      <!-- 欢迎页 -->
+      <section class="welcome" id="welcomeSection">
+        <div class="welcome-header">
+          <h1>☕ Java 后端知识库</h1>
+          <p class="welcome-subtitle">
+            系统化的 Java 后端面试知识，涵盖 JVM、并发编程、Spring 全家桶、数据库、分布式、微服务、系统设计等核心模块
+          </p>
+          <div class="welcome-stats" id="stats">
+            <div class="stat-item"><div class="stat-number">--</div><div class="stat-label">知识模块</div></div>
+            <div class="stat-item"><div class="stat-number">--</div><div class="stat-label">面试题</div></div>
+            <div class="stat-item"><div class="stat-number">∞</div><div class="stat-label">学习热情</div></div>
+          </div>
+        </div>
+        
+        <h2 class="section-title">知识模块</h2>
+        <div class="category-cards" id="categoryCards"></div>
+        
+        <h2 class="section-title">学习路线</h2>
+        <div class="learning-path">
+          <h2>从零到架构师</h2>
+          <div class="path-timeline" id="pathTimeline"></div>
+        </div>
+      </section>
+      
+      <!-- 文章视图 -->
+      <article class="article-view" id="articleView"></article>
+    </main>
+  </div>
+  
+  <!-- 返回顶部按钮 -->
+  <button class="back-to-top" id="backToTop">↑</button>
+  
+  <script src="/js/app.js"></script>
+</body>
+</html>
