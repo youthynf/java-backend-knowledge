@@ -284,3 +284,34 @@ Realm安全配置（context.xml）
            userRoleTable="user_roles"
            roleNameCol="rolename"/>
 </Realm>
+
+<!-- 面试复习补充 -->
+
+## 面试复习补充
+
+### 核心概念
+
+Tomcat 是 Servlet 容器和轻量级 Web 服务器，负责接收 HTTP 请求、解析协议、管理 Servlet 生命周期并把请求分发到应用。
+
+### 面试官想考什么
+
+面试官常问组件结构、请求处理流程、线程池、连接器、类加载机制、Spring Boot 内嵌 Tomcat 调优。
+
+### 标准回答
+
+Tomcat 关键组件包括 Server、Service、Connector、Engine、Host、Context、Wrapper。请求经 Connector 接入和解析，再进入容器管道，最终由 Servlet/Spring MVC 处理。性能问题常看线程池、连接数、超时和应用处理耗时。
+
+### 深挖追问
+
+- 如果消息处理成功但确认失败会怎样？
+- 如何设计幂等键和补偿任务？
+- 该方案在高并发或故障恢复时有什么边界？
+
+### 实战场景/示例
+
+Spring Boot 接口 RT 飙升时，不仅看业务代码，也要看 Tomcat 工作线程是否被慢 IO 占满。
+
+### 易错点/总结
+
+MQ 不是银弹。不要只说“加 MQ 解耦”，还要说明可靠投递、重复消费、顺序性、延迟、监控和补偿。
+

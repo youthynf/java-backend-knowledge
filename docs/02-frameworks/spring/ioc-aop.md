@@ -602,3 +602,31 @@ public interface FactoryBean<T> {
 - [Spring 官方文档](https://docs.spring.io/spring-framework/)
 - [Spring 源码解析](https://github.com/spring-projects/spring-framework)
 - [JavaGuide - Spring 面试题](https://javaguide.cn/system-design/framework/spring/spring-knowledge-and-interview-questions.html)
+
+## 面试官想考什么
+
+- 是否真正理解 IOC 是控制反转，而不是简单“创建对象”；
+- 是否能讲清 BeanDefinition、BeanFactory/ApplicationContext、Bean 生命周期；
+- 是否知道 AOP 代理生成时机、代理类型和失效场景；
+- 是否能把 Spring 机制和项目中的事务、日志、权限、监控联系起来。
+
+## 标准回答
+
+> Spring IOC 通过容器管理对象创建、依赖注入和生命周期，让业务代码从手动创建依赖转为依赖抽象。AOP 则通过代理机制在不侵入业务代码的情况下增强横切逻辑，例如事务、日志、权限。面试时我会从容器启动、Bean 扫描、实例化、依赖注入、初始化、代理增强几个阶段说明，而不是只背注解。
+
+## 深挖追问
+
+### 为什么同类内部调用会导致 AOP 失效？
+
+因为 AOP 增强发生在代理对象上，同类内部 `this.method()` 调用绕过代理对象，拦截器没有机会执行，所以事务、缓存、日志等增强可能失效。
+
+### Spring 循环依赖都能解决吗？
+
+不能。Spring 主要通过三级缓存解决单例 Bean 的 setter/字段注入循环依赖；构造器循环依赖、原型 Bean 循环依赖通常无法自动解决。
+
+## 易错点/总结
+
+- IOC 不是简单工厂，而是对象生命周期和依赖关系管理；
+- AOP 依赖代理，代理边界决定增强是否生效；
+- `@Transactional` 失效常见于内部调用、异常被捕获、方法非 public、传播行为不符合预期；
+- 回答 Spring 问题最好结合源码流程和项目场景。

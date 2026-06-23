@@ -1,5 +1,7 @@
 # Undo Log、Redo Log、Binlog如何配合工作？
 
+## 核心概念
+
 Undo Log、Redo Log、Binlog如何配合工作？
 有没有想过这样一个问题：你在APP上完成一笔支付，点击确认后手机突然黑屏，再次打开却发现支付成功了；或者数据库突然宕机，重启后数据却一条没少。
 这背后不是运气，而是MySQL里3个「隐形保镖」在默默守护——Undo Log、Redo Log、Binlog。它们分工明确又协同作战，不仅保证了数据安全（ACID特性），还支撑着亿级用户依赖的主从复制。今天就用最通俗的话，把这三者的配合逻辑讲明白！
@@ -44,3 +46,33 @@ Redo Log靠WAL技术，让内存修改不怕断电，是数据的「持久保障
 Binlog连接主从和备份，是数据的「传播桥梁」；
 两阶段提交是三者配合的核心，强制绑定Redo Log和Binlog，确保主从一致，这也是MySQL Crash-safe的关键。
 其实这三个日志的设计，本质上是MySQL在「性能」和「数据安全」之间的平衡——既要靠内存操作提升速度，又要靠日志保证数据不丢、一致。理解了它们的配合逻辑，你对MySQL的ACID特性和主从复制就会有更底层的认知～
+
+## 面试官想考什么
+
+- redo log、undo log、binlog 的职责边界。
+- 事务提交、崩溃恢复、主从复制之间如何配合。
+- 两阶段提交解决什么一致性问题。
+
+## 标准回答
+
+MySQL 日志要区分职责：undo log 用于回滚和 MVCC，redo log 用于崩溃恢复，binlog 用于复制和按时间点恢复。事务提交时 redo log 与 binlog 通过两阶段提交降低不一致风险。
+
+## 深挖追问
+
+1. redo 和 binlog 区别？redo 用于崩溃恢复，binlog 用于复制和归档恢复。
+2. 为什么需要两阶段提交？降低 redo 与 binlog 不一致。
+3. undo 只用于回滚吗？还用于 MVCC 构造历史版本。
+
+## 实战场景 / SQL 示例
+
+```sql
+SHOW VARIABLES LIKE "sync_binlog";
+SHOW VARIABLES LIKE "innodb_flush_log_at_trx_commit";
+-- 参数影响持久性、性能和故障丢失窗口。
+```
+
+## 易错点 / 总结
+
+- 不要混淆 Server 层 binlog 和 InnoDB redo/undo。
+- 刷盘参数会影响性能和故障丢失窗口。
+- 只知道日志名不够，要能串起提交与恢复流程。

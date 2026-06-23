@@ -296,3 +296,38 @@ ByteBuf duplicate = buffer.duplicate();
 
 RocketMQ与Kafka对比
 RocketMQ选择了mmap+write这种零拷贝方式，适用于业务级消息这种小块文件的数据持久化和传输；而Kafka采用的是sendfile这种零拷贝方式，适用于系统日志消息这种高吞吐量的大块文件的数据持久化和传输。但是值得注意的一点是，Kafka的索引文件使用的是mmap+write方式，数据文件使用的是 sendfile方式。
+
+---
+
+<!-- interview-review-enhanced -->
+
+## 面试复习版
+
+### 核心概念
+- 零拷贝目标是减少用户态/内核态切换和数据复制次数。
+- Java 常见能力包括 FileChannel.transferTo/transferFrom、MappedByteBuffer。
+
+### 面试官想考什么
+- 传统 I/O 数据拷贝路径。
+- sendfile、mmap 与 Java API 对应关系。
+
+### 标准回答
+零拷贝不是完全没有复制，而是减少 CPU 参与的数据搬运。文件传输场景可用 transferTo；内存映射适合大文件随机读写，但要注意资源释放和页缓存影响。
+
+### 深挖追问
+- DMA 在零拷贝中起什么作用？
+- mmap 有什么风险？
+- Kafka 如何利用零拷贝？
+
+### 实战场景/代码示例
+```java
+try(FileChannel in=FileChannel.open(src);
+    FileChannel out=FileChannel.open(dst, StandardOpenOption.WRITE)){
+  in.transferTo(0,in.size(),out);
+}
+```
+
+### 易错点/总结
+- 零拷贝效果依赖 OS 和 JDK 实现。
+- 内存映射文件释放时机不如普通对象直观。
+

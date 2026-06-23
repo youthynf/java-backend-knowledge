@@ -157,3 +157,38 @@ proxy.sayHello();
 安全性：可能突破封装性；
 代码复杂度：增加调试难度；
 内部暴露：可能访问到未公开的 API，带来兼容性问题。
+
+---
+
+<!-- interview-review-enhanced -->
+
+## 面试复习版
+
+### 核心概念
+- 反射允许运行期获取类结构、创建对象、访问字段、调用方法。
+- 核心类型有 Class、Constructor、Field、Method。
+
+### 面试官想考什么
+- 动态性、性能成本和封装破坏风险。
+- Spring/ORM/序列化为何依赖反射。
+
+### 标准回答
+反射让程序可基于类名、注解或配置执行逻辑，提升框架扩展性；缺点是性能和可读性较差，可能绕过封装，生产中应缓存反射元数据。
+
+### 深挖追问
+- Class.forName 和 Xxx.class 区别？
+- setAccessible 风险？
+- 反射和动态代理关系？
+
+### 实战场景/代码示例
+```java
+Class<?> c=Class.forName("com.example.User");
+Object o=c.getDeclaredConstructor().newInstance();
+Method m=c.getDeclaredMethod("setName",String.class);
+m.invoke(o,"Tom");
+```
+
+### 易错点/总结
+- 不要吞反射异常。
+- 模块化环境下访问非公开成员可能受限制。
+

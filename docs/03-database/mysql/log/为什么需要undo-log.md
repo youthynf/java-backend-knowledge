@@ -1,5 +1,7 @@
 # 为什么需要undo log?
 
+## 核心概念
+
 为什么需要undo log?
 在执行执行一条“增删改”语句的时候，MySQL 会隐式开启事务来执行“增删改”语句的，执行完就自动提交事务的，这样就保证了执行完“增删改”语句后，我们可以及时在数据库表看到“增删改”的结果了。一个事务在执行过程中，在还没有提交事务之前，如果 MySQL 发生了崩溃，要怎么回滚到事务之前的数据呢？undo log 是一种用于撤销回退的日志。在事务没提交之前，MySQL 会先记录更新前的数据到 undo log 日志文件里面，当事务回滚时，可以利用 undo log 来进行回滚。undo log（回滚日志），它保证了事务的 ACID 特性 (opens new window)中的原子性（Atomicity）。
 
@@ -25,3 +27,33 @@ update分为两种情况：update的列是否是主键列。
 因此，undo log 两大作用：
 实现事务回滚，保障事务的原子性。事务处理过程中，如果出现了错误或者用户执 行了 ROLLBACK 语句，MySQL 可以利用 undo log 中的历史数据将数据恢复到事务开始之前的状态。=
 实现 MVCC（多版本并发控制）关键因素之一。MVCC 是通过 ReadView + undo log 实现的。undo log 为每条记录保存多份历史数据，MySQL 在执行快照读（普通 select 语句）的时候，会根据事务的 Read View 里的信息，顺着 undo log 的版本链找到满足其可见性的记录。
+
+## 面试官想考什么
+
+- redo log、undo log、binlog 的职责边界。
+- 事务提交、崩溃恢复、主从复制之间如何配合。
+- 两阶段提交解决什么一致性问题。
+
+## 标准回答
+
+MySQL 日志要区分职责：undo log 用于回滚和 MVCC，redo log 用于崩溃恢复，binlog 用于复制和按时间点恢复。事务提交时 redo log 与 binlog 通过两阶段提交降低不一致风险。
+
+## 深挖追问
+
+1. redo 和 binlog 区别？redo 用于崩溃恢复，binlog 用于复制和归档恢复。
+2. 为什么需要两阶段提交？降低 redo 与 binlog 不一致。
+3. undo 只用于回滚吗？还用于 MVCC 构造历史版本。
+
+## 实战场景 / SQL 示例
+
+```sql
+SHOW VARIABLES LIKE "sync_binlog";
+SHOW VARIABLES LIKE "innodb_flush_log_at_trx_commit";
+-- 参数影响持久性、性能和故障丢失窗口。
+```
+
+## 易错点 / 总结
+
+- 不要混淆 Server 层 binlog 和 InnoDB redo/undo。
+- 刷盘参数会影响性能和故障丢失窗口。
+- 只知道日志名不够，要能串起提交与恢复流程。

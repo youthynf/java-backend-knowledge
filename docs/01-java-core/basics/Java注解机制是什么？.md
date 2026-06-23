@@ -59,3 +59,37 @@ for (Method method : clazz.getDeclaredMethods()) {
         // 处理注解
     }
 }
+
+---
+
+<!-- interview-review-enhanced -->
+
+## 面试复习版
+
+### 核心概念
+- 注解是元数据，必须被编译器、APT、框架或反射解析才有业务效果。
+- Retention 决定保留阶段，Target 决定作用目标。
+
+### 面试官想考什么
+- 元注解和运行期读取。
+- Spring 注解为什么能生效。
+
+### 标准回答
+注解本身不改变逻辑；它描述元数据，处理器或框架读取后执行增强、校验、扫描、生成代码等行为。
+
+### 深挖追问
+- @Retention 三种策略？
+- 注解能继承吗？
+- 如何自定义并读取注解？
+
+### 实战场景/代码示例
+```java
+@Retention(RetentionPolicy.RUNTIME)
+@Target(ElementType.METHOD)
+@interface Audit { String value(); }
+```
+
+### 易错点/总结
+- 只定义注解没有处理器通常无效果。
+- 大量运行期扫描要注意性能。
+

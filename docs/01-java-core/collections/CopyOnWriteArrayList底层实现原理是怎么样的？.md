@@ -12,3 +12,37 @@ CopyOnWriteArrayList写时复制列表，基本原理：
 2.6 释放ReentranceLock；
 至此，写时复制列表的写入过程结束。
 注意：CopyOnWriteArrayList读取数据时不需要加锁。
+
+---
+
+<!-- interview-review-enhanced -->
+
+## 面试复习版
+
+### 核心概念
+- ArrayList 底层是动态数组，支持快速随机访问。
+- 扩容会创建新数组并复制元素；非线程安全。
+
+### 面试官想考什么
+- 扩容机制、时间复杂度、线程安全。
+- ArrayList 与 LinkedList/Vector 区别。
+
+### 标准回答
+ArrayList 适合读多写少、按下标访问的场景。尾部追加均摊 O(1)，中间插入/删除需要移动元素。多线程修改要外部同步或使用并发集合。
+
+### 深挖追问
+- 默认容量和首次扩容？
+- 为什么随机访问快？
+- fail-fast 是什么？
+
+### 实战场景/代码示例
+```java
+List<String> list=new ArrayList<>(100);
+list.add("A");
+String first=list.get(0);
+```
+
+### 易错点/总结
+- 预估大小可减少扩容成本。
+- 迭代时结构性修改会触发 ConcurrentModificationException。
+

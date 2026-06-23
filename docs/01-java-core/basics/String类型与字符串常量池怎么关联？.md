@@ -27,3 +27,37 @@ JDK 1.7：
 从 JDK 1.7 开始，永久代的部分内容被迁移到了堆中，但永久代依旧存在。其中，符号引用（Symbol References）被移到了 Native Heap，字符串常量池（String Intern Pool）和类的静态变量被移到了 Java 堆。
 JDK 1.8及之后：
 从 JDK 1.8 开始，永久代被彻底移除，取而代之的是元空间（Metaspace）。元空间使用本地内存（Native Memory），默认情况下，其大小仅受限于系统的可用内存，但可以通过参数（如-XX:MetaspaceSize和-XX:MaxMetaspaceSize）来限制。
+
+---
+
+<!-- interview-review-enhanced -->
+
+## 面试复习版
+
+### 核心概念
+- String 不可变，字面量通常进入字符串常量池。
+- intern 返回常量池中等值字符串引用；编译期常量拼接可折叠。
+
+### 面试官想考什么
+- new String、字面量、intern 的引用关系。
+- 不可变性和常量池复用的意义。
+
+### 标准回答
+回答时先区分内容相等和引用相同，再区分编译期常量与运行期对象。String 不可变，适合做 Map key；大量动态拼接应使用 StringBuilder。
+
+### 深挖追问
+- StringBuilder/StringBuffer 区别？
+- 为什么 String 可以缓存 hash？
+- 循环拼接字符串有什么问题？
+
+### 实战场景/代码示例
+```java
+String a="he"+"llo";
+String b="hello";
+System.out.println(a==b); // 通常 true
+```
+
+### 易错点/总结
+- == 比引用，equals 比内容。
+- intern 细节与 JDK 版本有关，避免绝对化。
+

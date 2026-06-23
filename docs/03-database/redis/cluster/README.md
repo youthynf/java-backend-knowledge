@@ -1,5 +1,7 @@
 # cluster
 
+## 核心概念
+
 - [Redis和MySQL单节点能扛多并发量？](03-database/redis/cluster/Redis和MySQL单节点能扛多并发量？.md)
 - [Redis集群模式的优缺点？](03-database/redis/cluster/Redis集群模式的优缺点？.md)
 - [Redis集群脑裂问题如何解决？](03-database/redis/cluster/Redis集群脑裂问题如何解决？.md)
@@ -8,3 +10,33 @@
 - [Redis如何实现主从复制？](03-database/redis/cluster/Redis如何实现主从复制？.md)
 - [Redis哨兵机制如何实现选新的主节点？](03-database/redis/cluster/Redis哨兵机制如何实现选新的主节点？.md)
 - [Redis主从集群可以保证数据一致性吗？](03-database/redis/cluster/Redis主从集群可以保证数据一致性吗？.md)
+
+## 面试官想考什么
+
+- 复制、选主、故障转移、分片、一致性的取舍。
+- 主从延迟、脑裂、数据丢失窗口和读写分离风险。
+- 能否给出监控、限流、降级和恢复方案。
+
+## 标准回答
+
+Redis 高可用围绕主从复制、哨兵和 Cluster。复制通常是异步的，不能承诺强一致；哨兵负责监控、主观/客观下线、选主和故障转移；Cluster 通过槽位分片扩展容量和吞吐，但会带来跨槽限制。
+
+## 深挖追问
+
+1. 主从能强一致吗？通常不能，异步复制有延迟。
+2. 哨兵和 Cluster 区别？哨兵做故障转移，Cluster 还做分片。
+3. 脑裂如何降低影响？配置最小副本写入、监控延迟和超时切换。
+
+## 实战场景 / SQL 示例
+
+```text
+INFO replication
+CLUSTER NODES
+-- 观察主从状态、复制延迟、槽位分布和故障转移情况。
+```
+
+## 易错点 / 总结
+
+- 异步复制不等于强一致。
+- 读写分离要处理写后读一致性。
+- 扩容、迁移、故障切换必须提前演练。

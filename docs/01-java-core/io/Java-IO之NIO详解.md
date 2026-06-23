@@ -179,3 +179,39 @@ MappedByteBuffer mbb = fc.map(FileChannel.MapMode.READ_WRITE, 0, 1024);
 NIO与普通I/O区别：
 •  NIO是非阻塞的
 •  NIO面向块，I/O面向流
+
+---
+
+<!-- interview-review-enhanced -->
+
+## 面试复习版
+
+### 核心概念
+- BIO 同步阻塞，通常一连接一线程。
+- NIO 同步非阻塞，基于 Channel、Buffer、Selector。
+- AIO 异步非阻塞，由回调或 Future 获取结果。
+- I/O 多路复用允许一个线程监听多个连接事件。
+
+### 面试官想考什么
+- 三种 I/O 模型差异和适用场景。
+- 阻塞/非阻塞、同步/异步的区别。
+
+### 标准回答
+BIO 编程简单但高并发下线程成本高；NIO 通过 Selector 管理多个 Channel，适合高并发网络服务；AIO 将 I/O 完成通知交给系统/框架，模型更异步但使用复杂。
+
+### 深挖追问
+- select/poll/epoll 有什么区别？
+- NIO 为什么需要 Buffer？
+- Netty 为什么基于 NIO？
+
+### 实战场景/代码示例
+```java
+Selector selector=Selector.open();
+channel.configureBlocking(false);
+channel.register(selector, SelectionKey.OP_READ);
+```
+
+### 易错点/总结
+- 非阻塞不等于异步。
+- NIO 编程复杂，实际项目常用 Netty 封装。
+

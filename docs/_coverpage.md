@@ -1,9 +1,10 @@
-<!-- 封面页 -->
-
 # Java 后端面试知识库
 
-> 系统化的 Java 后端面试知识点
-> 八股文 · 实战场景 · 架构设计
+> 面向 Java 后端工程师的复习手册：基础、框架、数据库、中间件、分布式、微服务、架构设计、算法与 DevOps。
 
-[![GitHub](https://img.shields.io/github/stars/youthynf/java-backend-knowledge?style=social)](https://github.com/youthynf/java-backend-knowledge)
-[开始阅读](/)
+- 系统梳理高频面试题
+- 结合生产场景解释原理
+- 补充标准回答、追问和易错点
+- 适合面试冲刺，也适合作为日常知识库
+
+[开始阅读](README.md)

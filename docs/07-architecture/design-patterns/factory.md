@@ -1,346 +1,37 @@
-# 工厂模式 (Factory)
+# 工厂模式
 
 ## 核心概念
 
-将对象的创建逻辑封装起来，让客户端无需知道具体创建细节。
+工厂模式用于封装对象创建过程，让调用方不直接依赖具体实现类。常见形式包括简单工厂、工厂方法和抽象工厂。
 
-### 三种形式
+## 面试官想考什么
 
-| 模式 | 特点 |
-|------|------|
-| 简单工厂 | 一个工厂类创建所有产品 |
-| 工厂方法 | 每个产品有对应的工厂 |
-| 抽象工厂 | 创建产品族（相关产品集合） |
+- 是否理解为什么要封装创建逻辑；
+- 是否能区分简单工厂、工厂方法、抽象工厂；
+- 是否知道工厂模式和 Spring IOC 的关系；
+- 是否能判断什么时候不需要工厂。
 
----
+## 标准回答
 
-## 一、简单工厂
+> 工厂模式的核心是把对象创建从业务代码中抽离出来，调用方只依赖接口或抽象类。简单工厂通过一个工厂类根据参数创建对象；工厂方法把创建逻辑下放到子类；抽象工厂用于创建一组相关对象。它适合对象创建复杂、实现类较多、需要扩展的场景，但如果对象很简单，强行使用会增加复杂度。
 
-### 实现
+## 深挖追问
 
-```java
-// 产品接口
-public interface Product {
-    void use();
-}
+### 简单工厂违反开闭原则吗？
 
-// 具体产品A
-public class ProductA implements Product {
-    @Override
-    public void use() {
-        System.out.println("使用产品 A");
-    }
-}
+通常会。新增产品类型时往往需要修改工厂类的判断逻辑。但它实现简单，在类型不多、变化不频繁时仍然实用。
 
-// 具体产品B
-public class ProductB implements Product {
-    @Override
-    public void use() {
-        System.out.println("使用产品 B");
-    }
-}
+### Spring Bean 工厂算工厂模式吗？
 
-// 简单工厂
-public class SimpleFactory {
-    public static Product create(String type) {
-        switch (type) {
-            case "A":
-                return new ProductA();
-            case "B":
-                return new ProductB();
-            default:
-                throw new IllegalArgumentException("未知产品类型: " + type);
-        }
-    }
-}
-
-// 使用
-Product product = SimpleFactory.create("A");
-product.use();
-```
-
-### 优缺点
-
-- **优点**：简单直接，适合产品种类少且固定的场景
-- **缺点**：新增产品需要修改工厂类，违反开闭原则
-
----
-
-## 二、工厂方法
-
-### 实现
-
-```java
-// 产品接口
-public interface Product {
-    void use();
-}
-
-// 具体产品
-public class ProductA implements Product {
-    @Override
-    public void use() {
-        System.out.println("使用产品 A");
-    }
-}
-
-public class ProductB implements Product {
-    @Override
-    public void use() {
-        System.out.println("使用产品 B");
-    }
-}
-
-// 工厂接口
-public interface Factory {
-    Product create();
-}
-
-// 具体工厂
-public class FactoryA implements Factory {
-    @Override
-    public Product create() {
-        return new ProductA();
-    }
-}
-
-public class FactoryB implements Factory {
-    @Override
-    public Product create() {
-        return new ProductB();
-    }
-}
-
-// 使用
-Factory factory = new FactoryA();
-Product product = factory.create();
-product.use();
-```
-
-### 优缺点
-
-- **优点**：符合开闭原则，新增产品只需新增工厂类
-- **缺点**：类数量增多
-
----
-
-## 三、抽象工厂
-
-### 实现
-
-```java
-// 产品族：数据库组件
-public interface Connection {
-    void connect();
-}
-
-public interface Statement {
-    void execute(String sql);
-}
-
-// MySQL 产品族
-public class MySqlConnection implements Connection {
-    @Override
-    public void connect() {
-        System.out.println("MySQL 连接");
-    }
-}
-
-public class MySqlStatement implements Statement {
-    @Override
-    public void execute(String sql) {
-        System.out.println("MySQL 执行: " + sql);
-    }
-}
-
-// PostgreSQL 产品族
-public class PostgresConnection implements Connection {
-    @Override
-    public void connect() {
-        System.out.println("PostgreSQL 连接");
-    }
-}
-
-public class PostgresStatement implements Statement {
-    @Override
-    public void execute(String sql) {
-        System.out.println("PostgreSQL 执行: " + sql);
-    }
-}
-
-// 抽象工厂
-public interface DatabaseFactory {
-    Connection createConnection();
-    Statement createStatement();
-}
-
-// MySQL 工厂
-public class MySqlFactory implements DatabaseFactory {
-    @Override
-    public Connection createConnection() {
-        return new MySqlConnection();
-    }
-    
-    @Override
-    public Statement createStatement() {
-        return new MySqlStatement();
-    }
-}
-
-// PostgreSQL 工厂
-public class PostgresFactory implements DatabaseFactory {
-    @Override
-    public Connection createConnection() {
-        return new PostgresConnection();
-    }
-    
-    @Override
-    public Statement createStatement() {
-        return new PostgresStatement();
-    }
-}
-
-// 使用
-DatabaseFactory factory = new MySqlFactory();
-Connection conn = factory.createConnection();
-Statement stmt = factory.createStatement();
-conn.connect();
-stmt.execute("SELECT * FROM users");
-```
-
----
-
-## 面试高频问题
-
-### Q1: 工厂方法 vs 抽象工厂？
-
-| 对比 | 工厂方法 | 抽象工厂 |
-|------|----------|----------|
-| 产品维度 | 一种产品 | 产品族（多种相关产品） |
-| 工厂数量 | 每个产品一个工厂 | 每个产品族一个工厂 |
-| 新增产品 | 新增工厂类 | 需要修改工厂接口 |
-| 新增产品族 | - | 新增工厂类 |
-
-### Q2: 开闭原则如何体现？
-
-**工厂方法**：
-- 新增产品：新增产品类 + 工厂类，无需修改已有代码
-- 修改产品：只需修改对应工厂
-
-**简单工厂**：
-- 新增产品需要修改工厂类的 if/switch，违反开闭原则
-
-### Q3: Spring 如何使用工厂模式？
-
-```java
-// Spring BeanFactory
-public interface BeanFactory {
-    Object getBean(String name) throws BeansException;
-    <T> T getBean(Class<T> requiredType) throws BeansException;
-}
-
-// ApplicationContext 继承了 BeanFactory
-ApplicationContext context = new ClassPathXmlApplicationContext("beans.xml");
-UserService userService = context.getBean(UserService.class);
-```
-
----
+Spring 容器承担了对象创建和依赖管理职责，可以看作工厂思想的复杂实现。面试中可以结合 BeanFactory、ApplicationContext 说明。
 
 ## 实战场景
 
-### 场景1：日志工厂
+支付系统支持多种渠道，可以定义 `PayService` 接口，不同支付渠道实现该接口，再通过工厂或 Spring 容器按渠道编码获取对应实现，避免业务代码中散落大量 `new` 和 `if-else`。
 
-```java
-public interface Logger {
-    void log(String message);
-}
+## 易错点/总结
 
-public class ConsoleLogger implements Logger {
-    @Override
-    public void log(String message) {
-        System.out.println("[CONSOLE] " + message);
-    }
-}
-
-public class FileLogger implements Logger {
-    @Override
-    public void log(String message) {
-        // 写入文件
-    }
-}
-
-public class LoggerFactory {
-    public static Logger getLogger(String type) {
-        switch (type) {
-            case "console":
-                return new ConsoleLogger();
-            case "file":
-                return new FileLogger();
-            default:
-                throw new IllegalArgumentException("Unknown logger type");
-        }
-    }
-}
-```
-
-### 场景2：支付工厂
-
-```java
-public interface PaymentProcessor {
-    void pay(BigDecimal amount);
-}
-
-public class AlipayProcessor implements PaymentProcessor {
-    @Override
-    public void pay(BigDecimal amount) {
-        System.out.println("支付宝支付: " + amount);
-    }
-}
-
-public class WechatProcessor implements PaymentProcessor {
-    @Override
-    public void pay(BigDecimal amount) {
-        System.out.println("微信支付: " + amount);
-    }
-}
-
-@Component
-public class PaymentFactory {
-    private final Map<String, PaymentProcessor> processors;
-    
-    public PaymentFactory(List<PaymentProcessor> processorList) {
-        this.processors = processorList.stream()
-            .collect(Collectors.toMap(
-                p -> p.getClass().getSimpleName().replace("Processor", "").toLowerCase(),
-                p -> p
-            ));
-    }
-    
-    public PaymentProcessor getProcessor(String type) {
-        PaymentProcessor processor = processors.get(type);
-        if (processor == null) {
-            throw new IllegalArgumentException("Unknown payment type: " + type);
-        }
-        return processor;
-    }
-}
-```
-
----
-
-## 延伸思考
-
-1. **工厂模式 vs 建造者模式** 如何选择？
-2. **Spring Bean 工厂** 是哪种工厂模式？
-3. **依赖注入** 如何替代工厂模式？
-
----
-
-## 参考资料
-
-- [设计模式：可复用面向对象软件的基础](https://www.oreilly.com/library/view/design-patterns-elements/0201633612/)
-- [Head First 设计模式](https://www.oreilly.com/library/view/head-first-design/0596007124/)
-
----
-
-*最后更新: 2026-04-09*
+- 工厂模式解决创建逻辑复杂和依赖具体类的问题；
+- 简单工厂不等于工厂方法；
+- 抽象工厂适合产品族，不要滥用；
+- 如果只是 `new` 一个简单对象，不一定需要工厂。

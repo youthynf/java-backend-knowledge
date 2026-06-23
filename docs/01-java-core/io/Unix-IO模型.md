@@ -49,3 +49,39 @@ select的timeout参数精度为 1ns，而 poll 和 epoll 为 1ms，因此 select
 poll没有最大描述符数量的限制，如果平台支持并且对实时性要求不高，应该使用poll而不是select。需要同时监控小于 1000 个描述符，就没有必要使用 epoll，因为这个应用场景下并不能体现 epoll 的优势。需要监控的描述符状态变化多，而且都是非常短暂的，也没有必要使用 epoll。因为 epoll 中的所有描述符都存储在内核中，造成每次需要对描述符的状态改变都需要通过 epoll_ctl() 进行系统调用，频繁系统调用降低效率。并且epoll 的描述符存储在内核，不容易调试。
 •  epoll 应用场景
 只需要运行在Linux平台上，并且有非常大量的描述符需要同时轮询，而且这些连接最好是长连接。
+
+---
+
+<!-- interview-review-enhanced -->
+
+## 面试复习版
+
+### 核心概念
+- BIO 同步阻塞，通常一连接一线程。
+- NIO 同步非阻塞，基于 Channel、Buffer、Selector。
+- AIO 异步非阻塞，由回调或 Future 获取结果。
+- I/O 多路复用允许一个线程监听多个连接事件。
+
+### 面试官想考什么
+- 三种 I/O 模型差异和适用场景。
+- 阻塞/非阻塞、同步/异步的区别。
+
+### 标准回答
+BIO 编程简单但高并发下线程成本高；NIO 通过 Selector 管理多个 Channel，适合高并发网络服务；AIO 将 I/O 完成通知交给系统/框架，模型更异步但使用复杂。
+
+### 深挖追问
+- select/poll/epoll 有什么区别？
+- NIO 为什么需要 Buffer？
+- Netty 为什么基于 NIO？
+
+### 实战场景/代码示例
+```java
+Selector selector=Selector.open();
+channel.configureBlocking(false);
+channel.register(selector, SelectionKey.OP_READ);
+```
+
+### 易错点/总结
+- 非阻塞不等于异步。
+- NIO 编程复杂，实际项目常用 Netty 封装。
+

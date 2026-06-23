@@ -1,5 +1,7 @@
 # MySQL的Checkpoint机制是什么？
 
+## 核心概念
+
 MySQL的Checkpoint机制是什么？
 在MySQL数据库的运行体系中，数据的持久性和一致性是核心诉求，而Checkpoint机制正是支撑这一诉求的关键技术。无论是日常业务中的数据读写，还是系统故障后的恢复，Checkpoint都在背后默默发挥着重要作用。今天我们就来全面拆解MySQL Checkpoint机制，搞懂它的工作原理、影响及优化方式。
 Checkpoint机制：数据持久化的“定海神针”
@@ -57,3 +59,33 @@ Last checkpoint at   1896535000  -- 对应：Last checkpoint at（最近一次Ch
 升级磁盘为SSD，大幅提升I/O吞吐量，从硬件层面缓解Checkpoint的I/O压力；同时配置RAID阵列，进一步提升存储性能和可靠性。
 总结
 MySQL Checkpoint机制是数据持久化与故障恢复的核心支撑，其本质是通过“定期+阈值”的方式批量刷新脏页，平衡内存与磁盘的数据一致性。在实际运维中，需深入理解Checkpoint的触发条件与执行逻辑，结合业务特性优化参数和运维策略，既要通过Checkpoint筑牢数据安全防线，也要避免其成为数据库性能瓶颈，让数据库在安全与高效中稳定运行。
+
+## 面试官想考什么
+
+- redo log、undo log、binlog 的职责边界。
+- 事务提交、崩溃恢复、主从复制之间如何配合。
+- 两阶段提交解决什么一致性问题。
+
+## 标准回答
+
+MySQL 日志要区分职责：undo log 用于回滚和 MVCC，redo log 用于崩溃恢复，binlog 用于复制和按时间点恢复。事务提交时 redo log 与 binlog 通过两阶段提交降低不一致风险。
+
+## 深挖追问
+
+1. redo 和 binlog 区别？redo 用于崩溃恢复，binlog 用于复制和归档恢复。
+2. 为什么需要两阶段提交？降低 redo 与 binlog 不一致。
+3. undo 只用于回滚吗？还用于 MVCC 构造历史版本。
+
+## 实战场景 / SQL 示例
+
+```sql
+SHOW VARIABLES LIKE "sync_binlog";
+SHOW VARIABLES LIKE "innodb_flush_log_at_trx_commit";
+-- 参数影响持久性、性能和故障丢失窗口。
+```
+
+## 易错点 / 总结
+
+- 不要混淆 Server 层 binlog 和 InnoDB redo/undo。
+- 刷盘参数会影响性能和故障丢失窗口。
+- 只知道日志名不够，要能串起提交与恢复流程。

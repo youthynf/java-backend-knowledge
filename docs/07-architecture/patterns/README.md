@@ -1,6 +1,28 @@
-# patterns
+# 设计模式
 
-- [proxy](07-architecture/patterns/proxy.md)
-- [singleton](07-architecture/patterns/singleton.md)
-- [strategy](07-architecture/patterns/strategy.md)
-- [template-method](07-architecture/patterns/template-method.md)
+设计模式不是为了炫技，而是为了解决代码在扩展、复用和维护上的常见问题。面试时重点说明 **使用场景、解决的问题、代价和项目落地**。
+
+## 文档导航
+
+- [单例模式](singleton.md)
+- [代理模式](proxy.md)
+- [策略模式](strategy.md)
+- [模板方法模式](template-method.md)
+
+## 面试官想考什么
+
+- 是否理解模式背后的设计原则，例如开闭原则、依赖倒置、单一职责；
+- 是否能区分相似模式的适用场景；
+- 是否知道设计模式过度使用会增加复杂度；
+- 是否能结合 Spring、JDK 或项目代码举例。
+
+## 标准回答
+
+> 设计模式是前人总结的代码结构经验。使用时要先判断变化点在哪里，再用合适的模式隔离变化，而不是为了套模式而套模式。
+
+## 易错点
+
+- 把所有 if-else 都强行改成策略模式；
+- 单例没有考虑线程安全、反射和序列化；
+- 代理模式只知道静态代理，不知道动态代理；
+- 模板方法和策略模式边界不清。

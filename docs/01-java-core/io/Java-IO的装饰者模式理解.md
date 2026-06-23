@@ -14,3 +14,37 @@ FileInputStream fileInputStream = new FileInputStream(filePath);
 BufferedInputStream bufferedInputStream = new BufferedInputStream(fileInputStream);
 
 DataInputStream装饰者提供了对更多数据类型进行输入的操作, 比如int, double等基本类型.
+
+---
+
+<!-- interview-review-enhanced -->
+
+## 面试复习版
+
+### 核心概念
+- Java I/O 按方向分输入/输出，按单位分字节流/字符流，按功能分节点流/处理流。
+- 装饰者模式让 Buffered、Data、Object 等流组合增强能力。
+
+### 面试官想考什么
+- 字节流和字符流如何选择。
+- 为什么关闭最外层包装流即可。
+
+### 标准回答
+处理二进制用 InputStream/OutputStream，处理文本用 Reader/Writer 并明确字符集。缓冲流减少系统调用，转换流负责字节到字符的编码转换。
+
+### 深挖追问
+- InputStreamReader 作用？
+- BufferedInputStream 为什么快？
+- 序列化流有什么风险？
+
+### 实战场景/代码示例
+```java
+try(BufferedReader br=Files.newBufferedReader(path, StandardCharsets.UTF_8)){
+  String line=br.readLine();
+}
+```
+
+### 易错点/总结
+- 文本 I/O 必须明确字符集。
+- 流使用后要关闭，优先 try-with-resources。
+

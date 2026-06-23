@@ -148,3 +148,37 @@ class String implements Comparable {
     
     public int compareTo(String other) { ... } // 实际方法
 }
+
+---
+
+<!-- interview-review-enhanced -->
+
+## 面试复习版
+
+### 核心概念
+- 泛型主要在编译期做类型检查，运行期类型擦除。
+- PECS：生产者 extends，消费者 super。
+
+### 面试官想考什么
+- 类型擦除、泛型不变性、上下界通配符。
+- 为什么 List<Object> 不是 List<String> 父类型。
+
+### 标准回答
+泛型把类型错误提前到编译期，减少强转。由于擦除，不能直接 new T 或创建泛型数组；API 设计时按读写方向选择 extends/super。
+
+### 深挖追问
+- 什么是桥接方法？
+- List<?> 和原始类型 List 区别？
+- 如何读取泛型元数据？
+
+### 实战场景/代码示例
+```java
+void copy(List<? extends Number> src, List<? super Number> dst){
+  for(Number n:src) dst.add(n);
+}
+```
+
+### 易错点/总结
+- 少用原始类型。
+- 泛型不是协变的。
+

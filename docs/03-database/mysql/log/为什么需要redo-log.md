@@ -1,5 +1,7 @@
 # 为什么需要redo log?
 
+## 核心概念
+
 为什么需要redo log?
 Buffer Pool 是提高了读写效率没错，但是问题来了，Buffer Pool 是基于内存的，而内存总是不可靠，万一断电重启，还没来得及落盘的脏页数据就会丢失。为了防止断电导致数据丢失的问题，当有一条记录需要更新的时候，InnoDB 引擎就会先更新内存（同时标记为脏页），然后将本次对这个页的修改以 redo log 的形式记录下来，这个时候更新就算完成了。后续，InnoDB 引擎会在适当的时候，由后台线程将缓存在 Buffer Pool 的脏页刷新到磁盘里，这就是 WAL （Write-Ahead Logging）技术。WAL 技术指的是， MySQL 的写操作并不是立刻写到磁盘上，而是先写日志，然后在合适的时间再写到磁盘上。
 
@@ -65,3 +67,33 @@ check point ～ write pos 之间的部分（图中蓝色部分）：待落盘的
 Write-Ahead Logging(WAL)：在事务提交之前，将事务所做的修改操作记录到redo log中，然后再将数据写入磁盘，这样即时在数据写入磁盘钱发生了宕机，系统可以通过redo log中的记录来恢复数据。
 Redo log的顺序写入：redo log采用追加写入的方式，将redo log日志追加到文件末尾，而不是随机写入，这样可以减少磁盘的随机I/O操作，提高写入性能；
 Checkpoint机制：MySQL会定期将内存中的数据刷新到磁盘，同时将最新的LSN（Log Sequenct Number）记录到磁盘，这个LSN可以确保redo log中的操作是按顺序执行的。在恢复数据时，系统根据LSN来确定从哪个位置开始应用redo log。
+
+## 面试官想考什么
+
+- redo log、undo log、binlog 的职责边界。
+- 事务提交、崩溃恢复、主从复制之间如何配合。
+- 两阶段提交解决什么一致性问题。
+
+## 标准回答
+
+MySQL 日志要区分职责：undo log 用于回滚和 MVCC，redo log 用于崩溃恢复，binlog 用于复制和按时间点恢复。事务提交时 redo log 与 binlog 通过两阶段提交降低不一致风险。
+
+## 深挖追问
+
+1. redo 和 binlog 区别？redo 用于崩溃恢复，binlog 用于复制和归档恢复。
+2. 为什么需要两阶段提交？降低 redo 与 binlog 不一致。
+3. undo 只用于回滚吗？还用于 MVCC 构造历史版本。
+
+## 实战场景 / SQL 示例
+
+```sql
+SHOW VARIABLES LIKE "sync_binlog";
+SHOW VARIABLES LIKE "innodb_flush_log_at_trx_commit";
+-- 参数影响持久性、性能和故障丢失窗口。
+```
+
+## 易错点 / 总结
+
+- 不要混淆 Server 层 binlog 和 InnoDB redo/undo。
+- 刷盘参数会影响性能和故障丢失窗口。
+- 只知道日志名不够，要能串起提交与恢复流程。

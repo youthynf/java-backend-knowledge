@@ -16,3 +16,37 @@ size与我们add的数量不符：并发线程拿到size相同，同时执行siz
 使用new CopyOnWriteArrayList(arrayList)包装；
 使用Vector类替代ArrayList：new Vector(arrayList);
 助记：线程不安全体现： 1.部分为null：拿到size相同，同时完成赋值，但size++被先后执行； 2.索引越界异常：拿到size相同，刚好是数组最后一个元素下标，赋值和size++先后执行； 3.size与add的数量不符：拿到size相同，同时完成赋值，执行size++并发，由于非原子性，导致size覆盖写；
+
+---
+
+<!-- interview-review-enhanced -->
+
+## 面试复习版
+
+### 核心概念
+- ArrayList 底层是动态数组，支持快速随机访问。
+- 扩容会创建新数组并复制元素；非线程安全。
+
+### 面试官想考什么
+- 扩容机制、时间复杂度、线程安全。
+- ArrayList 与 LinkedList/Vector 区别。
+
+### 标准回答
+ArrayList 适合读多写少、按下标访问的场景。尾部追加均摊 O(1)，中间插入/删除需要移动元素。多线程修改要外部同步或使用并发集合。
+
+### 深挖追问
+- 默认容量和首次扩容？
+- 为什么随机访问快？
+- fail-fast 是什么？
+
+### 实战场景/代码示例
+```java
+List<String> list=new ArrayList<>(100);
+list.add("A");
+String first=list.get(0);
+```
+
+### 易错点/总结
+- 预估大小可减少扩容成本。
+- 迭代时结构性修改会触发 ConcurrentModificationException。
+

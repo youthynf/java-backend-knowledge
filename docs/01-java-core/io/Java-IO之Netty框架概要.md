@@ -129,3 +129,35 @@ public class NettyClient {
         }
     }
 }
+
+---
+
+<!-- interview-review-enhanced -->
+
+## 面试复习版
+
+### 核心概念
+- Netty 是基于事件驱动和 NIO 的网络框架。
+- 核心组件包括 EventLoop、Channel、ChannelPipeline、Handler、ByteBuf。
+
+### 面试官想考什么
+- Netty 为什么高性能。
+- Reactor 模型和 pipeline 机制。
+
+### 标准回答
+Netty 封装 NIO 复杂性，通过事件循环、非阻塞 I/O、内存池和 pipeline 处理网络事件，常用于 RPC、网关、长连接服务。
+
+### 深挖追问
+- EventLoop 为什么不能阻塞？
+- ByteBuf 比 ByteBuffer 好在哪？
+- 粘包拆包怎么处理？
+
+### 实战场景/代码示例
+```java
+// 入站事件沿 ChannelPipeline 传播，由 Handler 处理编解码和业务逻辑。
+```
+
+### 易错点/总结
+- 不要在 EventLoop 中执行耗时阻塞任务。
+- 网络半包/粘包是 TCP 流式协议常见问题。
+

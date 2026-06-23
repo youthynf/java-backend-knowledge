@@ -74,3 +74,36 @@ ServiceLoader.load() 被调用；
 配置敏感：配置文件和路径必须严格遵循；
 性能开销：反射创建实例有一定性能损耗；
 无选择性：会加载所有实现类，无法按需加载。
+
+---
+
+<!-- interview-review-enhanced -->
+
+## 面试复习版
+
+### 核心概念
+- SPI 是面向接口的服务发现机制。
+- 标准 SPI 通过 META-INF/services/接口全限定名 声明实现类。
+
+### 面试官想考什么
+- 插件化扩展思想。
+- SPI 与 API、工厂模式区别。
+
+### 标准回答
+框架定义接口，第三方提供实现，调用方通过 ServiceLoader 等机制加载实现，从而在不修改框架代码的情况下扩展能力。
+
+### 深挖追问
+- ServiceLoader 是否懒加载？
+- 多个实现如何选择？
+- 标准 SPI 缺点？
+
+### 实战场景/代码示例
+```java
+ServiceLoader<MyPlugin> loader=ServiceLoader.load(MyPlugin.class);
+for(MyPlugin p:loader) p.start();
+```
+
+### 易错点/总结
+- 标准 SPI 缺少依赖注入和条件选择。
+- 实现类通常需要可访问无参构造。
+

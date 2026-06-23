@@ -1,24 +1,39 @@
-# 🏠 欢迎
+# 🏠 Java 后端面试知识库
 
-> 个人知识库，持续积累中。
+这是一份面向 **Java 后端面试复习 + 日常知识沉淀** 的文档库。建议不要只背结论，而是按“概念 → 原理 → 场景 → 追问 → 易错点”的路径复习。
+
+## 📚 如何使用
+
+1. **先搭框架**：每个模块先看 README，知道本模块解决什么问题。
+2. **再攻高频题**：优先复习带有“面试官想考什么 / 标准回答 / 深挖追问”的文章。
+3. **最后串场景**：把数据库、缓存、MQ、分布式、微服务、架构设计串成完整系统方案。
+4. **回答要落地**：面试中尽量给出取舍、边界和踩坑，不要只说定义。
 
 ## 📂 知识分类
 
-| 分类 | 说明 |
-|------|------|
-| [☕ Java 核心](/01-java-core/basics/) | JVM、并发、集合、IO、设计模式 |
-| [🔧 框架](/02-frameworks/spring/) | Spring、MyBatis、Spring Cloud |
-| [💾 数据库](/03-database/mysql/basics/) | MySQL、Redis |
-| [📨 消息队列](/04-mq/basics/) | Kafka、RocketMQ、RabbitMQ |
-| [🌐 分布式](/05-distributed/) | 理论、锁、事务、ID |
-| [🏗 微服务](/06-microservice/) | 治理、网关、追踪 |
-| [📐 架构设计](/07-architecture/patterns/) | 设计模式、系统设计 |
-| [🔗 网络](/08-network/network-model/) | HTTP、TCP/IP、网络安全 |
-| [🧮 算法](/09-algorithm/) | 数据结构与算法 |
-| [🐳 DevOps](/devops/) | Docker、K8s、Linux |
+- [Java 基础](01-java/README.md)：语法、集合、并发、JVM 等核心基础。
+- [框架](02-frameworks/README.md)：Spring、IOC、AOP、Bean 生命周期等。
+- [数据库](03-database/README.md)：MySQL、索引、事务、SQL 优化等。
+- [中间件](04-middleware/README.md)：Redis、MQ、搜索、缓存等。
+- [分布式](05-distributed/README.md)：分布式锁、协议、事务补偿、熔断等。
+- [微服务](06-microservice/README.md)：服务拆分、注册发现、配置、网关、治理。
+- [架构设计](07-architecture/README.md)：设计模式、系统设计、高并发场景。
+- [项目实战](08-projects/README.md)：项目经验、业务方案、落地复盘。
+- [算法](09-algorithm/README.md)：常见数据结构与算法面试准备。
+- [DevOps](devops/README.md)：Linux、Docker、日志分析、部署排障。
 
-## 📌 说明
+## 🎯 面试回答模板
 
-- 内容来源：原创整理 + 网络收藏
-- 每篇收藏文章均标注原文链接
-- 知识库持续更新，欢迎交流
+> 先给结论 → 解释原理 → 结合项目场景 → 说明取舍 → 补充风险和优化方向。
+
+常用表达：
+
+- “这个问题本质是……我一般从……几个层面处理。”
+- “低并发可以……但高并发下要考虑……”
+- “它的缺点是……所以生产上还需要配合……”
+
+## 📌 维护原则
+
+- 不确定的内容不强行下结论，优先标注边界条件。
+- 命令类文档保留可执行步骤，同时补充风险、排查思路和面试表达。
+- 架构类文档强调取舍，不把某个方案描述成“银弹”。

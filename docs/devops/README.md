@@ -1,11 +1,29 @@
-# devops
+# DevOps
 
-- [常用Linux命令](devops/常用Linux命令.md)
-- [如何从日志分析PV和UV？](devops/如何从日志分析PV和UV？.md)
-- [使用TailScale外网访问树莓派](devops/使用TailScale外网访问树莓派.md)
-- [树莓派-5-NVMe-SSD-系统迁移全流程手册](devops/树莓派-5-NVMe-SSD-系统迁移全流程手册.md)
-- [树莓派-Raspberry-Pi-OS（原生-Debian）常用指令大全](devops/树莓派-Raspberry-Pi-OS（原生-Debian）常用指令大全.md)
-- [Docker部署实操笔记](devops/Docker部署实操笔记.md)
-- [Docker与虚拟机有什么区别？](devops/Docker与虚拟机有什么区别？.md)
-- [Docker与K8s之前的关系是什么？](devops/Docker与K8s之前的关系是什么？.md)
-- [Windows11使用docker部署openclaw](devops/Windows11使用docker部署openclaw.md)
+DevOps 模块面向 Java 后端常见部署、排障和运维协作场景，包括 Linux 命令、日志分析、Docker、Kubernetes 基础认知等。
+
+## 文档导航
+
+- [什么是 Linux？](什么是Linux？.md)
+- [常用的 Linux 命令有哪些？](常用的Linux命令有哪些？.md)
+- [如何从日志分析 PV 和 UV？](如何从日志分析PV和UV？.md)
+- [Docker 与虚拟机有什么区别？](Docker与虚拟机有什么区别？.md)
+- [Docker 与 K8s 之间的关系是什么？](Docker与K8s之前的关系是什么？.md)
+
+## 面试官想考什么
+
+- 是否具备基本线上排障能力；
+- 是否能看懂日志、定位端口、进程、磁盘、CPU、内存问题；
+- 是否理解容器和虚拟机的隔离差异；
+- 是否知道应用发布、回滚、监控、告警的基本流程。
+
+## 标准回答
+
+> 后端工程师不一定要成为专业运维，但必须能完成基本部署和故障定位：看日志、查进程、查端口、看资源指标、确认配置和网络连通性。容器化之后，还要理解镜像、容器、编排、服务发现和滚动发布。
+
+## 易错点
+
+- 只会本地开发，不会看服务器日志；
+- 把 Docker 当成轻量虚拟机，忽略镜像分层和进程隔离；
+- 日志分析只看关键字，不关注时间窗口、请求链路和错误比例；
+- 线上直接操作缺少备份和回滚方案。

@@ -1,5 +1,7 @@
 # 底层数据结构-SDS
 
+## 核心概念
+
 底层数据结构-SDS
 Redis是用C语言实现的，但是它没有直接使用C语言的char*字符数组来实现字符串，而是自己封装了一个名为简单动态字符串（simple dynamic String，SDS）的数据结构来表示字符串。也就是Redis的String数据类型的底层数据结构是SDS。
 
@@ -16,3 +18,33 @@ SDS相比C语言字符串优势：
 
 节约内存空间：
 SDS结构中有个flags成员变量，表示SDS类型。Redis一共设计了5种类型，分别是sdshdr5、sdshdr8、sdshdr16、sdshdr32、sdshdr64。它们主要区别是使用不同字节长度来表示字符串的长度len和可分配长度alloc这两个头信息，从而节约更少内存占用。此外，默认情况编译器会进行字节对齐填充，存在内存浪费的可能，支持采用了__attribute__((packaged))属性定义结构体，按照实际占用字节数进行内存分配，从而节省内存空间。
+
+## 面试官想考什么
+
+- Redis 类型的使用场景、底层编码和时间复杂度。
+- 不同结构的内存占用、适用边界和反模式。
+- key 设计、TTL、容量控制是否合理。
+
+## 标准回答
+
+Redis 数据结构题要同时回答使用场景、底层编码和复杂度。选择 String、Hash、List、Set、ZSet、Bitmap、HyperLogLog、GEO、Stream 等结构时，要考虑访问模式、内存占用、key 规模和命令复杂度。
+
+## 深挖追问
+
+1. 为什么有紧凑编码？节省内存并提升局部性。
+2. ZSet 为什么适合排行榜？按 score 排序并支持范围查询。
+3. Hash 适合存对象吗？适合小对象字段更新，但大 Hash 也可能成为大 Key。
+
+## 实战场景 / SQL 示例
+
+```text
+ZADD rank:game 1001 user:1
+ZREVRANGE rank:game 0 9 WITHSCORES
+HSET user:1 name alice level 5
+```
+
+## 易错点 / 总结
+
+- 不要忽略命令复杂度和集合规模。
+- 大 Key、热 Key 往往比平均 QPS 更危险。
+- 选择结构前先明确读写模式和过期策略。

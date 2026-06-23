@@ -217,3 +217,39 @@ Netty存在意义
 虽然Java NIO和Java AIO框架提供了多路复用/异步IO的支持, 但是并没有提供上层信息格式的良好封装. 例如没有提供针对Protocol Buffer或JSON等信息格式的封装, 但是Netty提供了这些数据格式的封装(基于责任链模式的编码和解码功能);
 Netty可以处理很多上层特有的服务, 如客户端的权限以及上面提到的信息格式封装和简单的数据读取;
 Java NIO框架存在一个poll/epoll bug, 使用Selector.select(timeout)时其实是非阻塞的, 导致CPU使用率100%. 原因是底层JNI的实现在Linux使用epoll系统调用, 某些内核版本中epoll的某些边缘情况处理不当, 导致本应该阻塞的调用变成了非阻塞. Netty在应用层解决了这个问题.
+
+---
+
+<!-- interview-review-enhanced -->
+
+## 面试复习版
+
+### 核心概念
+- BIO 同步阻塞，通常一连接一线程。
+- NIO 同步非阻塞，基于 Channel、Buffer、Selector。
+- AIO 异步非阻塞，由回调或 Future 获取结果。
+- I/O 多路复用允许一个线程监听多个连接事件。
+
+### 面试官想考什么
+- 三种 I/O 模型差异和适用场景。
+- 阻塞/非阻塞、同步/异步的区别。
+
+### 标准回答
+BIO 编程简单但高并发下线程成本高；NIO 通过 Selector 管理多个 Channel，适合高并发网络服务；AIO 将 I/O 完成通知交给系统/框架，模型更异步但使用复杂。
+
+### 深挖追问
+- select/poll/epoll 有什么区别？
+- NIO 为什么需要 Buffer？
+- Netty 为什么基于 NIO？
+
+### 实战场景/代码示例
+```java
+Selector selector=Selector.open();
+channel.configureBlocking(false);
+channel.register(selector, SelectionKey.OP_READ);
+```
+
+### 易错点/总结
+- 非阻塞不等于异步。
+- NIO 编程复杂，实际项目常用 Netty 封装。
+

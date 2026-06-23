@@ -182,3 +182,37 @@ public class PermissionChecker {
 
 - [Java String 源码](https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/lang/String.java)
 - [JVM 字符串常量池](https://www.baeldung.com/java-string-pool)
+
+---
+
+<!-- interview-review-enhanced -->
+
+## 面试复习版
+
+### 核心概念
+- String 不可变，字面量通常进入字符串常量池。
+- intern 返回常量池中等值字符串引用；编译期常量拼接可折叠。
+
+### 面试官想考什么
+- new String、字面量、intern 的引用关系。
+- 不可变性和常量池复用的意义。
+
+### 标准回答
+回答时先区分内容相等和引用相同，再区分编译期常量与运行期对象。String 不可变，适合做 Map key；大量动态拼接应使用 StringBuilder。
+
+### 深挖追问
+- StringBuilder/StringBuffer 区别？
+- 为什么 String 可以缓存 hash？
+- 循环拼接字符串有什么问题？
+
+### 实战场景/代码示例
+```java
+String a="he"+"llo";
+String b="hello";
+System.out.println(a==b); // 通常 true
+```
+
+### 易错点/总结
+- == 比引用，equals 比内容。
+- intern 细节与 JDK 版本有关，避免绝对化。
+

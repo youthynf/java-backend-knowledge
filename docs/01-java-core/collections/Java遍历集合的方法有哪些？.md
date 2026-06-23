@@ -71,3 +71,38 @@ CollectionUtils.forAllDo(list, new Closure() {
        System.out.println(input);
    }
 });
+
+---
+
+<!-- interview-review-enhanced -->
+
+## 面试复习版
+
+### 核心概念
+- 集合遍历方式包括 for、增强 for、Iterator、forEach、Stream。
+- Iterator 支持安全删除当前元素。
+
+### 面试官想考什么
+- fail-fast 与迭代删除。
+- 不同遍历方式的可读性和性能取舍。
+
+### 标准回答
+遍历集合时如果需要删除元素，优先使用 Iterator.remove 或 removeIf；增强 for 底层也是迭代器，直接 list.remove 会触发并发修改异常。
+
+### 深挖追问
+- fail-fast 是强保证吗？
+- Stream 遍历适合修改外部状态吗？
+- 并发集合迭代器有何不同？
+
+### 实战场景/代码示例
+```java
+Iterator<String> it=list.iterator();
+while(it.hasNext()){
+  if(it.next().isBlank()) it.remove();
+}
+```
+
+### 易错点/总结
+- 遍历时不要结构性修改原集合。
+- 并行流不适合有共享可变状态的操作。
+

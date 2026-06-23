@@ -107,3 +107,38 @@ Thread thread = new Thread() {
 五、特殊用法
 在内部类中明确的引用外部类实例：Outer.this.outerField
 .this 与 .new使用：Outer.Inner inner = outer.new Inner();
+
+---
+
+<!-- interview-review-enhanced -->
+
+## 面试复习版
+
+### 核心概念
+- 内部类包括成员、静态、局部、匿名内部类。
+- 非静态内部类持有外部类实例引用，静态内部类不持有。
+
+### 面试官想考什么
+- 不同内部类场景和访问规则。
+- 静态内部类单例为什么线程安全。
+
+### 标准回答
+内部类用于增强封装、表达强绑定关系或简化回调。非静态内部类依赖外部对象；静态内部类适合工具结构和懒加载单例。
+
+### 深挖追问
+- 匿名内部类访问局部变量为何要求 effectively final？
+- 内部类可能导致内存泄漏吗？
+- Lambda 与匿名内部类区别？
+
+### 实战场景/代码示例
+```java
+class Holder{
+  private static class Inner{ static final Holder I=new Holder(); }
+  static Holder get(){ return Inner.I; }
+}
+```
+
+### 易错点/总结
+- 警惕非静态内部类长期持有外部对象。
+- Lambda 不能完全替代匿名内部类。
+

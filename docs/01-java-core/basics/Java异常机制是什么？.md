@@ -17,3 +17,39 @@ try-with-resource：实现资源的自动释放，自动释放的资源需要是
 •  运行时异常：NullPointerException、ArrayIndexOutOfBoundsException、ClassCastException、IllegalArgumentException等。
 •  受检查异常：IOException、SQLException、ClassNotFoundException、InterruptedException等。
 •  错误：OutOfMemoryError、StackOverflowError、NoClassDefFoundError等。
+
+---
+
+<!-- interview-review-enhanced -->
+
+## 面试复习版
+
+### 核心概念
+- Throwable 分 Error 和 Exception；Exception 分受检异常和运行时异常。
+- 异常处理目标是恢复、转换、记录或向上抛出。
+
+### 面试官想考什么
+- checked/unchecked 异常适用场景。
+- finally、try-with-resources、异常链。
+
+### 标准回答
+可恢复且调用方必须感知的情况适合受检异常；编程错误或参数非法多用运行时异常。资源关闭优先 try-with-resources，包装异常时保留 cause。
+
+### 深挖追问
+- finally 一定执行吗？
+- return 和 finally 同时存在如何执行？
+- 为什么不要空 catch？
+
+### 实战场景/代码示例
+```java
+try(InputStream in=Files.newInputStream(path)){
+  return in.read();
+}catch(IOException e){
+  throw new UncheckedIOException(e);
+}
+```
+
+### 易错点/总结
+- 不要吞异常。
+- 不要用异常做正常流程控制。
+

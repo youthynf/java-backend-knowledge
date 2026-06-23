@@ -1,369 +1,43 @@
 # 秒杀系统设计
 
-> 高并发场景典型系统，核心问题：防超卖、高并发、防刷
+## 核心概念
 
-## 场景描述
+秒杀系统是典型高并发系统设计题，重点不是把所有技术都堆上去，而是围绕“高并发访问 + 少量库存 + 不能超卖 + 可接受的用户体验”做取舍。
 
-- **典型场景**：双11秒杀、限时抢购、票务系统
-- **核心特点**：
-  - 流量突增（平时100 QPS，秒杀时10000+ QPS）
-  - 库存有限（几千件商品，几十万人抢）
-  - 时间窗口短（几秒到几分钟）
+## 面试官想考什么
 
----
+- 是否能进行容量估算和链路拆分；
+- 是否知道如何削峰填谷；
+- 是否理解库存一致性和订单幂等；
+- 是否能设计降级、监控和应急预案。
 
-## 需求分析
+## 标准回答
 
-### 功能需求
+> 我会把秒杀系统分成活动预热、入口防护、库存扣减、异步下单、结果查询和对账补偿几个部分。活动开始前把活动和库存信息预热到缓存；入口层做限流、防刷和验证码；库存扣减使用 Redis Lua 或数据库条件更新保证原子性；扣减成功后写入 MQ 异步创建订单；用户通过查询接口获取结果；后台通过对账任务修正异常状态。
 
-1. 秒杀商品展示
-2. 用户下单购买
-3. 库存扣减
-4. 订单创建
-5. 支付
+## 典型架构流程
 
-### 非功能需求
+1. **活动预热**：商品、库存、规则写入缓存，静态资源走 CDN。
+2. **请求准入**：网关限流、防刷、登录校验、活动时间校验。
+3. **库存预扣**：Redis 原子扣减库存，失败直接返回售罄。
+4. **消息排队**：扣减成功后发送创建订单消息。
+5. **订单落库**：消费者幂等创建订单，数据库唯一约束防重复。
+6. **支付超时**：超时未支付释放库存或取消订单。
+7. **对账补偿**：核对 Redis、订单、库存流水，处理异常。
 
-| 指标 | 目标 |
-|------|------|
-| QPS | 10000+ |
-| 响应时间 | < 100ms |
-| 可用性 | 99.99% |
-| 数据一致性 | 不超卖、不少卖 |
+## 深挖追问
 
----
+### Redis 扣库存后订单创建失败怎么办？
 
-## 容量估算
+需要补偿机制。可以记录库存流水，订单创建失败时回补库存；如果消费者异常，消息重试或死信队列兜底；定时任务对账修复不一致数据。
 
-```
-假设：
-- 日活用户：100万
-- 秒杀参与率：50%
-- 秒杀时长：10分钟
-- 峰值系数：10
+### 为什么不直接扣数据库库存？
 
-平均 QPS = 100万 × 50% ÷ (10 × 60) ≈ 830 QPS
-峰值 QPS = 830 × 10 ≈ 8300 QPS
+如果并发不高，数据库条件更新可以接受；但秒杀高峰会让数据库成为瓶颈。缓存预扣可以削峰，但会带来一致性问题，因此要配合 MQ、幂等和对账。
 
-实际按 10000 QPS 设计
-```
+## 易错点/总结
 
----
-
-## 系统架构
-
-### 整体架构
-
-```
-┌──────────────┐
-│   客户端      │
-└──────┬───────┘
-       │
-       ↓
-┌──────────────┐      ┌──────────────┐
-│   CDN/静态   │─────→│  静态资源    │
-└──────┬───────┘      └──────────────┘
-       │
-       ↓
-┌──────────────┐
-│   网关层      │ ← 限流、鉴权
-└──────┬───────┘
-       │
-       ↓
-┌──────────────┐      ┌──────────────┐
-│   应用服务   │─────→│   Redis      │ ← 库存预扣减
-└──────┬───────┘      └──────────────┘
-       │
-       ↓
-┌──────────────┐      ┌──────────────┐
-│   消息队列   │─────→│   消费者     │
-└──────────────┘      └──────┬───────┘
-                             │
-                             ↓
-                      ┌──────────────┐
-                      │   MySQL      │ ← 订单落库
-                      └──────────────┘
-```
-
-### 架构分层
-
-1. **客户端层**：App、H5、小程序
-2. **CDN层**：静态资源加速
-3. **网关层**：限流、鉴权、路由
-4. **应用层**：业务逻辑
-5. **缓存层**：Redis 缓存库存
-6. **消息层**：削峰填谷
-7. **数据层**：MySQL 持久化
-
----
-
-## 核心难点与解决方案
-
-### 1. 防止超卖
-
-**问题**：库存只有100，但有1000人买到
-
-**方案一：Redis 原子操作**
-
-```java
-// Lua 脚本保证原子性
-String luaScript = """
-    if redis.call('get', KEYS[1]) <= 0 then
-        return 0
-    end
-    redis.call('decr', KEYS[1])
-    return 1
-    """;
-
-Long result = redisTemplate.execute(
-    new DefaultRedisScript<>(luaScript, Long.class),
-    Collections.singletonList("stock:" + productId)
-);
-
-if (result == 1) {
-    // 扣减成功，创建订单
-} else {
-    // 库存不足
-}
-```
-
-**方案二：数据库乐观锁**
-
-```sql
-UPDATE product 
-SET stock = stock - 1 
-WHERE id = ? AND stock > 0;
-```
-
-**方案三：分布式锁 + Redis**
-
-```java
-String lockKey = "lock:product:" + productId;
-boolean locked = redisTemplate.opsForValue()
-    .setIfAbsent(lockKey, "1", 10, TimeUnit.SECONDS);
-
-if (locked) {
-    try {
-        int stock = redisTemplate.opsForValue().get("stock:" + productId);
-        if (stock > 0) {
-            redisTemplate.opsForValue().decrement("stock:" + productId);
-            // 创建订单
-        }
-    } finally {
-        redisTemplate.delete(lockKey);
-    }
-}
-```
-
-**推荐方案：Redis 原子操作 + 数据库兜底**
-
----
-
-### 2. 高并发压力
-
-**问题**：瞬间大量请求压垮系统
-
-**方案一：多级缓存**
-
-```
-请求 → 本地缓存 → Redis → MySQL
-        (热点数据)  (库存)   (兜底)
-```
-
-**方案二：CDN 加速**
-
-静态资源（商品详情页）部署到 CDN：
-
-```nginx
-location ~* \.(html|css|js|png|jpg)$ {
-    expires 7d;
-    add_header Cache-Control "public, immutable";
-}
-```
-
-**方案三：页面静态化 + 动态加载**
-
-```
-秒杀页面：
-- 静态部分：商品图片、描述 → CDN
-- 动态部分：库存、倒计时 → Ajax 轮询
-```
-
-**方案四：限流**
-
-```java
-// 令牌桶限流
-RateLimiter rateLimiter = RateLimiter.create(1000);  // 1000 QPS
-
-if (rateLimiter.tryAcquire()) {
-    // 处理请求
-} else {
-    // 返回"系统繁忙"
-}
-```
-
----
-
-### 3. 削峰填谷
-
-**问题**：瞬间流量太大，数据库扛不住
-
-**方案：消息队列异步处理**
-
-```java
-// 秒杀入口：只做 Redis 扣减，发送 MQ 消息
-public Result seckill(Long productId, Long userId) {
-    // 1. Redis 原子扣减库存
-    Long stock = redisTemplate.opsForValue().decrement("stock:" + productId);
-    
-    if (stock < 0) {
-        redisTemplate.opsForValue().increment("stock:" + productId);
-        return Result.fail("库存不足");
-    }
-    
-    // 2. 发送消息到 MQ（异步创建订单）
-    OrderMessage message = new OrderMessage(productId, userId);
-    rocketMQTemplate.asyncSend("order-topic", message, new SendCallback() {
-        @Override
-        public void onSuccess(SendResult result) {
-            log.info("消息发送成功");
-        }
-        
-        @Override
-        public void onException(Throwable e) {
-            log.error("消息发送失败", e);
-            // 回滚库存
-            redisTemplate.opsForValue().increment("stock:" + productId);
-        }
-    });
-    
-    return Result.success("排队中，请稍后查询结果");
-}
-
-// 消费者：创建订单
-@RocketMQMessageListener(topic = "order-topic", consumerGroup = "order-group")
-public class OrderConsumer implements RocketMQListener<OrderMessage> {
-    @Override
-    public void onMessage(OrderMessage message) {
-        // 创建订单
-        orderService.createOrder(message.getProductId(), message.getUserId());
-    }
-}
-```
-
-**优点：**
-- 秒杀入口快速返回
-- 数据库按自己的节奏处理
-- 流量平滑
-
----
-
-### 4. 防刷机制
-
-**问题**：黄牛、机器刷单
-
-**方案一：验证码**
-
-```java
-// 秒杀前必须验证码
-public Result seckill(Long productId, Long userId, String captcha) {
-    if (!captchaService.verify(userId, captcha)) {
-        return Result.fail("验证码错误");
-    }
-    // ...
-}
-```
-
-**方案二：用户限流**
-
-```java
-// 同一用户限制请求频率
-String key = "limit:user:" + userId;
-Long count = redisTemplate.opsForValue().increment(key);
-
-if (count == 1) {
-    redisTemplate.expire(key, 1, TimeUnit.SECONDS);
-}
-
-if (count > 5) {  // 每秒最多5次
-    return Result.fail("请求过于频繁");
-}
-```
-
-**方案三：IP 限流**
-
-```java
-// 同一 IP 限制
-String key = "limit:ip:" + ip;
-// 类似用户限流
-```
-
-**方案四：隐藏秒杀地址**
-
-```java
-// 秒杀前先获取动态路径
-@GetMapping("/seckill/path")
-public String getSeckillPath(Long productId, Long userId) {
-    // 验证用户资格
-    if (!checkUserQualification(userId)) {
-        return null;
-    }
-    // 生成随机路径
-    String randomPath = UUID.randomUUID().toString();
-    // 缓存路径
-    redisTemplate.opsForValue().set(
-        "seckill:path:" + randomPath, 
-        productId + ":" + userId, 
-        10, TimeUnit.SECONDS
-    );
-    return randomPath;
-}
-
-// 秒杀时验证路径
-@PostMapping("/seckill/{path}")
-public Result seckill(@PathVariable String path, Long productId, Long userId) {
-    String value = redisTemplate.opsForValue().get("seckill:path:" + path);
-    if (value == null || !value.equals(productId + ":" + userId)) {
-        return Result.fail("非法请求");
-    }
-    // 执行秒杀...
-}
-```
-
----
-
-### 5. 数据一致性
-
-**问题**：Redis 扣减成功但订单创建失败
-
-**方案：消息队列 + 重试 + 补偿**
-
-```java
-// 消费者处理
-@Transactional
-public void createOrder(OrderMessage message) {
-    try {
-        // 1. 创建订单
-        Order order = new Order();
-        order.setProductId(message.getProductId());
-        order.setUserId(message.getUserId());
-        orderMapper.insert(order);
-
-        // 2. 扣减库存（幂等检查）
-        // ...
-    } catch (Exception e) {
-        // 重试或进入死信队列
-        throw e;
-    }
-}
-```
-
-### 6. 总结
-
-秒杀系统设计的核心要点：
-
-- **限流**：在入口处拦截大部分请求
-- **缓存**：Redis 预扣减库存，避免数据库压力
-- **异步**：消息队列削峰填谷
-- **兜底**：熔断降级，保护核心链路
-- **一致性**：消息 + 重试 + 补偿保证最终一致
+- 不做限流，任何库存方案都会被流量冲垮；
+- 只保证库存不超卖还不够，还要防重复下单；
+- 异步化后必须设计查询结果和失败补偿；
+- 秒杀链路要尽量短，非核心逻辑异步处理。

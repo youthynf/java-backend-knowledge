@@ -27,3 +27,36 @@ PriorityBlockingQueue：带优先级的无界队列
 SynchronousQueue：不存储元素的特殊队列
 DelayQueue：元素延迟出队的队列
 ConcurrentSkipListMap 和 ConcurrentSkipListSet：基于跳表(Skip List)实现，并发版本的 TreeMap/TreeSet，保证元素有序。
+
+---
+
+<!-- interview-review-enhanced -->
+
+## 面试复习版
+
+### 核心概念
+- 早期同步集合有 Vector、Hashtable、Collections.synchronizedXxx。
+- 并发包提供 ConcurrentHashMap、CopyOnWriteArrayList、BlockingQueue 等更细粒度方案。
+
+### 面试官想考什么
+- 哪些集合线程安全，以及各自适用场景。
+- 同步包装集合和并发集合的区别。
+
+### 标准回答
+线程安全集合要按读写比例和一致性要求选择。读多写少可用 CopyOnWrite；高并发 Map 用 ConcurrentHashMap；生产消费用 BlockingQueue。
+
+### 深挖追问
+- ConcurrentHashMap 为什么性能更好？
+- synchronizedList 迭代时还需要加锁吗？
+- 弱一致迭代器是什么？
+
+### 实战场景/代码示例
+```java
+Map<String,Integer> map=new ConcurrentHashMap<>();
+map.compute("k",(k,v)->v==null?1:v+1);
+```
+
+### 易错点/总结
+- 不要只看“线程安全”标签，需看复合操作是否原子。
+- 并发集合也不能替代业务级事务一致性。
+

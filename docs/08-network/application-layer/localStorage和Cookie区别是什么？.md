@@ -9,3 +9,34 @@ localStorage和Cookie区别：
 
 什么数据应该存在到cookie，什么数据存放到 Localstorage：
 Cookie 适合用于在客户端和服务器之间传递数据、跨域访问和设置过期时间，而 LocalStorage 适合用于在同一域名下的不同页面之间共享数据、存储大量数据和永久存储数据。
+
+<!-- 面试复习补充 -->
+
+## 面试复习补充
+
+### 核心概念
+
+Cookie、Session、Token、JWT 都用于解决 HTTP 无状态下的身份和会话问题。Cookie 是客户端存储和自动携带机制，Session 是服务端会话，Token/JWT 通常由客户端携带并由服务端校验。
+
+### 面试官想考什么
+
+面试官想考登录态存储位置、安全风险、分布式 Session、JWT 优缺点以及 Cookie 被禁用时的替代方案。
+
+### 标准回答
+
+Session 数据在服务端，客户端只保存 SessionId；Token/JWT 可减少服务端会话存储压力，但撤销、过期和泄露处理要设计好。Cookie 会自动随域名请求携带，localStorage 不会自动携带但容易被 XSS 读取。敏感令牌要配合 HTTPS、HttpOnly、SameSite、短有效期和刷新机制。
+
+### 深挖追问
+
+- 如果线上出现超时/失败，如何验证是不是这个环节？
+- 它和相邻层协议的职责边界是什么？
+- 有哪些参数或默认行为会影响生产表现？
+
+### 实战场景/示例
+
+前后端分离系统可用 Authorization Bearer Token；传统 Web 可用 Session + Cookie。分布式部署时 Session 通常外置到 Redis。
+
+### 易错点/总结
+
+JWT 不是加密本身，默认只是签名防篡改，载荷不要放敏感明文。
+
