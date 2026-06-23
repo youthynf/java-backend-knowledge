@@ -24,6 +24,14 @@
     /* ========== 文章排版核心样式 ========== */
     /* 覆盖 Docsify vue.css 默认样式 */
 
+    /* 正文内容区：缩小 Docsify 默认留白，让知识库内容更贴近页面边缘 */
+    .markdown-section {
+      max-width: none !important;
+      margin: 0 !important;
+      padding: 20px !important;
+      box-sizing: border-box !important;
+    }
+
     /* h1 - 文章大标题，绿色粗底线 */
     .markdown-section h1 {
       color: var(--theme-color) !important;
