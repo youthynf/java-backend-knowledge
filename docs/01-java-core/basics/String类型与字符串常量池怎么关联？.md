@@ -1,32 +1,49 @@
-# String类型与字符串常量池怎么关联？
+# String 类型与字符串常量池怎么关联？
 
-String类型与字符串常量池怎么关联？
-一、String不可变的实现原理
-String被声明为final，因此它不可被继承；
-String内部使用char数组存储数据，该数组被声明为final。这意味着value数组初始化之后就不能再引用其它数组。并且String内部没有改变value数组的方法，因此可以保证String不可变。
+## 核心概念
 
-二、字符串常量池
-通过使用str.intern()保证相同内容的字符串变量引用的是同一内存对象。其原理是通过xxx.intern()首先把引用的对象放到字符串常量池中，然后返回这个对象引用，如果字符串已经存在常量池中，直接返回该对象引用。
+`String` 是 Java 中不可变的字符串类型。字符串常量池是 JVM 为了复用字符串字面量、减少内存浪费而设计的一块特殊区域。
 
-三、创建String的方式
-String str = new String("aaa")：每次都会创建新的对象，如果"aaa"字面量不在字符串常量池中，则需要先创建字符串常量放入常量池，后在堆中创建字符串对象。因此该语句可能涉及2个对象的创建；
-String str2 = str.intern()：将字符串放入字符串常量池中，并返回这个对象引用；
-String str3 = “aaa”：使用双引号的形式创建字符串实例，会自动地将新建的对象放入字符串常量池中；
+当代码中出现字符串字面量时，JVM 会优先从字符串常量池中查找是否已经存在相同内容的字符串：
 
-四、HotSpot中字符串常量池保存位置
-方法区是JVM规范定义的逻辑区域，用于存放：
-•  类信息（Class Matadata）：类名、父类、接口、访问修饰符、字段描述、方法描述等；
-•  运行时常量池（Runtime Constant Pool）：类文件中的常量池表（符号引用、字面量等）；
-•  静态变量（Static Variables）：static修饰的类变量；
-•  JIT编译后的代码（Just-In-Time Complied Code）：热点代码的本地机器码缓存；
-•  方法字节码（Method Code）：类方法的字节码指令。
+- 如果存在，直接复用池中的引用。
+- 如果不存在，则在池中创建新的字符串对象。
 
-JDK 1.6及之前：
-在 JDK 1.2 到 1.6 版本，方法区是通过永久代（Permanent Generation，简称 PermGen）来实现的。永久代是堆内存的一部分，其大小需要在启动 JVM 时通过参数（如-XX:MaxPermSize）预先设定，若超出此设定值，就会抛出OutOfMemoryError: PermGen space异常。
-JDK 1.7：
-从 JDK 1.7 开始，永久代的部分内容被迁移到了堆中，但永久代依旧存在。其中，符号引用（Symbol References）被移到了 Native Heap，字符串常量池（String Intern Pool）和类的静态变量被移到了 Java 堆。
-JDK 1.8及之后：
-从 JDK 1.8 开始，永久代被彻底移除，取而代之的是元空间（Metaspace）。元空间使用本地内存（Native Memory），默认情况下，其大小仅受限于系统的可用内存，但可以通过参数（如-XX:MetaspaceSize和-XX:MaxMetaspaceSize）来限制。
+## 字面量创建字符串
+
+```java
+String s1 = "abc";
+String s2 = "abc";
+System.out.println(s1 == s2); // true
+```
+
+`s1` 和 `s2` 都指向字符串常量池中的同一个 `"abc"` 对象。
+
+## new 创建字符串
+
+```java
+String s1 = new String("abc");
+String s2 = "abc";
+System.out.println(s1 == s2); // false
+```
+
+`new String("abc")` 通常会在堆上创建一个新的 `String` 对象，而字面量 `"abc"` 位于字符串常量池中，所以两个引用不同。
+
+## intern 方法
+
+`intern()` 会尝试把字符串放入常量池，并返回常量池中的引用。
+
+```java
+String s1 = new String("abc");
+String s2 = s1.intern();
+String s3 = "abc";
+
+System.out.println(s2 == s3); // true
+```
+
+## 总结
+
+字符串常量池的核心作用是复用字符串字面量。面试中要重点区分 `==` 比较引用、`equals()` 比较内容，以及字面量、`new String()`、`intern()` 三者的关系。
 
 ---
 

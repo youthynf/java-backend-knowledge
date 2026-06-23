@@ -1,22 +1,84 @@
-# Java异常机制是什么？
+# Java 异常机制是什么？
 
-Java异常机制是什么？
-一、概述
-Java 异常机制是 Java 语言中用于处理程序运行时错误的重要特性，它提供了一种结构化和统一的方式来管理程序执行过程中可能出现的异常情况。Java 中的异常是指程序在运行过程中出现的错误或意外事件，这些异常会干扰程序的正常执行流程。
-二、类关系
-Java 异常体系基于继承结构，所有异常类最终继承自java.lang.Throwable类，其下主要分为两个分支：Error和Exception。其中Error用来表示JVM无法处理的错误，如系统级错误或资源耗尽的情况，这类错误通常无法通过程序代码处理，而需要系统层面干预；Exception表示程序可以捕获和处理的异常情况，进一步可以分为受检异常和运行时异常两类：
-•  受检异常：直接继承自Exception，编译器会强制要求程序显式处理，如IOException、SQLException等；
-•  非受检异常 : 继承自RuntimeException，编译器不强制要求处理，是程序运行时错误，如NullPointerException、ArrayIndexOutOfBoundsException等。
+## 核心概念
 
-三、异常捕获处理的方法
-try-catch：同一个 catch 也可以捕获多种类型异常，用 | 隔开；
-try-catch-finally：常规用法；
-try-finally：可用在不需要捕获异常的代码，可以保证资源在使用后被关闭；
-try-with-resource：实现资源的自动释放，自动释放的资源需要是实现了AutoCloseable接口的类；
-四、常见异常类
-•  运行时异常：NullPointerException、ArrayIndexOutOfBoundsException、ClassCastException、IllegalArgumentException等。
-•  受检查异常：IOException、SQLException、ClassNotFoundException、InterruptedException等。
-•  错误：OutOfMemoryError、StackOverflowError、NoClassDefFoundError等。
+Java 异常机制用于处理程序运行过程中的错误或意外情况。它把正常业务逻辑和错误处理逻辑分离，使程序具备更好的可读性和可靠性。
+
+所有异常和错误的根类都是 `java.lang.Throwable`。
+
+## 异常体系
+
+```text
+Throwable
+├── Error
+└── Exception
+    ├── RuntimeException
+    └── 其他受检异常
+```
+
+### Error
+
+`Error` 表示 JVM 或系统层面的严重问题，通常程序无法恢复，例如：
+
+- `OutOfMemoryError`
+- `StackOverflowError`
+
+这类错误一般不建议业务代码主动捕获处理。
+
+### Exception
+
+`Exception` 表示程序可以捕获和处理的异常，主要分为两类：
+
+- **受检异常**：编译器强制要求处理，例如 `IOException`、`SQLException`。
+- **非受检异常**：继承自 `RuntimeException`，编译器不强制处理，例如 `NullPointerException`、`IndexOutOfBoundsException`。
+
+## 异常处理方式
+
+### try-catch
+
+```java
+try {
+    // 可能抛异常的代码
+} catch (IOException | SQLException e) {
+    // 异常处理逻辑
+}
+```
+
+### finally
+
+`finally` 通常用于释放资源，无论是否发生异常都会执行。
+
+```java
+try {
+    // 使用资源
+} finally {
+    // 关闭资源
+}
+```
+
+### try-with-resources
+
+实现了 `AutoCloseable` 的资源推荐使用 try-with-resources 自动关闭。
+
+```java
+try (InputStream in = new FileInputStream("a.txt")) {
+    // 使用输入流
+}
+```
+
+### throws
+
+方法内部不处理异常时，可以通过 `throws` 声明向上抛出。
+
+```java
+public void read() throws IOException {
+    // ...
+}
+```
+
+## 总结
+
+异常机制的重点不是“能不能 catch”，而是要区分异常类型、明确异常边界，并保证资源正确释放。业务异常通常用自定义异常表达，系统异常要记录上下文信息，避免吞异常。
 
 ---
 

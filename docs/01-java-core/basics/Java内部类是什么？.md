@@ -1,112 +1,98 @@
-# Java内部类是什么？
+# Java 内部类是什么？
 
-Java内部类是什么？
-一、Java内部类分类
-成员内部类（Member Inner Class）：定义在类中的普通类；
-静态内部类（Static Nested Class）：定义在类中被static修饰的普通类；
-局部内部类（Local Inner Class）：定义在方法中或者作用域类的类；
-匿名内部类（Anonymous Inner Class）：
+## 核心概念
 
-二、Java内部类概述
-成员内部类：
-•  声明方式：定义在外部类的成员位置；
-•  使用方式：依赖外部类的实例对象来创建内部类对象；
-•  作用范围：支持访问所有非静态的外部类成员变量、方法，以及 static final 修饰的常量；
-•  特殊属性：成员内部类会隐式持有外部类的引用；
-•  生成形式：编译后会生成独立的 .class 文件（如Outer$Inner.class）;
+内部类是定义在另一个类内部的类。它可以表达类之间更紧密的从属关系，也可以访问外部类成员。
 
-public class Outer {
-    private int outerField = 10;
-    
-    public class Inner {
-        public void print() {
-            System.out.println("访问外部类字段: " + outerField);
+Java 内部类主要分为四类：
+
+1. 成员内部类
+2. 静态内部类
+3. 局部内部类
+4. 匿名内部类
+
+## 成员内部类
+
+成员内部类定义在外部类的成员位置，依赖外部类实例存在。
+
+```java
+class Outer {
+    private String name = "outer";
+
+    class Inner {
+        void print() {
+            System.out.println(name);
         }
     }
-    
-    public Inner getInner() {
-        return new Inner();
-    }
 }
+```
 
-// 使用方式
+特点：
+
+- 可以访问外部类的实例变量和实例方法。
+- 创建时需要依赖外部类对象。
+
+```java
 Outer outer = new Outer();
-// 需要依赖外部类来创建对象
-Outer.Inner inner = outer.new Inner();  // 或 outer.getInner();
-inner.print();
+Outer.Inner inner = outer.new Inner();
+```
 
-静态内部类：
-•  声明方式：使用 static 关键字修饰的成员内部类；
-•  使用方式：不需要依赖外部类实例对象就可以创建内部类对象；
-•  作用范围：只支持访问静态成员变量、方法；
+## 静态内部类
 
-public class Outer {
-    private static int staticField = 20;
-    
-    public static class StaticInner {
-        public void print() {
-            System.out.println("访问外部类静态字段: " + staticField);
+静态内部类使用 `static` 修饰，不依赖外部类实例。
+
+```java
+class Outer {
+    static class Inner {
+        void print() {
+            System.out.println("static inner");
         }
     }
 }
+```
 
-// 使用方式
-Outer.StaticInner staticInner = new Outer.StaticInner();
-staticInner.print();
+特点：
 
-局部内部类：
-•  定义方式：定义在方法或作用域内的类；
-•  作用范围：只能访问 final 或 effectively final 的局部变量，作用域仅限于定义它的块中；
+- 可以直接通过外部类名创建。
+- 只能直接访问外部类的静态成员。
 
-public class Outer {
-    public void method() {
-        final int localVar = 30;
-        
-        class LocalInner {
-            public void print() {
-                System.out.println("局部变量: " + localVar);
-            }
+```java
+Outer.Inner inner = new Outer.Inner();
+```
+
+## 局部内部类
+
+局部内部类定义在方法或代码块中，只能在当前作用域内使用。
+
+```java
+void method() {
+    class LocalInner {
+        void print() {
+            System.out.println("local inner");
         }
-        
-        LocalInner inner = new LocalInner();
-        inner.print();
     }
+    new LocalInner().print();
 }
+```
 
-匿名内部类：
-•  声明方式：没有类名的内部类，且必须继承一个类或者实现一个接口；
-•  使用方式：只能创建一次实例；
+## 匿名内部类
 
-// 接口方式
-Runnable runnable = new Runnable() {
+匿名内部类没有类名，通常用于一次性实现接口或继承类。
+
+```java
+Runnable task = new Runnable() {
     @Override
     public void run() {
-        System.out.println("匿名内部类实现");
+        System.out.println("running");
     }
 };
+```
 
-// 抽象类方式
-Thread thread = new Thread() {
-    @Override
-    public void run() {
-        System.out.println("匿名Thread子类");
-    }
-};
+Java 8 之后，很多匿名内部类可以被 Lambda 表达式替代。
 
-三、Java内部类的好处
-更好的封装性：将只在一个地方使用的类逻辑上组织在一起；
-访问特权：可以访问外部类的私有成员；
-代码简洁：匿名内部类可以减少代码量；
-多重继承：通过内部类实现类似多重继承的效果；
+## 总结
 
-四、内部类的原理
-编译后，内部类会被转换为独立的类文件：
-成员内部类会持有外部类的引用（通过合成构造函数参数），仅限成员内部类；
-访问外部类私有成员是通过编译器生成的访问方法；
-
-五、特殊用法
-在内部类中明确的引用外部类实例：Outer.this.outerField
-.this 与 .new使用：Outer.Inner inner = outer.new Inner();
+内部类的本质仍然是编译后生成的独立 `.class` 文件。它常用于表达强关联关系、封装实现细节，以及实现回调、事件监听等场景。
 
 ---
 

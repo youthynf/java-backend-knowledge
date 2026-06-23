@@ -1,64 +1,62 @@
-# Java注解机制是什么？
+# Java 注解机制是什么？
 
-Java注解机制是什么？
-一、概述
-注解是JDK1.5版本开始引入的重要特性，用于对代码进行说明，可以对包、类、接口、字段、方法参数、局部变量等进行注解。
-二、注解的作用
-它主要的作用有以下四方面：
-生成文档：通过代码里标识的元数据生成javadoc文档。
-编译检查：通过代码里标识的元数据让编译器在编译期间进行检查验证。
-编译时动态处理：编译时通过代码里标识的元数据动态处理，例如动态生成代码。
-运行时动态处理：运行时通过代码里标识的元数据动态处理，例如使用反射注入实例。
+## 核心概念
 
-三、注解的常见分类
-Java自带的标准注解：包括@Override、@Deprecated和@SuppressWarnings，分别用于标明重写某个方法、标明某个类或方法过时、标明要忽略的警告，用这些注解标明后编译器就会进行检查。
-元注解：元注解是用于定义注解的注解，包括@Retention、@Target、@Inherited、@Documented，@Retention用于标明注解被保留的阶段，@Target用于标明注解使用的范围，@Inherited用于标明注解可继承，@Documented用于标明是否生成javadoc文档。
-自定义注解：可以根据自己的需求定义注解，并可用元注解对自定义注解进行注解。
+注解（Annotation）是 Java 提供的一种元数据机制。它可以为类、方法、字段、参数等程序元素添加额外说明，并由编译器、运行时框架或工具读取处理。
 
-四、自定义注解和AOP实现示例
-最为常见的就是使用Spring AOP切面实现统一的操作日志管理。如@Pointcut("@annotation(com.xxx.aspectj.lang.annotation.Log)")其中Log为自定义注解。
+注解本身不直接改变业务逻辑，但框架可以根据注解生成代码、执行校验、完成依赖注入或控制运行流程。
 
+## 常见内置注解
+
+- `@Override`：标记方法重写父类或接口方法。
+- `@Deprecated`：标记元素已过时。
+- `@SuppressWarnings`：抑制编译器警告。
+
+## 自定义注解
+
+```java
+@Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.TYPE, ElementType.METHOD})
-public @interface MyAnnotation {
-    String value() default "default";  // 属性
-    int priority() default 0;
-    String[] tags() default {};
+public @interface Log {
+    String value() default "";
 }
+```
 
-五、注解处理
-编译时处理（APT）
+## 元注解
 
-@SupportedAnnotationTypes("com.example.MyAnnotation")
-@SupportedSourceVersion(SourceVersion.RELEASE_11)
-public class MyAnnotationProcessor extends AbstractProcessor {
-    @Override
-    public boolean process(Set<? extends TypeElement> annotations, 
-                         RoundEnvironment roundEnv) {
-        for (TypeElement annotation : annotations) {
-            Set<? extends Element> elements = roundEnv.getElementsAnnotatedWith(annotation);
-            // 处理被注解的元素
-        }
-        return true;
-    }
-}
-运行时处理（反射）
+元注解是用来修饰注解的注解。
 
-Class<?> clazz = MyClass.class;
+### `@Target`
 
-// 类注解
-if (clazz.isAnnotationPresent(MyAnnotation.class)) {
-    MyAnnotation anno = clazz.getAnnotation(MyAnnotation.class);
-    System.out.println("Value: " + anno.value());
-}
+指定注解可以作用的位置，例如类、方法、字段、参数等。
 
-// 方法注解
-for (Method method : clazz.getDeclaredMethods()) {
-    if (method.isAnnotationPresent(MyAnnotation.class)) {
-        MyAnnotation methodAnno = method.getAnnotation(MyAnnotation.class);
-        // 处理注解
-    }
-}
+### `@Retention`
+
+指定注解保留到哪个阶段：
+
+- `SOURCE`：只保留在源码中。
+- `CLASS`：保留到字节码中，但运行时不可读取。
+- `RUNTIME`：运行时仍可通过反射读取。
+
+### `@Documented`
+
+表示注解会被包含到 JavaDoc 文档中。
+
+### `@Inherited`
+
+表示注解可以被子类继承，仅对类上的注解生效。
+
+## 常见应用场景
+
+- Spring MVC：`@Controller`、`@RequestMapping`。
+- Spring IOC：`@Component`、`@Autowired`。
+- 参数校验：`@NotNull`、`@Size`。
+- ORM 映射：`@Table`、`@Column`。
+- AOP 切面：自定义日志、权限、审计注解。
+
+## 总结
+
+注解的本质是元数据。它经常和反射、动态代理、AOP、编译期处理器配合使用，是 Java 框架实现声明式编程的重要基础。
 
 ---
 
