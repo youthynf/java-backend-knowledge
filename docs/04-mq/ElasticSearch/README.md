@@ -4,7 +4,7 @@
 
 | 文章 | 摘要 |
 | --- | --- |
-| [ElasticSearch入门概要](ElasticSearch入门概要.md) | 全文检索、日志检索、倒排索引、分片副本、写入查询流程、深分页和性能优化 |
+| [ElasticSearch入门概要](/04-mq/ElasticSearch/ElasticSearch入门概要.md) | 全文检索、日志检索、倒排索引、分片副本、写入查询流程、深分页和性能优化 |
 
 ## 复习摘要
 

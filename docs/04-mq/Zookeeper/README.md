@@ -4,7 +4,7 @@
 
 | 文章 | 摘要 |
 | --- | --- |
-| [Zookeeper入门概要](Zookeeper入门概要.md) | ZAB、一致性、临时顺序节点、分布式锁、注册发现与配置中心 |
+| [Zookeeper入门概要](/04-mq/Zookeeper/Zookeeper入门概要.md) | ZAB、一致性、临时顺序节点、分布式锁、注册发现与配置中心 |
 
 ## 复习摘要
 

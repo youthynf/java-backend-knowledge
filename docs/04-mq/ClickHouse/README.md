@@ -4,7 +4,7 @@
 
 | 文章 | 摘要 |
 | --- | --- |
-| [ClickHouse入门概要](ClickHouse入门概要.md) | 列式存储、MergeTree、分区/排序键、物化视图和 OLAP 查询优化 |
+| [ClickHouse入门概要](/04-mq/ClickHouse/ClickHouse入门概要.md) | 列式存储、MergeTree、分区/排序键、物化视图和 OLAP 查询优化 |
 
 ## 复习摘要
 

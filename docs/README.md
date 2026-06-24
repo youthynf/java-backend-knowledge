@@ -11,15 +11,15 @@
 
 ## 📂 知识分类
 
-- [Java 基础](01-java-core/README.md)：语法、集合、并发、JVM 等核心基础。
-- [框架](02-frameworks/README.md)：Spring、IOC、AOP、Bean 生命周期等。
-- [数据库](03-database/README.md)：MySQL、索引、事务、SQL 优化等。
-- [中间件](04-mq/README.md)：Redis、MQ、搜索、缓存等。
-- [分布式](05-distributed/README.md)：分布式锁、协议、事务补偿、熔断等。
-- [微服务](06-microservice/README.md)：服务拆分、注册发现、配置、网关、治理。
-- [架构设计](07-architecture/README.md)：设计模式、系统设计、高并发场景。
-- [算法](09-algorithm/README.md)：常见数据结构与算法面试准备。
-- [DevOps](devops/README.md)：Linux、Docker、日志分析、部署排障。
+- [Java 基础](/01-java-core/README.md)：语法、集合、并发、JVM 等核心基础。
+- [框架](/02-frameworks/README.md)：Spring、IOC、AOP、Bean 生命周期等。
+- [数据库](/03-database/README.md)：MySQL、索引、事务、SQL 优化等。
+- [中间件](/04-mq/README.md)：Redis、MQ、搜索、缓存等。
+- [分布式](/05-distributed/README.md)：分布式锁、协议、事务补偿、熔断等。
+- [微服务](/06-microservice/README.md)：服务拆分、注册发现、配置、网关、治理。
+- [架构设计](/07-architecture/README.md)：设计模式、系统设计、高并发场景。
+- [算法](/09-algorithm/README.md)：常见数据结构与算法面试准备。
+- [DevOps](/devops/README.md)：Linux、Docker、日志分析、部署排障。
 
 ## 🎯 面试回答模板
 

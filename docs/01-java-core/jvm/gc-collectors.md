@@ -305,7 +305,7 @@ E = Eden区  S = Survivor区  O = Old区  H = Humongous(大对象)
 
 ---
 
-[← 返回 JVM 目录](README.md)
+[← 返回 JVM 目录](/01-java-core/jvm/README.md)
 
 ---
 

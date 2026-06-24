@@ -4,8 +4,8 @@
 
 | 文章 | 摘要 |
 | --- | --- |
-| [Tomcat入门概要](Tomcat入门概要.md) | Servlet 容器、Connector/Container、线程模型、类加载机制与调优 |
-| [Tomcat 的类加载机制是怎么样的？](Tomcat的类加载机制是怎么样的？.md) | WebAppClassLoader、委派模型调整、隔离与热部署 |
+| [Tomcat入门概要](/04-mq/Tomcat/Tomcat入门概要.md) | Servlet 容器、Connector/Container、线程模型、类加载机制与调优 |
+| [Tomcat 的类加载机制是怎么样的？](/04-mq/Tomcat/Tomcat的类加载机制是怎么样的？.md) | WebAppClassLoader、委派模型调整、隔离与热部署 |
 
 ## 复习摘要
 

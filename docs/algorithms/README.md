@@ -12,7 +12,7 @@
 
 ### dynamic-programming
 
-- [LC53 最大子数组和](dynamic-programming/LC53-最大子数组和.md)：算法面试复习，重点关注核心机制、典型追问、实战场景和易错点。
+- [LC53 最大子数组和](/algorithms/dynamic-programming/LC53-最大子数组和.md)：算法面试复习，重点关注核心机制、典型追问、实战场景和易错点。
 
 ## 面试复习检查清单
 

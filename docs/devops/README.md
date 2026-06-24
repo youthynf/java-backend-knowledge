@@ -12,17 +12,17 @@
 
 ### 基础文章
 
-- [Docker 与 K8s 之间的关系是什么？](Docker与K8s之前的关系是什么？.md)：DevOps面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [Docker 与虚拟机有什么区别？](Docker与虚拟机有什么区别？.md)：DevOps面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [Docker 部署实操笔记](Docker部署实操笔记.md)：DevOps面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [Windows 11 使用 Docker 部署 OpenClaw](Windows11使用docker部署openclaw.md)：DevOps面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [什么是 Linux？](什么是Linux？.md)：DevOps面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [使用 Tailscale 外网访问树莓派](使用TailScale外网访问树莓派.md)：DevOps面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [如何从日志分析 PV 和 UV？](如何从日志分析PV和UV？.md)：DevOps面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [常用 Linux 命令](常用Linux命令.md)：DevOps面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [常用的 Linux 命令有哪些？](常用的Linux命令有哪些？.md)：DevOps面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [树莓派 5 NVMe SSD 系统迁移全流程手册](树莓派-5-NVMe-SSD-系统迁移全流程手册.md)：DevOps面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [树莓派 Raspberry Pi OS（原生 Debian）常用指令大全](树莓派-Raspberry-Pi-OS（原生-Debian）常用指令大全.md)：DevOps面试复习，重点关注核心机制、典型追问、实战场景和易错点。
+- [Docker 与 K8s 之间的关系是什么？](/devops/Docker与K8s之前的关系是什么？.md)：DevOps面试复习，重点关注核心机制、典型追问、实战场景和易错点。
+- [Docker 与虚拟机有什么区别？](/devops/Docker与虚拟机有什么区别？.md)：DevOps面试复习，重点关注核心机制、典型追问、实战场景和易错点。
+- [Docker 部署实操笔记](/devops/Docker部署实操笔记.md)：DevOps面试复习，重点关注核心机制、典型追问、实战场景和易错点。
+- [Windows 11 使用 Docker 部署 OpenClaw](/devops/Windows11使用docker部署openclaw.md)：DevOps面试复习，重点关注核心机制、典型追问、实战场景和易错点。
+- [什么是 Linux？](/devops/什么是Linux？.md)：DevOps面试复习，重点关注核心机制、典型追问、实战场景和易错点。
+- [使用 Tailscale 外网访问树莓派](/devops/使用TailScale外网访问树莓派.md)：DevOps面试复习，重点关注核心机制、典型追问、实战场景和易错点。
+- [如何从日志分析 PV 和 UV？](/devops/如何从日志分析PV和UV？.md)：DevOps面试复习，重点关注核心机制、典型追问、实战场景和易错点。
+- [常用 Linux 命令](/devops/常用Linux命令.md)：DevOps面试复习，重点关注核心机制、典型追问、实战场景和易错点。
+- [常用的 Linux 命令有哪些？](/devops/常用的Linux命令有哪些？.md)：DevOps面试复习，重点关注核心机制、典型追问、实战场景和易错点。
+- [树莓派 5 NVMe SSD 系统迁移全流程手册](/devops/树莓派-5-NVMe-SSD-系统迁移全流程手册.md)：DevOps面试复习，重点关注核心机制、典型追问、实战场景和易错点。
+- [树莓派 Raspberry Pi OS（原生 Debian）常用指令大全](/devops/树莓派-Raspberry-Pi-OS（原生-Debian）常用指令大全.md)：DevOps面试复习，重点关注核心机制、典型追问、实战场景和易错点。
 
 ## 面试复习检查清单
 

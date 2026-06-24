@@ -1,6 +1,6 @@
 # concurrency
 
-- [thread-pool](thread-pool.md)
+- [thread-pool](/01-java-core/concurrency/thread-pool.md)
 
 ## 面试复习建议
 

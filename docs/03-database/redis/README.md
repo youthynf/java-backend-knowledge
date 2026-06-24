@@ -2,7 +2,7 @@
 
 ## 核心概念
 
-- [data-structures](data-structures.md)
+- [data-structures](/03-database/redis/data-structures.md)
 
 ## 面试官想考什么
 

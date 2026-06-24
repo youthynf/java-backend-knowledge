@@ -2,7 +2,7 @@
 
 ## 核心概念
 
-- [index-optimization](index-optimization.md)
+- [index-optimization](/03-database/mysql/index-optimization.md)
 
 ## 面试官想考什么
 

@@ -10,33 +10,33 @@
 
 ## 子目录导航
 
-- [设计模式](design-patterns/README.md)：本目录用于复习设计原则和设计模式，重点不是背类图，而是理解职责边界、扩展点和工程取舍。
-- [设计原则与模式](patterns/README.md)：本目录整理后端面试复习文章，建议围绕概念、追问、实战和易错点复习。
-- [系统设计与线上排障](system-design/README.md)：本目录聚焦系统设计与线上问题排查，建议按现象、指标、根因、止血和治理的顺序复习。
+- [设计模式](/07-architecture/design-patterns/README.md)：本目录用于复习设计原则和设计模式，重点不是背类图，而是理解职责边界、扩展点和工程取舍。
+- [设计原则与模式](/07-architecture/patterns/README.md)：本目录整理后端面试复习文章，建议围绕概念、追问、实战和易错点复习。
+- [系统设计与线上排障](/07-architecture/system-design/README.md)：本目录聚焦系统设计与线上问题排查，建议按现象、指标、根因、止血和治理的顺序复习。
 
 ## 文章导航
 
 ### design-patterns
 
-- [工厂模式](design-patterns/factory.md)：设计模式面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [单例模式](design-patterns/singleton.md)：设计模式面试复习，重点关注核心机制、典型追问、实战场景和易错点。
+- [工厂模式](/07-architecture/design-patterns/factory.md)：设计模式面试复习，重点关注核心机制、典型追问、实战场景和易错点。
+- [单例模式](/07-architecture/design-patterns/singleton.md)：设计模式面试复习，重点关注核心机制、典型追问、实战场景和易错点。
 
 ### patterns
 
-- [代理模式](patterns/proxy.md)：设计模式面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [单例模式](patterns/singleton.md)：设计模式面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [策略模式](patterns/strategy.md)：设计模式面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [模板方法模式](patterns/template-method.md)：设计模式面试复习，重点关注核心机制、典型追问、实战场景和易错点。
+- [代理模式](/07-architecture/patterns/proxy.md)：设计模式面试复习，重点关注核心机制、典型追问、实战场景和易错点。
+- [单例模式](/07-architecture/patterns/singleton.md)：设计模式面试复习，重点关注核心机制、典型追问、实战场景和易错点。
+- [策略模式](/07-architecture/patterns/strategy.md)：设计模式面试复习，重点关注核心机制、典型追问、实战场景和易错点。
+- [模板方法模式](/07-architecture/patterns/template-method.md)：设计模式面试复习，重点关注核心机制、典型追问、实战场景和易错点。
 
 ### system-design
 
-- [CPU 100% 问题怎么排查？](system-design/CPU100%问题怎么排查？.md)：系统设计与排障面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [秒杀系统设计](system-design/seckill.md)：系统设计与排障面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [如何保证接口幂等？](system-design/如何保证接口幂等.md)：系统设计与排障面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [如何排查并解决 Redis 的 CPU 占用高问题？](system-design/如何排查并解决Redis的CPU占用高问题？.md)：系统设计与排障面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [如何设计秒杀场景处理高并发以及超卖现象？](system-design/如何设计秒杀场景处理高并发以及超卖现象？.md)：系统设计与排障面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [如果让你优化一个项目，你会怎么做？](system-design/如果让你优化一个项目，你会怎么做？.md)：系统设计与排障面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [导致 CPU 飙升到 100% 有什么原因？](system-design/导致CPU飙升到100%有什么原因？.md)：系统设计与排障面试复习，重点关注核心机制、典型追问、实战场景和易错点。
+- [CPU 100% 问题怎么排查？](/07-architecture/system-design/CPU100%问题怎么排查？.md)：系统设计与排障面试复习，重点关注核心机制、典型追问、实战场景和易错点。
+- [秒杀系统设计](/07-architecture/system-design/seckill.md)：系统设计与排障面试复习，重点关注核心机制、典型追问、实战场景和易错点。
+- [如何保证接口幂等？](/07-architecture/system-design/如何保证接口幂等.md)：系统设计与排障面试复习，重点关注核心机制、典型追问、实战场景和易错点。
+- [如何排查并解决 Redis 的 CPU 占用高问题？](/07-architecture/system-design/如何排查并解决Redis的CPU占用高问题？.md)：系统设计与排障面试复习，重点关注核心机制、典型追问、实战场景和易错点。
+- [如何设计秒杀场景处理高并发以及超卖现象？](/07-architecture/system-design/如何设计秒杀场景处理高并发以及超卖现象？.md)：系统设计与排障面试复习，重点关注核心机制、典型追问、实战场景和易错点。
+- [如果让你优化一个项目，你会怎么做？](/07-architecture/system-design/如果让你优化一个项目，你会怎么做？.md)：系统设计与排障面试复习，重点关注核心机制、典型追问、实战场景和易错点。
+- [导致 CPU 飙升到 100% 有什么原因？](/07-architecture/system-design/导致CPU飙升到100%有什么原因？.md)：系统设计与排障面试复习，重点关注核心机制、典型追问、实战场景和易错点。
 
 ## 面试复习检查清单
 

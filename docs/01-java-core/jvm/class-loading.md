@@ -314,7 +314,7 @@ Object obj = clazz.newInstance();
 
 ---
 
-[← 返回 JVM 目录](README.md)
+[← 返回 JVM 目录](/01-java-core/jvm/README.md)
 
 ---
 

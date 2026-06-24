@@ -6,8 +6,8 @@
 
 | 模块 | 文章 | 复习重点 |
 | --- | --- | --- |
-| Spring | [Spring 总览](spring/README.md) | IOC、AOP、事务、Bean 生命周期、循环依赖、Spring Boot 扩展点 |
-| Spring | [Spring IOC 与 AOP 核心原理](spring/ioc-aop.md) | 容器启动、依赖注入、三级缓存、动态代理、事务失效 |
+| Spring | [Spring 总览](/02-frameworks/spring/README.md) | IOC、AOP、事务、Bean 生命周期、循环依赖、Spring Boot 扩展点 |
+| Spring | [Spring IOC 与 AOP 核心原理](/02-frameworks/spring/ioc-aop.md) | 容器启动、依赖注入、三级缓存、动态代理、事务失效 |
 
 ## 面试复习路线
 
