@@ -279,10 +279,7 @@ public class EmailNotifierConsumer {
     }
 }
 
-<!-- 面试复习补充 -->
-
-## 面试复习补充
-
+## 面试总结
 ### 核心概念
 
 Kafka 是分布式提交日志系统，核心抽象包括 Topic、Partition、Replica、Producer、Consumer Group 和 Offset。它通过顺序追加、批量传输、PageCache 和分区并行获得高吞吐。
@@ -309,10 +306,7 @@ Kafka 的 Topic 被拆成多个 Partition，分区内有序；消费者组内一
 
 MQ 不是银弹。不要只说“加 MQ 解耦”，还要说明可靠投递、重复消费、顺序性、延迟、监控和补偿。
 
-<!-- 面试复习强化 -->
-
-## 面试复习强化
-
+## 补充要点
 ### 核心概念
 
 Kafka 是分布式提交日志系统。Topic 是逻辑主题，Partition 是并行和顺序的基本单位，Broker 存储分区副本，Producer 按分区写入，Consumer Group 内每个分区同一时刻只被一个消费者实例消费。Kafka 的高吞吐来自顺序写、PageCache、零拷贝、批量发送、压缩和分区并行。
