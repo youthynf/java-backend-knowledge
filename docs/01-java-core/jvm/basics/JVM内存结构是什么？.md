@@ -69,7 +69,7 @@ Java堆用于存储Java对象实例，堆的大小在JVM启动的时候就确定
 
 对象的分配过程：
 1. 优先分配到Eden区：大多数新对象会被直接分配到 Eden 区；大对象（超过-XX:PretenureSizeThreshold）会直接进入老年代，避免在 Eden 和 Survivor 区之间频繁移动；
-2. Minor GC触发与对象晋升：当Eden区满时，触发Minor GC（新生代 GC）；存活的对象被移动到Survivor 区，对象年龄计��器 + 1（初始为 0）；
+2. Minor GC触发与对象晋升：当Eden区满时，触发Minor GC（新生代 GC）；存活的对象被移动到Survivor 区，对象年龄计数器 + 1（初始为 0）；
 3. Survivor区对象流转：Survivor区始终保持一个为空。下一次Minor GC时，Eden区和From区的存活对象被移动到To区，对象年龄+1；然后From和To区角色互换；
 4. 对象晋升到老年代的条件：
 •  年龄阈值：当对象年龄达到-XX:MaxTenuringThreshold（默认 15）时，晋升到老年代。

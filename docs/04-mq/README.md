@@ -1,24 +1,34 @@
-# 消息与中间件篇
+# 中间件与消息队列
 
-本目录覆盖 MQ、搜索、网关/容器等后端中间件。面试复习时建议以“可靠性、吞吐量、一致性、可观测性”为主线，不要只背产品特性。
+这一部分关注消息中间件、搜索/网关/应用服务器等常用基础设施。复习时要围绕可靠性、顺序性、幂等、性能瓶颈和故障恢复来组织答案。
 
-## 导航
+## 面试复习重点
 
-| 模块 | 文章 | 摘要 |
-| --- | --- | --- |
-| MQ 基础 | [消息队列基础](/04-mq/basics/README.md) / [如何防止重复消费](/04-mq/basics/消息队列如何防止消息重复消费？.md) | 解耦、削峰、异步、可靠投递、幂等消费 |
-| Kafka | [Kafka 总览](/04-mq/Kafka/README.md) / [入门概要](/04-mq/Kafka/Kafka入门概要.md) / [会丢消息吗](/04-mq/Kafka/Kafka会丢消息吗？.md) / [Exactly-Once](/04-mq/Kafka/Kafka的Exactly-Once语义怎么保证？.md) / [消息积压](/04-mq/Kafka/Kafka百万消息挤压如何处理？.md) | 高吞吐日志流、分区副本、消费者组、ISR、事务、积压治理 |
-| RocketMQ | [RocketMQ 总览](/04-mq/rocketmq/README.md) / [与 Kafka 区别](/04-mq/rocketmq/RocketMQ与Kafka有什么区别？.md) / [性能对比](/04-mq/rocketmq/RocketMQ为什么性能不如Kafka？.md) | 业务消息、事务消息、延迟消息、顺序消息 |
-| RabbitMQ | [RabbitMQ 总览](/04-mq/rabbitmq/README.md) / [入门概要](/04-mq/rabbitmq/RabbitMQ入门概要.md) | AMQP、Exchange、Queue、RoutingKey、确认机制 |
-| 搜索/分析 | [ElasticSearch](/04-mq/ElasticSearch/README.md) / [ClickHouse](/04-mq/ClickHouse/README.md) | 搜索、倒排索引、列存、OLAP 分析 |
-| 基础设施 | [Zookeeper](/04-mq/Zookeeper/README.md) / [Nginx](/04-mq/Nginx/README.md) / [Tomcat](/04-mq/Tomcat/README.md) | 协调、负载均衡、Servlet 容器与类加载 |
+- 核心概念是什么，解决了什么问题，和相邻知识点如何区分。
+- 面试官常从实现原理、适用场景、异常边界和性能影响继续追问。
+- 生产落地时要结合监控、日志、压测和故障预案验证方案。
 
-## 标准回答框架
+## 建议掌握程度
 
-回答 MQ 题建议从 **业务场景 → 消息模型 → 可靠性方案 → 性能与扩展 → 监控补偿** 展开。任何“保证不丢不重”的回答都必须补充边界：分布式系统只能通过幂等、事务/最终一致、对账补偿降低风险。
+- **能讲清概念**：先用自己的话解释定义、背景和解决的问题。
+- **能画出链路**：把核心流程、关键组件和状态变化串起来。
+- **能回答追问**：准备优缺点、适用场景、常见坑和替代方案。
+- **能落地排查**：结合日志、指标、工具和案例说明如何定位问题。
 
-## 易错点
+## 文章导航
 
-- 只说“加 MQ 解耦”，不说失败重试、幂等和死信。
-- 把 Kafka 的 Exactly-Once 理解成外部数据库也天然 Exactly-Once。
-- 积压时盲目加消费者，却忽略分区数和下游承载能力。
+- [消息队列基础](/04-mq/basics/README.md)
+- [Kafka 总览](/04-mq/Kafka/README.md)
+- [RocketMQ 总览](/04-mq/rocketmq/README.md)
+- [RabbitMQ 总览](/04-mq/rabbitmq/README.md)
+- [ElasticSearch](/04-mq/ElasticSearch/README.md)
+- [Zookeeper](/04-mq/Zookeeper/README.md)
+
+## 面试表达模板
+
+回答这类问题时，建议按下面顺序组织：
+
+1. 先给结论：一句话说明它是什么、解决什么问题。
+2. 再讲原理：说明核心组件、关键流程和数据结构。
+3. 补充场景：结合项目或线上问题说明什么时候用、怎么用。
+4. 说明边界：讲清楚缺点、风险、替代方案和排查手段。

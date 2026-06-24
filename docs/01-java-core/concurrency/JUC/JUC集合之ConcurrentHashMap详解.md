@@ -296,7 +296,7 @@ static final int spread(int h) {
 适应新结构：
 JDK 8 改用数组 + 链表 + 红黑树结构，不再依赖 Segment 分段锁，而是使用 CAS + synchronized 优化并发性能。
 为什么 JDK 8 优化 Hash 计算？
-1. 减少���算开销：JDK 7 的多次位运算在并发场景下可能成为性能瓶颈。
+1. 减少计算开销：JDK 7 的多次位运算在并发场景下可能成为性能瓶颈。
 2. 适应新结构：JDK 8 改用红黑树处理冲突，即使哈希冲突稍多，也能保证 O(log n) 的查询效率。
 3. CAS 友好：更简单的哈希计算能提高 CAS（Compare-And-Swap）操作的效率。
 

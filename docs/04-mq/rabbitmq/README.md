@@ -1,20 +1,29 @@
 # RabbitMQ
 
-RabbitMQ 是基于 AMQP 的传统消息中间件，面试重点是 Exchange 路由模型、确认机制、死信队列和可靠投递。
+这一部分关注消息中间件、搜索/网关/应用服务器等常用基础设施。复习时要围绕可靠性、顺序性、幂等、性能瓶颈和故障恢复来组织答案。
 
-## 导航
+## 面试复习重点
 
-| 文章 | 摘要 |
-| --- | --- |
-| [RabbitMQ 入门概要](/04-mq/rabbitmq/RabbitMQ入门概要.md) | Exchange、Queue、Binding、RoutingKey、Confirm、Ack、DLX、TTL |
+- 核心概念是什么，解决了什么问题，和相邻知识点如何区分。
+- 面试官常从实现原理、适用场景、异常边界和性能影响继续追问。
+- 生产落地时要结合监控、日志、压测和故障预案验证方案。
 
-## 复习摘要
+## 建议掌握程度
 
-- **消息模型**：Producer → Exchange → Queue → Consumer，通过 Binding 和 RoutingKey 路由。
-- **Exchange 类型**：direct 精确匹配，topic 通配符，fanout 广播，headers 按头匹配。
-- **可靠性**：publisher confirm、mandatory/return、queue/message durable、manual ack、死信队列。
-- **适用场景**：业务系统异步通知、任务队列、复杂路由；超大规模日志流一般不如 Kafka。
+- **能讲清概念**：先用自己的话解释定义、背景和解决的问题。
+- **能画出链路**：把核心流程、关键组件和状态变化串起来。
+- **能回答追问**：准备优缺点、适用场景、常见坑和替代方案。
+- **能落地排查**：结合日志、指标、工具和案例说明如何定位问题。
 
-## 易错点
+## 文章导航
 
-不要把 RabbitMQ 的 ack 和 publisher confirm 混为一谈：confirm 是 Broker 确认生产者消息已接收，ack 是消费者确认消息已处理。
+- [RabbitMQ 入门概要](/04-mq/rabbitmq/RabbitMQ入门概要.md)
+
+## 面试表达模板
+
+回答这类问题时，建议按下面顺序组织：
+
+1. 先给结论：一句话说明它是什么、解决什么问题。
+2. 再讲原理：说明核心组件、关键流程和数据结构。
+3. 补充场景：结合项目或线上问题说明什么时候用、怎么用。
+4. 说明边界：讲清楚缺点、风险、替代方案和排查手段。

@@ -40,7 +40,7 @@ public class LockSupport {
         } catch (Exception ex) { throw new Error(ex); }
     }
 }
-UNSAFE字段表示sun.mic.Unsafe类, 一般程序中不允许直接调用, 而long类型的表示示例对象相应字段在内存中的偏移��址, 可以通过偏移地址获取或设置该字段的值.
+UNSAFE字段表示sun.mic.Unsafe类, 一般程序中不允许直接调用, 而long类型的表示示例对象相应字段在内存中的偏移地址, 可以通过偏移地址获取或设置该字段的值.
 
 构造函数
 LockSupport只有一个私有构造函数, 无法被实例化.
