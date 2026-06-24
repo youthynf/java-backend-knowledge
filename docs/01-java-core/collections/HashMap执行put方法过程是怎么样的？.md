@@ -1,92 +1,164 @@
-# HashMap执行put方法过程是怎么样的？
+# HashMap 执行 put 方法过程是怎么样的？
 
-HashMap执行put方法过程是怎么样的？
-计算key的哈希值：调用 hash(key) 计算 key 的哈希值，不是直接使用 key 的 hashCode()，而是会进行二次处理：
+## 核心概念
 
-// 将 hashCode 的高16位与低16位异或（减少哈希冲突）
+`HashMap.put(k, v)` 的本质是：根据 key 的 hash 定位数组桶位，如果桶为空就直接插入；如果桶不为空，就在链表或红黑树中查找相同 key，找到则覆盖 value，找不到则新增节点，最后根据 size 判断是否需要扩容。
+
+JDK 8 之后，HashMap 的主要结构是：
+
+```text
+数组 table + 链表 + 红黑树
+```
+
+数组用于定位桶，链表和红黑树用于解决哈希冲突。
+
+## put 的执行步骤
+
+### 1. 计算扰动后的 hash
+
+HashMap 不会直接使用 `key.hashCode()`，而是会做一次高低位扰动：
+
+```java
 static final int hash(Object key) {
     int h;
     return (key == null) ? 0 : (h = key.hashCode()) ^ (h >>> 16);
 }
-
-定位数组索引（桶位置）：使用 (数组长度-1) & hash 代替取模运算（效率更高）
-
-i = (n - 1) & hash  // n是数组长度
-
-处理数组槽位的多种可能情况
-3.1 桶为空（没有元素）：直接创建新节点放入该位置，并将HashMap的修改次数modCount加1，以便在进行迭代时发现并发修改。
-
-if ((p = tab[i]) == null)
-    tab[i] = newNode(hash, key, value, null);
-3.2 桶不为空（存在元素）
-第一个节点匹配：检查第一个节点的 key 是否相同（先比较哈希值，再用 equals），相同则覆盖
-
-if (p.hash == hash && 
-    ((k = p.key) == key || (key != null && key.equals(k))))
-    e = p;
-红黑树节点：如果是树节点，调用红黑树的插入方法，在红黑树中使用哈希码和equals()方法进行查找，根据键的哈希码定位到红黑树中的某个节点，然后逐个比较键，直到找到相同的键或达到红黑树的末尾，如果找到则更新值，否则将新的键值对添加到红黑树；
-
-else if (p instanceof TreeNode)
-    e = ((TreeNode<K,V>)p).putTreeVal(this, tab, hash, key, value);
-链表遍历：遍历链表查找 key，找不到则在链表尾部插入新节点（JDK 1.7及之前采用头插法），链表长度≥8时尝试树化（前提是数组长度≥64）
-
-for (int binCount = 0; ; ++binCount) {
-    if ((e = p.next) == null) {
-        p.next = newNode(hash, key, value, null);
-        if (binCount >= TREEIFY_THRESHOLD - 1) // -1 for 1st
-            treeifyBin(tab, hash);
-        break;
-    }
-    if (e.hash == hash &&
-        ((k = e.key) == key || (key != null && key.equals(k))))
-        break;
-    p = e;
-}
-
-扩容检查：检查当前容量size是否超过阈值【当前容量×负载因子】，超过则需要进行扩容操作：
-
-if (++size > threshold)
-    resize();
-
-扩容操作：
-创建一个新的2倍大小的数组；
-将旧数组中的键值对重新哈希到新的数组中；
-更新HashMap的数组引用和阈值参数；
-
-6.完成添加操作
-
----
-
-<!-- interview-review-enhanced -->
-
-## 面试复习版
-
-### 核心概念
-- HashMap 基于数组、链表/红黑树实现，JDK 8 后冲突严重时可树化。
-- 容量通常保持 2 的幂，便于用 (n-1)&hash 定位桶。
-- HashMap 非线程安全。
-
-### 面试官想考什么
-- put/get、扩容、树化、哈希扰动。
-- 并发下数据覆盖、可见性和结构破坏风险。
-
-### 标准回答
-HashMap 通过 hash 定位桶，桶内再用 equals 精确匹配。put 时可能触发扩容，元素会重新分布。它适合单线程或外部同步场景，多线程应使用 ConcurrentHashMap。
-
-### 深挖追问
-- 为什么容量是 2 的幂？
-- 负载因子为什么默认 0.75？
-- JDK 7 和 JDK 8 扩容有什么差异？
-
-### 实战场景/代码示例
-```java
-Map<String,Integer> map=new HashMap<>(16);
-map.put("id",1);
-Integer v=map.get("id");
 ```
 
-### 易错点/总结
-- 重写 key 的 equals 必须重写 hashCode。
-- 不要在并发写场景使用 HashMap。
-- 可变对象做 key 风险很高。
+这样做的目的是让高位信息也参与低位计算，降低哈希冲突概率。
 
+### 2. 初始化或检查 table
+
+如果底层数组还没有初始化，第一次 put 时会触发 `resize()` 初始化数组。HashMap 是懒初始化，不是 new 出来就马上分配 table。
+
+### 3. 定位桶下标
+
+HashMap 使用位运算计算数组下标：
+
+```java
+i = (n - 1) & hash;
+```
+
+前提是数组长度 `n` 是 2 的幂。这样可以用位运算替代取模，提高效率。
+
+### 4. 桶为空：直接插入
+
+如果 `table[i] == null`，说明该位置没有元素，直接创建新节点放入桶中：
+
+```java
+tab[i] = newNode(hash, key, value, null);
+```
+
+### 5. 桶不为空：处理冲突
+
+桶不为空时，有三种情况。
+
+#### 情况一：头节点就是相同 key
+
+如果头节点的 hash 相同，并且 key 引用相同或 `equals` 相等，说明是更新操作，记录该节点，后面覆盖 value。
+
+#### 情况二：桶中是红黑树
+
+如果头节点是 `TreeNode`，说明这个桶已经树化，调用红黑树插入逻辑：
+
+```java
+e = ((TreeNode<K,V>)p).putTreeVal(this, tab, hash, key, value);
+```
+
+找到相同 key 就覆盖，找不到就插入新的树节点。
+
+#### 情况三：桶中是链表
+
+如果还是链表，就从头到尾遍历：
+
+- 找到相同 key：后续覆盖旧 value。
+- 找不到相同 key：尾插法插入新节点。
+- 插入后链表长度达到树化阈值时，尝试树化。
+
+JDK 8 使用尾插法；JDK 7 及以前扩容迁移时有头插法，且并发使用 HashMap 可能导致链表环问题。
+
+### 6. 树化判断
+
+当链表长度达到 `TREEIFY_THRESHOLD = 8` 时，会调用 `treeifyBin`。但并不是一到 8 就一定树化：
+
+- 如果数组容量小于 `MIN_TREEIFY_CAPACITY = 64`，优先扩容。
+- 如果数组容量至少为 64，才把链表转成红黑树。
+
+原因是容量太小时，冲突可能主要来自数组太小，扩容比树化更划算。
+
+### 7. 覆盖旧值或增加 size
+
+如果找到了相同 key，就覆盖旧 value，并返回旧值。
+
+如果是新增节点，则执行：
+
+```java
+++modCount;
+if (++size > threshold) {
+    resize();
+}
+```
+
+`modCount` 用于 fail-fast 迭代器检测结构性修改。
+
+### 8. 扩容
+
+当 `size > threshold` 时触发扩容。默认负载因子是 `0.75`，阈值通常是：
+
+```text
+threshold = capacity * loadFactor
+```
+
+扩容时容量变为原来的 2 倍，并迁移旧元素。JDK 8 迁移时不需要重新计算完整 hash，只需要看：
+
+```java
+(hash & oldCap) == 0
+```
+
+为 0 的留在原下标，不为 0 的移动到 `原下标 + oldCap`。
+
+## 面试官想考什么
+
+1. 是否知道 HashMap 底层结构和冲突处理方式。
+2. 是否能说清楚 hash 扰动、位运算取下标、2 的幂容量之间的关系。
+3. 是否理解覆盖 value、新增节点、树化、扩容几个分支。
+4. 是否知道 HashMap 不是线程安全容器。
+
+## 标准回答
+
+可以这样答：
+
+> HashMap 执行 put 时，先计算 key 的扰动 hash；如果 table 未初始化则先初始化。然后通过 `(n - 1) & hash` 定位桶下标。桶为空就直接插入新节点；桶不为空则先判断头节点是否为同一个 key，如果是就覆盖 value；如果桶是红黑树，就走树节点插入；如果是链表，就遍历链表，找到相同 key 则覆盖，找不到则尾插新节点。链表长度达到 8 且数组容量至少 64 时会树化。新增节点后 size 超过阈值会触发扩容。
+
+## 深挖追问
+
+### 为什么容量要是 2 的幂？
+
+因为只有容量是 2 的幂时，`(n - 1) & hash` 才能等价于对 `n` 取模，并且分布更均匀。扩容时也可以通过 `hash & oldCap` 快速判断节点新位置，降低迁移成本。
+
+### 为什么链表长度到 8 不一定树化？
+
+如果数组还比较小，冲突可能是容量不足导致的，此时扩容能更有效减少冲突。只有数组容量达到 64 后，链表仍然很长，才更适合转成红黑树。
+
+### put 相同 key 会不会增加 size？
+
+不会。相同 key 只覆盖旧 value，返回旧 value，不会增加 size。只有新增 key 才会让 size 加 1。
+
+### HashMap 可以在并发场景直接用吗？
+
+不能。HashMap 不是线程安全的，多线程同时 put 可能导致数据覆盖、丢失、结构异常等问题。并发场景应使用 `ConcurrentHashMap`，或者在外部做同步控制。
+
+## 实战场景
+
+- **预估容量**：如果知道大概元素数量，可以初始化容量，减少扩容次数。
+- **自定义 key**：必须正确重写 `equals` 和 `hashCode`，否则可能出现查不到、重复插入等问题。
+- **高冲突风险**：如果 key 的 hash 分布很差，会退化成链表/红黑树操作，影响性能。
+- **并发访问**：读多写少也不能随意并发写 HashMap，必要时改用 `ConcurrentHashMap`。
+
+## 易错点
+
+- HashMap 允许一个 null key，null key 的 hash 是 0。
+- JDK 8 链表新增节点采用尾插，不是头插。
+- 链表长度到 8 不代表一定树化，还要看数组容量是否达到 64。
+- `threshold` 不是容量，而是触发扩容的阈值。
+- `hashCode` 相等不代表 key 相等，还要用 `equals` 判断。

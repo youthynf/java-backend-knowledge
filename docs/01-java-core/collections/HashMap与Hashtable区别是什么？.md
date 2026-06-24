@@ -1,110 +1,109 @@
-# HashMap与Hashtable区别是什么？
+# HashMap 与 Hashtable 区别是什么？
 
-HashMap与Hashtable区别是什么？
-线程安全性：
-Hashgable：线程安全，所有方法都是通过synchronized修饰，每次操作都需要加锁，性能较低；
-HashMap：线程不安全，不支持多线程环境，必须通过外部工具Collections.synchronizedMap包装或使用ConcurrentHashMap来实现线程安全；
+## 核心概念
 
-性能：
-Hashtable：因为是线程安全，每次都需要加锁，性能较低，不推荐使用；
-HashMap：性能优于Hashtable，因为不是线程安全，没有性能开销；
+`HashMap` 和 `Hashtable` 都是基于哈希表的 key-value 容器，但它们属于不同历史阶段的设计：
 
-空值支持：
-Hashtable：不允许null键或null值，如果尝试插入会抛出NullPointerException；
-HashMap：允许一个null键和多个null值；
+- `Hashtable` 是 JDK 1.0 的早期集合类，方法级别使用 `synchronized`，线程安全但性能差。
+- `HashMap` 是 JDK 1.2 集合框架的一部分，默认不保证线程安全，性能更好，使用更广。
 
-初始容量和负载因子：
-Hashtable：初始容量是11，负载因子是0.75，扩容方式是变为原来的2n+1，通过 hash % capacity 计算索引值；
-HashMap：初始容量是12，负载因子是0.75，扩容方式是2的n次方，扩容是容量翻倍，索引通过 hash & （capacity - 1）计算；
+实际开发中，单线程或外部已保证同步时优先用 `HashMap`；并发场景优先用 `ConcurrentHashMap`，而不是 Hashtable。
 
-底层实现：
-Hashtable：底层使用【数组+链表】，当哈希冲突严重时，性能显著下降；
-HashMap：JDK1.8之后，底层使用【数组+链表+红黑树】，当链表长度大于阈值（默认8）后，且数组容量大于等于64，则链表转化为红黑树，提升查询性能；
+## 主要区别
 
-迭代器：
-Hashtable：没有使用fail-fast迭代器，在并发修改是不会抛出异常，但可能导致不一致行为；
-HashMap：使用了fail-fast迭代器，如果在迭代过程中，有其他线程修改了HashMap的结构，则会抛出ConcurrentModificaionException异常；
+### 1. 线程安全性不同
 
-设计时间：
-Hashtable：引入于JDK1.0，设计较早，属于java.util包的一部分；
-HashMap：引入于JDK1.2，属于java.util包的一部分，是Hashtable的改进版；
+`Hashtable` 的大多数公开方法都使用 `synchronized` 修饰，单个方法调用是线程安全的。
 
-替代性：
-Hashtable：虽然使用域简单的多线程场景，但推荐使用ConcurrentHashMap代替；
-HashMap：推荐使用与单线程场景首选；
+`HashMap` 不加锁，不保证线程安全。多线程同时写入可能出现数据丢失、覆盖、结构异常等问题。
 
-扩展问题：
-为什么二者扩容倍数不一样？
-Hashtable设计比较早，主要强调线程安全性，而非高效性，而HashMap则是Hashtable的改进版本，设计上吸取了Hashtable的一些局限性，并针对性优化，使用2的n次方容量和位运算，提高了效率并减少了哈希冲突。
+注意：Hashtable 的线程安全也只是方法级别的，复合操作仍然可能需要额外同步。例如“先判断不存在再 put”不是天然原子的业务动作。
 
----
+### 2. 性能不同
 
-<!-- interview-review-enhanced -->
+Hashtable 因为方法级加锁，所有线程竞争同一把对象锁，并发性能较差。
 
-## 面试复习版
+HashMap 没有锁开销，单线程读写性能通常更好。
 
-### 核心概念
-- HashMap 基于数组、链表/红黑树实现，JDK 8 后冲突严重时可树化。
-- 容量通常保持 2 的幂，便于用 (n-1)&hash 定位桶。
-- HashMap 非线程安全。
+并发场景下，`ConcurrentHashMap` 通过更细粒度的并发控制提升吞吐，通常比 Hashtable 更合适。
 
-### 面试官想考什么
-- put/get、扩容、树化、哈希扰动。
-- 并发下数据覆盖、可见性和结构破坏风险。
+### 3. null 支持不同
 
-### 标准回答
-HashMap 通过 hash 定位桶，桶内再用 equals 精确匹配。put 时可能触发扩容，元素会重新分布。它适合单线程或外部同步场景，多线程应使用 ConcurrentHashMap。
+- `HashMap`：允许一个 `null` key，允许多个 `null` value。
+- `Hashtable`：不允许 `null` key，也不允许 `null` value，否则会抛出 `NullPointerException`。
 
-### 深挖追问
-- 为什么容量是 2 的幂？
-- 负载因子为什么默认 0.75？
-- JDK 7 和 JDK 8 扩容有什么差异？
+### 4. 初始容量和扩容方式不同
 
-### 实战场景/代码示例
+- `HashMap` 默认初始容量是 **16**，负载因子默认是 `0.75`，容量始终保持为 2 的幂，扩容时通常翻倍。
+- `Hashtable` 默认初始容量是 **11**，负载因子默认也是 `0.75`，扩容通常是 `oldCapacity * 2 + 1`。
+
+HashMap 使用 2 的幂容量，是为了通过：
+
 ```java
-Map<String,Integer> map=new HashMap<>(16);
-map.put("id",1);
-Integer v=map.get("id");
+(n - 1) & hash
 ```
 
-### 易错点/总结
-- 重写 key 的 equals 必须重写 hashCode。
-- 不要在并发写场景使用 HashMap。
-- 可变对象做 key 风险很高。
+快速定位桶下标，并优化扩容迁移。
 
----
+### 5. 底层结构不同
 
-<!-- interview-detail-2026-06-24 -->
+JDK 8 之后：
 
-## 面试版详细讲解补充
+- `HashMap`：数组 + 链表 + 红黑树。链表过长且数组容量足够时会树化，降低极端冲突下的查询成本。
+- `Hashtable`：数组 + 链表，没有 HashMap 这套红黑树优化。
 
-### 核心概念
-- HashMap与Hashtable区别是什么？ 的核心是理解集合的数据结构、复杂度、线程安全边界以及与 equals/hashCode/扩容策略的关系。
-- 复习时不要只记一句结论，要把“定义、底层原因、使用边界、工程取舍”串起来。
+### 6. 迭代行为不同
 
-### 面试官想考什么
-- 面试通常考底层结构、扩容/并发问题、为什么这样设计，以及在业务中如何选型。
-- 能否把该知识点和常见线上问题、代码设计、性能/并发/可维护性联系起来。
+HashMap 的迭代器是 fail-fast 的。如果迭代过程中发生结构性修改，可能抛出 `ConcurrentModificationException`。
 
-### 标准回答
-回答 HashMap与Hashtable区别是什么？ 时，先说明适用场景，再讲底层机制和关键参数，最后补充并发环境下的替代方案。集合类默认多数不是线程安全的，需要根据读写比例选择 synchronized 包装、并发容器或不可变集合。
+Hashtable 的 Iterator 通常也是 fail-fast；它早期还提供 Enumeration 枚举方式，Enumeration 不是 fail-fast。面试里不要简单说“Hashtable 一定不会 fail-fast”，要区分 Iterator 和 Enumeration。
 
-如果是口述面试，建议先给一句结论，再补充 2~3 个关键细节，最后用项目场景收尾。这样既有结构，也能给面试官继续追问的抓手。
+### 7. 继承体系不同
 
-### 深挖追问
-- 扩容何时触发？迭代时修改为什么抛 ConcurrentModificationException？并发容器如何降低锁粒度？
-- 如果让你在项目里落地这个知识点，你会如何设计测试用例验证边界？
-- 遇到性能、并发或可维护性问题时，有哪些替代方案？
+- `HashMap` 继承 `AbstractMap`，实现 `Map` 接口。
+- `Hashtable` 继承 `Dictionary`，实现 `Map` 接口。
 
-### 示例/实战场景
-```java
-List<String> safe = Collections.synchronizedList(new ArrayList<>()); // 简单同步包装，复杂并发优先考虑 JUC 容器
-```
+`Dictionary` 是早期遗留抽象类，现在基本不再使用。
 
-实战中建议把该知识点放到具体场景里理解：例如接口参数校验、集合选型、线程池治理、金额计算、JVM 排障或框架扩展点，而不是孤立背概念。
+## 面试官想考什么
 
-### 易错点/总结
-- 不要只背结论，要能结合容量、负载因子、hash 分布、读写比例解释取舍。
-- 面试表达要避免绝对化，例如“永远”“一定”“只会”，很多 Java 行为都与版本、实现、参数和上下文有关。
-- 最后用一句话收束：先讲清楚它解决什么问题，再讲清楚它的限制和替代方案。
+1. 是否知道 Hashtable 是历史遗留类，不是现代并发首选。
+2. 是否能说清楚 null、线程安全、扩容、底层结构差异。
+3. 是否知道并发场景应该考虑 `ConcurrentHashMap`。
+4. 是否能纠正常见错误，例如 HashMap 默认容量不是 12。
 
+## 标准回答
+
+可以这样答：
+
+> HashMap 和 Hashtable 都是哈希表实现的 Map。HashMap 默认不线程安全，允许一个 null key 和多个 null value，默认容量 16，容量保持 2 的幂，JDK 8 后底层是数组、链表和红黑树。Hashtable 是早期遗留类，方法用 synchronized 修饰，单方法线程安全，但并发性能差，不允许 null key 和 null value，默认容量 11，扩容一般是 2 倍加 1。现在单线程用 HashMap，并发场景优先用 ConcurrentHashMap，基本不推荐再使用 Hashtable。
+
+## 深挖追问
+
+### 为什么不推荐 Hashtable？
+
+因为它锁粒度太粗，所有操作竞争同一个对象锁，吞吐量差；而且它是历史遗留类，API 设计也比较旧。现代并发场景下，`ConcurrentHashMap` 的并发性能和工程适用性更好。
+
+### Hashtable 线程安全，为什么还不能替代 ConcurrentHashMap？
+
+Hashtable 的线程安全主要是单方法互斥，不能解决所有业务复合操作的一致性问题。同时它锁住整个对象，高并发下性能容易成为瓶颈。ConcurrentHashMap 在 JDK 8 中通过 CAS、volatile、桶级 synchronized 等方式减少锁竞争，更适合并发读写。
+
+### HashMap 为什么允许 null？
+
+HashMap 对 null key 做了特殊处理，null key 的 hash 视为 0，通常放在 table[0] 对应的桶中。Hashtable 的实现会直接调用 key 的 hash 相关方法，因此不支持 null。
+
+## 实战场景
+
+- **普通业务映射**：优先使用 `HashMap`。
+- **需要保持插入顺序**：使用 `LinkedHashMap`。
+- **需要排序**：使用 `TreeMap`。
+- **高并发读写**：使用 `ConcurrentHashMap`。
+- **兼容老代码**：遇到 Hashtable 通常是历史包袱，评估后可逐步替换。
+
+## 易错点
+
+- HashMap 默认初始容量是 16，不是 12。
+- Hashtable 不等于高性能并发容器。
+- Hashtable 的 Iterator 和 Enumeration 行为不同，不要笼统说它完全没有 fail-fast。
+- `Collections.synchronizedMap(new HashMap<>())` 只是粗粒度同步，迭代时仍需要手动同步。
+- ConcurrentHashMap 不允许 null key/value，这是为了避免并发场景下 null 带来的歧义。
