@@ -24,11 +24,11 @@
     /* ========== 文章排版核心样式 ========== */
     /* 覆盖 Docsify vue.css 默认样式 */
 
-    /* 正文内容区：缩小 Docsify 默认留白，让知识库内容更贴近页面边缘 */
+    /* 正文内容区：在保持宽屏利用率的同时，略微增加四周留白，阅读更舒展 */
     .markdown-section {
       max-width: none !important;
       margin: 0 !important;
-      padding: calc(20px + 10rpx) !important;
+      padding: 32px 40px !important;
       box-sizing: border-box !important;
     }
 
@@ -201,7 +201,7 @@
 
     /* 手机适配 */
     @media (max-width: 768px) {
-      .markdown-section { padding: calc(16px + 10rpx) !important; }
+      .markdown-section { padding: 20px 18px !important; }
       .markdown-section h1 { font-size: 1.5rem !important; }
       .markdown-section h2 { font-size: 1.3rem !important; }
       .markdown-section h3 { font-size: 1.15rem !important; }
