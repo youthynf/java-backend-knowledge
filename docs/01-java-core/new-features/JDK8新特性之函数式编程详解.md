@@ -1,250 +1,129 @@
-# JDK8新特性之函数式编程详解
+# JDK8 新特性之函数式编程详解
 
-JDK8新特性之函数式编程详解
-概述
-面向对象编程是对数据进行抽象；函数式编程是对行为进行抽象。核心思想: 使用不可变值和函数，函数对一个值进行处理，映射成另一个值。对核心类库的改进主要包括集合类的API和新引入的流Stream，流使程序员可以站在更高的抽象层次上对集合进行操作。
-一、lambda表达式
-Lambda 表达式在 Java 中只能用于 函数式接口（Functional Interface），而函数式接口的定义是：
-•  @FunctionalInterface 注解标记的接口（显式声明）。
-•  自带且仅有一个抽象方法（Single Abstract Method, SAM）的接口（即使没有注解，只要符合 SAM 规则，也是函数式接口）。
+## 核心概念
 
-特殊情况与边界案例：
-•  默认方法不影响函数式接口
-即使接口有多个默认方法，只要有一个抽象方法，仍然是函数式接口：
+函数式编程强调把“行为”作为值传递。Java 8 通过 Lambda 表达式、方法引用和函数式接口让这一点成为可能。它并不是替代面向对象，而是补充面向对象：对象承载状态，函数式接口承载可传递的行为。
 
+函数式接口是 Lambda 的目标类型：只包含一个抽象方法的接口。`@FunctionalInterface` 不是必须的，但推荐使用，因为编译器会帮你校验接口是否仍然只有一个抽象方法。
+
+| 接口 | 抽象方法 | 典型用途 |
+| --- | --- | --- |
+| `Predicate<T>` | `boolean test(T t)` | 过滤、条件判断 |
+| `Function<T,R>` | `R apply(T t)` | 类型转换、字段提取 |
+| `Consumer<T>` | `void accept(T t)` | 消费数据，无返回 |
+| `Supplier<T>` | `T get()` | 延迟创建对象 |
+| `UnaryOperator<T>` | `T apply(T t)` | 同类型转换 |
+| `BinaryOperator<T>` | `T apply(T a, T b)` | 聚合、归约 |
+
+## 面试官想考什么
+
+- Lambda、方法引用、函数式接口三者关系；
+- 什么是 effectively final，为什么 Lambda 捕获局部变量有这个限制；
+- 常用函数式接口的使用场景；
+- 函数式写法如何提升代码复用和可读性；
+- 函数式编程的边界：副作用、异常处理、调试和性能。
+
+## 标准回答
+
+> Java 8 的函数式编程基于函数式接口实现。Lambda 本身没有独立类型，必须赋值给一个只包含单个抽象方法的接口，例如 `Predicate`、`Function`、`Consumer`、`Supplier`。方法引用是部分 Lambda 的简写形式。实际开发中常用它来传递过滤条件、转换规则、回调逻辑，并配合 Stream API 处理集合。使用时要避免在 Lambda 中修改共享状态，复杂业务也不应强行写成很长的链式调用。
+
+## 深挖追问
+
+### 什么是函数式接口？
+
+只有一个抽象方法的接口就是函数式接口。接口中的 `default` 方法、`static` 方法，以及从 `Object` 继承来的公共方法，不计入抽象方法数量。
+
+```java
 @FunctionalInterface
-interface Greeter {
-    void greet();  // 唯一的抽象方法
+public interface IdGenerator {
+    String nextId(String prefix);
+}
+```
 
-    default void log() {
-        System.out.println("Logged");
+### Lambda 为什么只能捕获 effectively final 变量？
+
+局部变量存放在线程栈上，生命周期随方法结束而结束。Lambda 可能在方法返回后才执行，Java 捕获的是变量值的副本。为了避免外部变量继续变化带来的语义混乱，要求被捕获的局部变量不能再赋值。
+
+```java
+int base = 10;
+Function<Integer, Integer> add = x -> x + base; // base 后续没有被修改，所以是 effectively final
+```
+
+### 方法引用有哪些形式？
+
+```java
+User::getName        // 对象实例方法引用
+System.out::println  // 特定对象实例方法引用
+Integer::parseInt    // 静态方法引用
+ArrayList::new       // 构造器引用
+```
+
+### 函数式写法有什么缺点？
+
+过长链式调用不易调试；Lambda 中处理受检异常比较繁琐；如果在 `map/filter/forEach` 中修改外部集合或计数器，会引入副作用和线程安全问题；简单循环被强行改造成复杂 Stream 反而降低可维护性。
+
+## 实战场景/代码示例
+
+### 行为参数化：通用过滤
+
+```java
+public static <T> List<T> filter(List<T> source, Predicate<T> predicate) {
+    List<T> result = new ArrayList<>();
+    for (T item : source) {
+        if (predicate.test(item)) {
+            result.add(item);
+        }
     }
+    return result;
 }
 
-•  继承父接口的抽象方法
-如果子接口继承了父接口的抽象方法，且总抽象方法数量为1，它仍然是函数式接口：
+List<User> activeUsers = filter(users, User::isActive);
+List<User> vipUsers = filter(users, u -> u.getLevel() >= 5);
+```
 
-interface Parent {
-    void doSomething();
+### Function 组合转换
+
+```java
+Function<String, String> trim = String::trim;
+Function<String, Integer> parse = Integer::parseInt;
+Function<String, Integer> normalizeAndParse = trim.andThen(parse);
+
+Integer count = normalizeAndParse.apply(" 42 ");
+```
+
+### Supplier 延迟加载
+
+```java
+public User getOrLoad(Long userId, Supplier<User> loader) {
+    User user = cache.get(userId);
+    return user != null ? user : loader.get();
 }
 
-@FunctionalInterface
-interface Child extends Parent {}  // 合法，因为只有一个抽象方法
+User user = getOrLoad(userId, () -> userRepository.findById(userId)
+        .orElseThrow(() -> new IllegalArgumentException("用户不存在")));
+```
 
-•  重写Object类的方法不算抽象方法
+### Predicate 组合业务规则
 
-@FunctionalInterface
-interface MyInterface {
-    void execute();
+```java
+Predicate<Order> paid = o -> o.getStatus() == OrderStatus.PAID;
+Predicate<Order> highAmount = o -> o.getAmount().compareTo(new BigDecimal("1000")) > 0;
 
-    String toString();  // 来自 Object，不计入抽象方法
-}
+List<Order> riskyOrders = orders.stream()
+        .filter(paid.and(highAmount))
+        .toList();
+```
 
-方法引用
-当方法不修改lambda表达式提供的参数时，可以使用方法引用，否则不能使用，需要键入完整的lambda表达式：
+## 易错点/总结
 
-// 可以使用方法引用
-list.forEach(n -> System.out.println(n)); 
-list.forEach(System.out::println);  
+- Lambda 不等于函数式编程全部，它只是语法基础；
+- Lambda 捕获的局部变量必须是 final 或 effectively final；
+- Lambda 中的 `this` 指向外部类实例，不是 Lambda 对象；
+- 不要在 Lambda/Stream 中修改共享状态；
+- 能用方法引用提升可读性时再用，不要牺牲直观性；
+- 复杂业务建议拆成具名方法，便于测试、复用和排查。
 
-// 不可使用方法引用
-list.forEach((String s) -> System.out.println("*" + s + "*"));
-事实上，可以省略这里的lambda参数的类型声明，编译器可以从列表的类属性推测出来。
+## 参考资料
 
-使用注意事项
-•  lambda内部可以使用静态变量、非静态变量和局部变量；
-•  lambda表达式在Java中又称为闭包或匿名函数；
-•  lambda方法在编译器内部被翻译成私有方法，并派发invokeddynamic字节码指令来进行调用。
-•  lambda表达式只能引用final或final局部变量，即内部不能修改定义在域外的变量。
-
-二、Stream API使用
-求值方法
-•  惰性求值方法：没有做实际性工作，filter只是描述了stream，没有产生新的集合
-
-lists.stream().filter(f -> f.getName().equals("p1"))
-
-•  及早求值方法：collection最终会从stream产生新值，拥有终止操作。
-
-List<Person> list2 = lists.stream().filter(f -> f.getName().equals("p1")).collect(Collectors.toList());
-
-steam&parallelStream
-每个Stream都有两种模式：顺序执行和并行执行
-
-// 顺序流
-List <Person> people = list.getStream.collect(Collectors.toList());
-
-// 并行流
-List <Person> people = list.getStream.parallel().collect(Collectors.toList());
-parallelStream原理：数组会被分成多个段，其中每一个都在不同的线程中处理，然后将结果一起输出。
-
-List originalList = someData;
-split1 = originalList(0, mid);//将数据分小部分
-split2 = originalList(mid,end);
-new Runnable(split1.process());//小部分执行操作
-new Runnable(split2.process());
-List revisedList = split1 + split2;//将结果合并
-
-常见用法
-•  Filter&Predicate
-
-public static void main(args[]){
-    List languages = Arrays.asList("Java", "Scala", "C++", "Haskell", "Lisp");
- 
-    System.out.println("Languages which starts with J :");
-    filter(languages, (str)->str.startsWith("J"));
- 
-    System.out.println("Languages which ends with a ");
-    filter(languages, (str)->str.endsWith("a"));
- 
-    System.out.println("Print all languages :");
-    filter(languages, (str)->true);
- 
-    System.out.println("Print no language : ");
-    filter(languages, (str)->false);
- 
-    System.out.println("Print language whose length greater than 4:");
-    filter(languages, (str)->str.length() > 4);
-}
- 
-public static void filter(List names, Predicate condition) {
-    names.stream().filter((name) -> (condition.test(name))).forEach((name) -> {
-        System.out.println(name + " ");
-    });
-}
-多个Predicate组合filter：
-
-// 可以用and()、or()和xor()逻辑函数来合并Predicate，
-// 例如要找到所有以J开始，长度为四个字母的名字，你可以合并两个Predicate并传入
-Predicate<String> startsWithJ = (n) -> n.startsWith("J");
-Predicate<String> fourLetterLong = (n) -> n.length() == 4;
-names.stream()
-    .filter(startsWithJ.and(fourLetterLong))
-    .forEach((n) -> System.out.print("nName, which starts with 'J' and four letter long is : " + n));
-
-•  Map&Reduce
-map将集合类(例如列表)元素进行转换的。还有一个 reduce() 函数可以将所有值合并成一个。
-
-List costBeforeTax = Arrays.asList(100, 200, 300, 400, 500);
-double bill = costBeforeTax.stream().map((cost) -> cost + .12*cost).reduce((sum, cost) -> sum + cost).get();
-System.out.println("Total : " + bill);
-
-•  Collectors
-
-// 将字符串换成大写并用逗号链接起来
-List<String> G7 = Arrays.asList("USA", "Japan", "France", "Germany", "Italy", "U.K.","Canada");
-String G7Countries = G7.stream().map(x -> x.toUpperCase()).collect(Collectors.joining(", "));
-System.out.println(G7Countries);
-
-Collectors.joining(", ")
-Collectors.toList()
-Collectors.toSet() 
-Collectors.toMap(MemberModel::getUid, Function.identity())
-Collectors.toMap(ImageModel::getAid, o -> IMAGE_ADDRESS_PREFIX + o.getUrl())
-
-•  flatMap
-将多个Stream连接成一个Stream。
-
-List<Integer> result= Stream.of(Arrays.asList(1,3),Arrays.asList(5,6)).flatMap(a->a.stream()).collect(Collectors.toList());
-
-•  其他用法
-
-// distinct去重
-List<Long> likeTidList = likeDOs.stream().map(LikeDO::getTid)
-                .distinct().collect(Collectors.toList());
-
-// count计总数
-int countOfAdult=persons.stream()
-                       .filter(p -> p.getAge() > 18)
-                       .map(person -> new Adult(person))
-                       .count();
-
-// Match匹配
-boolean anyStartsWithA =
-    stringCollection
-        .stream()
-        .anyMatch((s) -> s.startsWith("a"));
-        
-// min,max,summaryStatics
-List<Person> lists = new ArrayList<Person>();
-lists.add(new Person(1L, "p1"));
-lists.add(new Person(2L, "p2"));
-lists.add(new Person(3L, "p3"));
-lists.add(new Person(4L, "p4"));
-Person a = lists.stream().max(Comparator.comparing(t -> t.getId())).get();
-System.out.println(a.getId());
-
-//获取数字的个数、最小值、最大值、总和以及平均值
-List<Integer> primes = Arrays.asList(2, 3, 5, 7, 11, 13, 17, 19, 23, 29);
-IntSummaryStatistics stats = primes.stream().mapToInt((x) -> x).summaryStatistics();
-System.out.println("Highest prime number in List : " + stats.getMax());
-System.out.println("Lowest prime number in List : " + stats.getMin());
-System.out.println("Sum of all prime numbers : " + stats.getSum());
-System.out.println("Average of all prime numbers : " + stats.getAverage());
-
-// peek用于调试或观察流中的元素
-List<Person> lists = new ArrayList<Person>();
-lists.add(new Person(1L, "p1"));
-lists.add(new Person(2L, "p2"));
-lists.add(new Person(3L, "p3"));
-lists.add(new Person(4L, "p4"));
-System.out.println(lists);
-
-List<Person> list2 = lists.stream()
-                                 .filter(f -> f.getName().startsWith("p"))
-                .peek(t -> {
-                    System.out.println(t.getName());
-                })
-                .collect(Collectors.toList());
-System.out.println(list2);
-
-三、FunctionalInterface
-理解@FunctionInterface
-•  被它注解的接口只能有一个抽象方法
-•  如果一个类型被这个注解，那么这个类型必须是一个interface，并且满足function interface的所有要求；
-•  编译器会自动把满足function interface要求的接口自动识别为function interface，所以不需要显式使用@FunctionInterface注解；
-
-自定义函数接口
-
-@FunctionalInterface
-public interface IMyInterface {
-    void study();
-}
-
-package com.isea.java;
-public class TestIMyInterface {
-    public static void main(String[] args) {
-        IMyInterface iMyInterface = () -> System.out.println("I like study");
-        iMyInterface.study();
-    }
-}
-
-内置四大函数接口
-•  消费型接口：Consumer<T> void accept(T t)有参数，无返回值的抽象方法
-
-Consumer<Person> greeter = (p) -> System.out.println("Hello, " + p.firstName);
-greeter.accept(new Person("Luke", "Skywalker"));
-
-•  供给型接口：Supplier<T> T get()无参有返回值的抽象方法
-
-Supplier<Person> personSupplier = Person::new;
-personSupplier.get();   // new Person
-
-•  断定型接口：Predicate<T> boolean test(T t)有参，但是返回值类型固定是boolean
-
-Predicate<String> predicate = (s) -> s.length() > 0;
-
-predicate.test("foo");              // true
-predicate.negate().test("foo");     // false
-
-Predicate<Boolean> nonNull = Objects::nonNull;
-Predicate<Boolean> isNull = Objects::isNull;
-
-Predicate<String> isEmpty = String::isEmpty;
-Predicate<String> isNotEmpty = isEmpty.negate();
-
-•  函数型接口：Function<T, R> R apply(T t)有参数有返回值的抽象方法
-
-Function<String, Integer> toInteger = Integer::valueOf;
-Function<String, String> backToString = toInteger.andThen(String::valueOf);
-
-backToString.apply("123");     // "123"
+- Java 8 `java.util.function` API
+- Effective Java：Prefer lambdas to anonymous classes

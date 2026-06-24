@@ -11,7 +11,17 @@
 - **分组校验（Groups）**：同一实体在不同场景下使用不同校验规则，如Create和Update分组
 - **校验链与责任链模式**：将多个校验组织为链式调用，每个校验器只关注自己的规则
 
-## 面试高频问题
+## 面试官想考什么
+
+- 是否理解 Bean Validation/JSR 380 的定位：声明式、标准化、可复用，而不是在业务代码里堆 if-else。
+- 是否能说清 `@Valid`、`@Validated`、分组校验、级联校验、自定义注解和统一异常处理。
+- 是否知道校验应该分层：Controller 做格式和必填校验，Service/领域层做业务规则校验，避免所有逻辑塞进 DTO 注解。
+
+## 标准回答
+
+参数校验可以用 Bean Validation 把常见规则声明在 DTO 字段上，Controller 入参用 `@Valid` 或 `@Validated` 触发校验，再通过全局异常处理统一返回错误信息。简单格式规则用内置注解，创建/更新差异用分组校验，嵌套对象用级联校验，跨字段或业务相关规则可以使用自定义约束注解或放在 Service/领域层。这样能减少重复 if-else，让校验规则更集中、更可测试，也更符合开闭原则。
+
+## 深挖追问
 
 1. **Bean Validation常用注解有哪些？**
    - `@NotNull`、`@NotEmpty`、`@NotBlank`：非空校验（区别：Null vs 空集合 vs 空字符串）
@@ -128,6 +138,14 @@ public class ValidationExceptionHandler {
     }
 }
 ```
+
+## 易错点/总结
+
+- `@NotNull` 只限制不能为 null，`@NotEmpty` 还要求字符串/集合长度大于 0，`@NotBlank` 还会排除纯空白字符串。
+- 嵌套对象如果不加 `@Valid`，内部字段约束不会自动生效。
+- `@Validated` 支持 Spring 分组校验；`@Valid` 是标准注解，更适合基础和级联场景。
+- 自定义 `ConstraintValidator` 中通常让 `null` 返回 true，把是否必填交给 `@NotNull/@NotBlank`，避免职责混乱。
+- 不要把强业务规则全部写成 DTO 注解；涉及数据库状态、权限、库存等规则更适合在 Service 或领域模型中校验。
 
 ## 延伸思考
 

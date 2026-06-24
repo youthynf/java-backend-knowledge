@@ -2,19 +2,19 @@
 
 ## 核心概念
 
-- [本地缓存与Redis缓存有什么区别？](03-database/redis/cache/本地缓存与Redis缓存有什么区别？.md)
-- [常见的缓存更新策略有哪些？](03-database/redis/cache/常见的缓存更新策略有哪些？.md)
-- [如何保证数据与缓存一致性？](03-database/redis/cache/如何保证数据与缓存一致性？.md)
-- [如何避免Redis缓存穿透？](03-database/redis/cache/如何避免Redis缓存穿透？.md)
-- [如何避免Redis缓存击穿？](03-database/redis/cache/如何避免Redis缓存击穿？.md)
-- [如何避免Redis缓存雪崩？](03-database/redis/cache/如何避免Redis缓存雪崩？.md)
-- [如何设计一个可以动态缓存热点数据的缓存策略？](03-database/redis/cache/如何设计一个可以动态缓存热点数据的缓存策略？.md)
-- [为什么Redis比MySQL快？](03-database/redis/cache/为什么Redis比MySQL快？.md)
-- [Redis持久化时对过期键会如何处理？](03-database/redis/cache/Redis持久化时对过期键会如何处理？.md)
-- [Redis的LRU算法与LFU算法有什么区别？](03-database/redis/cache/Redis的LRU算法与LFU算法有什么区别？.md)
-- [Redis内存淘汰策略有哪些？](03-database/redis/cache/Redis内存淘汰策略有哪些？.md)
-- [Redis使用的过期删除策略是什么？](03-database/redis/cache/Redis使用的过期删除策略是什么？.md)
-- [Redis主从模式中对过期键如何处理？](03-database/redis/cache/Redis主从模式中对过期键如何处理？.md)
+- [本地缓存与Redis缓存有什么区别？](本地缓存与Redis缓存有什么区别？.md)
+- [常见的缓存更新策略有哪些？](常见的缓存更新策略有哪些？.md)
+- [如何保证数据与缓存一致性？](如何保证数据与缓存一致性？.md)
+- [如何避免Redis缓存穿透？](如何避免Redis缓存穿透？.md)
+- [如何避免Redis缓存击穿？](如何避免Redis缓存击穿？.md)
+- [如何避免Redis缓存雪崩？](如何避免Redis缓存雪崩？.md)
+- [如何设计一个可以动态缓存热点数据的缓存策略？](如何设计一个可以动态缓存热点数据的缓存策略？.md)
+- [为什么Redis比MySQL快？](为什么Redis比MySQL快？.md)
+- [Redis持久化时对过期键会如何处理？](Redis持久化时对过期键会如何处理？.md)
+- [Redis的LRU算法与LFU算法有什么区别？](Redis的LRU算法与LFU算法有什么区别？.md)
+- [Redis内存淘汰策略有哪些？](Redis内存淘汰策略有哪些？.md)
+- [Redis使用的过期删除策略是什么？](Redis使用的过期删除策略是什么？.md)
+- [Redis主从模式中对过期键如何处理？](Redis主从模式中对过期键如何处理？.md)
 
 ## 面试官想考什么
 

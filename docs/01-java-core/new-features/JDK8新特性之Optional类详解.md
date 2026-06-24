@@ -1,74 +1,124 @@
-# JDK8新特性之Optional类详解
+# JDK8 新特性之 Optional 类详解
 
-JDK8新特性之Optional类详解
-新版本的Java，比如Java 8引入了一个新的Optional类。这是一个可以为null的容器对象。如果值存在则isPresent()方法会返回true，调用get()方法会返回该对象。
-Optional基本用法
+## 核心概念
 
-public class OptionalDemo {
+`Optional<T>` 是 Java 8 提供的“可能有值，也可能无值”的容器。它的目标不是彻底消灭 `null`，而是让方法返回值的空语义显式化，提醒调用方必须处理“查不到/不存在”的分支。
 
-  public static void main(String[] args) {
-    //创建Optional实例，也可以通过方法返回值得到。
-    Optional<String> name = Optional.of("Sanaulla");
+常用方法：
 
-    //创建没有值的Optional实例，例如值为'null'
-    Optional empty = Optional.ofNullable(null);
+| 方法 | 作用 | 注意点 |
+| --- | --- | --- |
+| `Optional.of(value)` | 包装确定非空的值 | value 为 null 会抛 NPE |
+| `Optional.ofNullable(value)` | 包装可能为空的值 | 最常用 |
+| `Optional.empty()` | 返回空容器 | 不要返回 null 的 Optional |
+| `map` | 有值时做转换 | 返回值会被再次包装 |
+| `flatMap` | 转换函数本身返回 Optional | 避免嵌套 Optional |
+| `filter` | 有值且满足条件才保留 | 不满足返回 empty |
+| `orElse` | 无值时返回默认值 | 参数会立即计算 |
+| `orElseGet` | 无值时延迟创建默认值 | 默认值昂贵时推荐 |
+| `orElseThrow` | 无值时抛异常 | 常用于强依赖数据 |
 
-    //isPresent方法用来检查Optional实例是否有值。
-    if (name.isPresent()) {
-      //调用get()返回Optional值。
-      System.out.println(name.get());
-    }
+## 面试官想考什么
 
-    try {
-      //在Optional实例上调用get()抛出NoSuchElementException。
-      System.out.println(empty.get());
-    } catch (NoSuchElementException ex) {
-      System.out.println(ex.getMessage());
-    }
+- Optional 解决什么问题，是否只是“包一层 null”；
+- `of` 和 `ofNullable` 的区别；
+- `orElse` 和 `orElseGet` 的执行时机；
+- `map` 与 `flatMap` 的区别；
+- 为什么不建议 Optional 用作实体字段、方法参数或集合元素。
 
-    //ifPresent方法接受lambda表达式参数。
-    //如果Optional值不为空，lambda表达式会处理并在其上执行操作。
-    name.ifPresent((value) -> {
-      System.out.println("The length of the value is: " + value.length());
-    });
+## 标准回答
 
-    //如果有值orElse方法会返回Optional实例，否则返回传入的错误信息。
-    System.out.println(empty.orElse("There is no value present!"));
-    System.out.println(name.orElse("There is some value!"));
+> Optional 是 Java 8 引入的空值容器，推荐用于方法返回值，表达结果可能不存在。创建时，确定非空用 `of`，可能为空用 `ofNullable`；使用时不建议直接 `get()`，而应通过 `map/filter/orElseGet/orElseThrow` 等方式处理。Optional 不能替代所有 null 判断，也不推荐作为字段或参数；集合无结果时一般返回空集合，而不是 `Optional<List<T>>`。
 
-    //orElseGet与orElse类似，区别在于传入的默认值。
-    //orElseGet接受lambda表达式生成默认值。
-    System.out.println(empty.orElseGet(() -> "Default Value"));
-    System.out.println(name.orElseGet(() -> "Default Value"));
+## 深挖追问
 
-    try {
-      //orElseThrow与orElse方法类似，区别在于返回值。
-      //orElseThrow抛出由传入的lambda表达式/方法生成异常。
-      empty.orElseThrow(ValueAbsentException::new);
-    } catch (Throwable ex) {
-      System.out.println(ex.getMessage());
-    }
+### Optional 能彻底避免 NPE 吗？
 
-    //map方法通过传入的lambda表达式修改Optonal实例默认值。 
-    //lambda表达式返回值会包装为Optional实例。
-    Optional<String> upperName = name.map((value) -> value.toUpperCase());
-    System.out.println(upperName.orElse("No value found"));
+不能。Optional 只是把空语义显式化。如果 Optional 变量本身被赋值为 null，或者调用方直接 `get()`，仍可能出错。正确做法是永远不要返回 `null` 的 Optional，并避免无判断 `get()`。
 
-    //flatMap与map(Funtion)非常相似，区别在于lambda表达式的返回值。
-    //map方法的lambda表达式返回值可以是任何类型，但是返回值会包装成Optional实例。
-    //但是flatMap方法的lambda返回值总是Optional类型。
-    upperName = name.flatMap((value) -> Optional.of(value.toUpperCase()));
-    System.out.println(upperName.orElse("No value found"));
+### `orElse` 和 `orElseGet` 有什么区别？
 
-    //filter方法检查Optiona值是否满足给定条件。
-    //如果满足返回Optional实例值，否则返回空Optional。
-    Optional<String> longName = name.filter((value) -> value.length() > 6);
-    System.out.println(longName.orElse("The name is less than 6 characters"));
+`orElse` 的参数会立即求值，不管 Optional 是否有值；`orElseGet` 接收 `Supplier`，只有 Optional 为空时才执行。
 
-    //另一个示例，Optional值不满足给定条件。
-    Optional<String> anotherName = Optional.of("Sana");
-    Optional<String> shortName = anotherName.filter((value) -> value.length() > 6);
-    System.out.println(shortName.orElse("The name is less than 6 characters"));
+```java
+User user1 = userOpt.orElse(createDefaultUser());        // 总会执行 createDefaultUser
+User user2 = userOpt.orElseGet(this::createDefaultUser); // 只有 empty 时执行
+```
 
-  }
+### `map` 和 `flatMap` 有什么区别？
+
+`map` 适合把值转换为普通对象；`flatMap` 适合转换函数本身已经返回 Optional 的场景，避免 `Optional<Optional<T>>`。
+
+```java
+Optional<String> city = userOpt
+        .map(User::getAddress)
+        .map(Address::getCity);
+
+Optional<String> phone = userOpt
+        .flatMap(User::getPhoneOptional);
+```
+
+### 为什么不推荐 Optional 做字段？
+
+实体字段涉及序列化、ORM、JSON 映射、Bean 规范等，Optional 字段会增加框架兼容成本，也让模型表达变复杂。字段是否允许为空应通过校验注解、构造器、领域规则或数据库约束表达。
+
+## 实战场景/代码示例
+
+### 查询用户并校验状态
+
+```java
+public Optional<User> findAvailableUser(Long userId) {
+    return userRepository.findById(userId)
+            .filter(User::isEnabled)
+            .filter(user -> !user.isDeleted());
 }
+
+User user = findAvailableUser(userId)
+        .orElseThrow(() -> new IllegalArgumentException("用户不存在或不可用"));
+```
+
+### 避免多层 null 判断
+
+传统写法：
+
+```java
+String city = null;
+if (user != null && user.getAddress() != null) {
+    city = user.getAddress().getCity();
+}
+```
+
+Optional 写法：
+
+```java
+String city = Optional.ofNullable(user)
+        .map(User::getAddress)
+        .map(Address::getCity)
+        .orElse("未知城市");
+```
+
+### 空集合不要再包 Optional
+
+```java
+// 推荐
+public List<Order> listOrders(Long userId) {
+    return orderRepository.findByUserId(userId); // 没有订单时返回 Collections.emptyList()
+}
+
+// 不推荐
+public Optional<List<Order>> listOrders(Long userId) { ... }
+```
+
+## 易错点/总结
+
+- `Optional.of(null)` 会直接抛 NPE；可能为空时用 `ofNullable`；
+- 不要把 `isPresent() + get()` 写成新式 null 判断，优先用链式处理；
+- 默认值创建成本高时，用 `orElseGet` 而不是 `orElse`；
+- Optional 推荐用于返回值，不推荐用于字段、参数、集合元素；
+- `Optional` 本身也不应该为 null；
+- 复杂业务中 Optional 链过长会降低可读性，必要时拆成普通判断。
+
+## 参考资料
+
+- Java 8 `java.util.Optional` API
+- Effective Java：Return optionals judiciously

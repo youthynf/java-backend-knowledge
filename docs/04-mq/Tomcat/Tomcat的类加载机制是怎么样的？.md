@@ -51,3 +51,36 @@ Tomcat 大体有 Bootstrap、System/Common、Webapp 等类加载器。每个 Web
 
 MQ 不是银弹。不要只说“加 MQ 解耦”，还要说明可靠投递、重复消费、顺序性、延迟、监控和补偿。
 
+<!-- 面试复习强化 -->
+
+## 面试复习强化
+
+### 核心概念
+
+Java 默认类加载遵循双亲委派：先让父加载器尝试加载，避免核心类被篡改。Tomcat 为了实现 Web 应用隔离，对 WebAppClassLoader 做了调整：每个 Web 应用有独立类加载器，优先加载自身 WEB-INF/classes 和 WEB-INF/lib 中的类，再委派给父加载器（部分基础类仍优先父加载）。
+
+### 面试官想考什么
+
+- 是否知道双亲委派的目的。
+- 是否理解 Tomcat 为什么要打破/调整双亲委派。
+- 是否能解释应用隔离、热部署、类冲突和内存泄漏。
+
+### 标准回答
+
+Tomcat 的类加载层次通常包括 Bootstrap、Platform/System、Common、WebAppClassLoader。Common 加载 Tomcat 和共享库；每个 Web 应用由独立 WebAppClassLoader 加载。这样不同应用可以使用不同版本的同名依赖，互不影响；应用卸载时理论上释放对应类加载器，实现热部署。但如果线程、ThreadLocal、静态引用、JDBC Driver 等持有 WebAppClassLoader 引用，可能导致类加载器泄漏。
+
+### 深挖追问
+
+- **为什么要应用隔离？** 多个 WAR 部署在同一 Tomcat 时，依赖版本可能不同，必须隔离。
+- **类冲突如何排查？** 查看依赖树、实际加载路径、ClassLoader 层级和重复 jar。
+- **热部署为什么容易内存泄漏？** 老应用类加载器被外部线程或静态对象引用，无法 GC。
+
+### 示例/实战场景
+
+两个业务应用分别依赖不同版本的 Jackson，Tomcat 通过独立 WebAppClassLoader 避免互相污染。但如果把某个业务 jar 放到 Tomcat lib 目录，就可能变成所有应用共享，引发版本冲突。
+
+### 易错点/总结
+
+- Tomcat 不是完全抛弃双亲委派，而是在 Web 应用层做了优先级调整。
+- 共享库放 Common/lib 要谨慎，可能影响所有应用。
+- 热部署问题常与 ThreadLocal、线程池、驱动注册未清理有关。

@@ -11,31 +11,73 @@
 ## 面试复习版
 
 ### 核心概念
-- HashMap 基于数组、链表/红黑树实现，JDK 8 后冲突严重时可树化。
-- 容量通常保持 2 的幂，便于用 (n-1)&hash 定位桶。
-- HashMap 非线程安全。
+- `HashMap` 是非线程安全容器，设计目标是单线程或外部同步场景下的高效 key-value 查询。
+- 底层基于数组 + 链表/红黑树。`put` 过程中可能修改桶链、树结构、`size`、`modCount`，也可能触发 resize；这些复合操作没有同步保护。
+- JDK 7 的头插法迁移在并发 resize 时可能形成环形链表，导致 `get` 死循环；JDK 8 改为尾插和新迁移逻辑后降低了死循环风险，但并发写仍然会数据丢失、覆盖、结构不一致。
+- 可见性也没有保证：一个线程 put 后，另一个线程不一定立即看见完整、正确的结构。
 
 ### 面试官想考什么
-- put/get、扩容、树化、哈希扰动。
-- 并发下数据覆盖、可见性和结构破坏风险。
+- 是否知道 `HashMap` “不是线程安全”的具体表现，而不是只会背结论。
+- 是否能说明 JDK 7 死循环问题和 JDK 8 仍不安全的区别。
+- 是否能给出正确替代方案：`ConcurrentHashMap`、外部锁、不可变 Map，或初始化后只读。
 
 ### 标准回答
-HashMap 通过 hash 定位桶，桶内再用 equals 精确匹配。put 时可能触发扩容，元素会重新分布。它适合单线程或外部同步场景，多线程应使用 ConcurrentHashMap。
+多线程同时读写 `HashMap` 会出现数据覆盖、更新丢失、`size` 不准确、遍历时 `ConcurrentModificationException`、扩容期间结构异常等问题。JDK 7 中并发扩容还可能因为链表迁移顺序问题形成环，进而导致 CPU 飙高；JDK 8 虽然实现改进，但 `HashMap` 仍没有锁和内存可见性保证，所以并发写场景必须避免使用。高并发读写应该优先用 `ConcurrentHashMap`；如果只是构建后只读，可以安全发布不可变 Map。
 
 ### 深挖追问
-- 为什么容量是 2 的幂？
-- 负载因子为什么默认 0.75？
-- JDK 7 和 JDK 8 扩容有什么差异？
+- 只读是否安全？如果 Map 在单线程构建完成并安全发布，之后只读通常可以；边读边写不安全。
+- `Collections.synchronizedMap` 和 `ConcurrentHashMap` 怎么选？前者整张表加锁，简单但并发度低；后者通过 CAS、桶级同步等方式提高并发性能。
+- 为什么 `Hashtable` 不推荐？方法级同步粒度粗，性能和功能都不如 `ConcurrentHashMap`。
 
 ### 实战场景/代码示例
 ```java
-Map<String,Integer> map=new HashMap<>(16);
-map.put("id",1);
-Integer v=map.get("id");
+// 错误：多线程写 HashMap，可能丢数据或结构异常
+Map<String, Integer> unsafe = new HashMap<>();
+
+// 正确：并发计数使用 ConcurrentHashMap + 原子更新
+ConcurrentHashMap<String, LongAdder> counter = new ConcurrentHashMap<>();
+counter.computeIfAbsent("login", k -> new LongAdder()).increment();
 ```
 
 ### 易错点/总结
-- 重写 key 的 equals 必须重写 hashCode。
-- 不要在并发写场景使用 HashMap。
-- 可变对象做 key 风险很高。
+- “JDK 8 没有死循环”不等于“JDK 8 HashMap 线程安全”。
+- `volatile Map` 只能保证引用可见，不能让 Map 内部复合操作线程安全。
+- `ConcurrentModificationException` 是 fail-fast 的问题提示，不是并发控制机制，不能依赖它保证正确性。
+- 面试中建议按“数据覆盖 → 扩容结构问题 → 可见性/一致性 → 替代方案”回答。
+
+---
+
+<!-- interview-detail-2026-06-24 -->
+
+## 面试版详细讲解补充
+
+### 核心概念
+- 多线程下HashMap会有什么问题？ 的核心是理解集合的数据结构、复杂度、线程安全边界以及与 equals/hashCode/扩容策略的关系。
+- 复习时不要只记一句结论，要把“定义、底层原因、使用边界、工程取舍”串起来。
+
+### 面试官想考什么
+- 面试通常考底层结构、扩容/并发问题、为什么这样设计，以及在业务中如何选型。
+- 能否把该知识点和常见线上问题、代码设计、性能/并发/可维护性联系起来。
+
+### 标准回答
+回答 多线程下HashMap会有什么问题？ 时，先说明适用场景，再讲底层机制和关键参数，最后补充并发环境下的替代方案。集合类默认多数不是线程安全的，需要根据读写比例选择 synchronized 包装、并发容器或不可变集合。
+
+如果是口述面试，建议先给一句结论，再补充 2~3 个关键细节，最后用项目场景收尾。这样既有结构，也能给面试官继续追问的抓手。
+
+### 深挖追问
+- 扩容何时触发？迭代时修改为什么抛 ConcurrentModificationException？并发容器如何降低锁粒度？
+- 如果让你在项目里落地这个知识点，你会如何设计测试用例验证边界？
+- 遇到性能、并发或可维护性问题时，有哪些替代方案？
+
+### 示例/实战场景
+```java
+List<String> safe = Collections.synchronizedList(new ArrayList<>()); // 简单同步包装，复杂并发优先考虑 JUC 容器
+```
+
+实战中建议把该知识点放到具体场景里理解：例如接口参数校验、集合选型、线程池治理、金额计算、JVM 排障或框架扩展点，而不是孤立背概念。
+
+### 易错点/总结
+- 不要只背结论，要能结合容量、负载因子、hash 分布、读写比例解释取舍。
+- 面试表达要避免绝对化，例如“永远”“一定”“只会”，很多 Java 行为都与版本、实现、参数和上下文有关。
+- 最后用一句话收束：先讲清楚它解决什么问题，再讲清楚它的限制和替代方案。
 

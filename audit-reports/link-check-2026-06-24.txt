@@ -1,0 +1,3 @@
+markdown files: 504
+local relative markdown links checked: 636
+missing links: 0

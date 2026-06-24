@@ -1,34 +1,20 @@
-# rabbitmq
+# RabbitMQ
 
-- [RabbitMQ入门概要](04-mq/rabbitmq/RabbitMQ入门概要.md)
+RabbitMQ 是基于 AMQP 的传统消息中间件，面试重点是 Exchange 路由模型、确认机制、死信队列和可靠投递。
 
-<!-- 面试复习补充 -->
+## 导航
 
-## 面试复习补充
+| 文章 | 摘要 |
+| --- | --- |
+| [RabbitMQ 入门概要](RabbitMQ入门概要.md) | Exchange、Queue、Binding、RoutingKey、Confirm、Ack、DLX、TTL |
 
-### 核心概念
+## 复习摘要
 
-本页是 `rabbitmq` 相关知识的目录入口。复习时要把目录中的零散问题串成一条后端链路：请求如何进入系统、如何被转发/处理、如何保证可靠性、性能和安全。
+- **消息模型**：Producer → Exchange → Queue → Consumer，通过 Binding 和 RoutingKey 路由。
+- **Exchange 类型**：direct 精确匹配，topic 通配符，fanout 广播，headers 按头匹配。
+- **可靠性**：publisher confirm、mandatory/return、queue/message durable、manual ack、死信队列。
+- **适用场景**：业务系统异步通知、任务队列、复杂路由；超大规模日志流一般不如 Kafka。
 
-### 面试官想考什么
+## 易错点
 
-面试官通常不是考你能否背出目录，而是看你能否建立知识地图：哪些概念属于基础机制，哪些属于工程落地，线上出现问题时如何定位到具体层次或组件。
-
-### 标准回答
-
-可以先给出总览，再按高频问题展开：核心概念是什么、解决什么痛点、在 Java 后端中出现在哪里、关键参数或边界条件是什么、如果线上异常应该看哪些指标。
-
-### 深挖追问
-
-- 这个目录中哪些知识点最容易和实际线上故障关联？
-- 相邻组件或协议的职责边界是什么？
-- 如果只允许你重点复习三类问题，你会选哪些？
-
-### 实战场景/示例
-
-例如排查一次接口超时，可能同时涉及 DNS、TCP 连接、TLS 握手、HTTP 连接池、网关转发、Tomcat 线程池、MQ 异步链路和下游存储。目录复习要服务于这种端到端分析。
-
-### 易错点/总结
-
-不要只背名词。面试回答要能落到“现象、原因、排查、解决、预防”五步。
-
+不要把 RabbitMQ 的 ack 和 publisher confirm 混为一谈：confirm 是 Broker 确认生产者消息已接收，ack 是消费者确认消息已处理。

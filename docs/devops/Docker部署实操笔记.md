@@ -1,111 +1,139 @@
-# Docker部署实操笔记
+# Docker 部署实操笔记
 
-Docker部署实操笔记
-使用Docker部署Redis详细步骤
-前提条件
-确保你的服务器 / 本地环境已安装 Docker 和 Docker Compose（可选，用于更便捷的部署）。
-检查 Docker 是否安装：
-bash
-运行
+## 核心概念
 
-docker --version
-若未安装，以 Linux（Ubuntu/Debian）为例，快速安装 Docker：
-bash
-运行
+Docker 部署的核心链路是：编写 Dockerfile → 构建镜像 → 推送镜像仓库 → 在目标机器拉取并运行容器 → 配置日志、数据卷、网络、健康检查和重启策略。对 Java 后端来说，重点是镜像体积、JVM 参数、配置注入、日志输出和优雅停机。
 
-# 更新软件源sudo apt update
-# 安装依赖sudo apt install -y apt-transport-https ca-certificates curl software-properties-common
-# 添加 Docker GPG 密钥curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-# 添加 Docker 软件源echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-# 安装 Dockersudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io
-# 启动并设置开机自启sudo systemctl start dockersudo systemctl enable docker# 验证安装sudo docker run --rm hello-world
+## 面试官想考什么
 
-步骤 1：拉取 Redis 官方镜像
-推荐拉取指定版本（如 7.2，避免最新版可能的兼容性问题），而非 latest：
-bash
-运行
+- 是否能独立把 Spring Boot/Java 服务容器化；
+- 是否理解镜像、容器、数据卷、端口映射、网络的关系；
+- 是否会写合理 Dockerfile，而不是把所有东西塞进镜像；
+- 是否知道容器中 Java 内存参数如何配置；
+- 是否考虑日志、健康检查、重启策略和数据持久化。
 
-# 查看可用的 Redis 镜像版本docker search redis --filter=is-official=true
-# 拉取 7.2 版本镜像（替换为你想要的版本）docker pull redis:7.2
-# 验证镜像是否拉取成功docker images | grep redis
-步骤 2：方式 1 - 快速测试部署（无持久化，仅用于测试）
-适合临时测试，容器删除后数据会丢失：
-bash
-运行
+## 标准回答
 
-# 启动 Redis 容器docker run -d \--name redis-test \          # 容器名称-p 6379:6379 \               # 端口映射（主机端口:容器端口）
-  redis:7.2                    # 使用的镜像
-步骤 3：方式 2 - 生产级部署（带持久化 + 自定义配置）
-这是推荐的正式环境部署方式，数据持久化到主机，且可自定义 Redis 配置：
-3.1 创建本地目录（用于挂载配置和数据）
-bash
-运行
+> Docker 部署一般先用 Dockerfile 构建应用镜像，推荐多阶段构建或使用精简 JRE 基础镜像，镜像中只放运行所需文件。运行容器时通过环境变量或配置文件挂载注入配置，通过 `-p` 暴露端口，通过 volume 持久化数据，通过 `--restart` 保证异常退出后自动拉起。Java 服务还要设置容器感知的 JVM 参数、优雅停机和健康检查，日志尽量输出到 stdout/stderr 交给平台采集。
 
-# 创建配置目录和数据目录mkdir -p /opt/redis/{conf,data}# 赋予目录权限（避免容器读写权限问题）chmod -R 777 /opt/redis
-3.2 编写自定义 Redis 配置文件
-在 /opt/redis/conf 目录下创建 redis.conf，添加核心配置（根据需求调整）：
-bash
-运行
+## 深挖追问
 
-# 编辑配置文件vim /opt/redis/conf/redis.conf
-粘贴以下基础配置（关键配置已标注注释）：
-conf
+### Dockerfile 为什么要分层和使用多阶段构建？
 
-# 绑定所有IP（允许外部访问，生产环境建议指定具体IP）
-bind 0.0.0.0
-# 保护模式关闭（否则仅允许本地访问）
-protected-mode no
-# 端口（需和容器映射端口一致）
-port 6379
-# 设置密码（必填，生产环境务必设置复杂密码）
-requirepass your_strong_password
-# 持久化方式：RDB（定时快照）+ AOF（追加日志）
-# RDB 配置
-save 900 1       # 900秒内至少1个键被修改则快照
-save 300 10      # 300秒内至少10个键被修改则快照
-save 60 10000    # 60秒内至少10000个键被修改则快照
-rdbcompression yes  # 压缩RDB文件
-rdbchecksum yes     # 校验RDB文件
-dbfilename dump.rdb # RDB文件名
-dir /data           # 数据存储目录（对应容器内路径）
-# AOF 配置
-appendonly yes              # 开启AOF
-appendfilename "appendonly.aof"
-appendfsync everysec        # 每秒同步一次（平衡性能和数据安全）
-auto-aof-rewrite-percentage 100  # AOF文件增长100%时重写
-auto-aof-rewrite-min-size 64mb   # 重写最小文件大小
-# 最大内存限制（根据服务器配置调整）
-maxmemory 1gb
-maxmemory-policy allkeys-lru  # 内存满时淘汰策略
-3.3 启动生产级 Redis 容器
-bash
-运行
+镜像是分层的，合理分层可以复用缓存、减少重复构建。多阶段构建可以把编译环境和运行环境分开，最终镜像只包含 JAR、JRE 和必要文件，降低体积和安全风险。
 
-docker run -d \--name redis-prod \          # 容器名称--restart always \           # 开机自启/容器异常退出时重启-p 6379:6379 \               # 端口映射-v /opt/redis/conf/redis.conf:/etc/redis/redis.conf \  # 挂载配置文件-v /opt/redis/data:/data \   # 挂载数据目录（持久化）-e TZ=Asia/Shanghai \        # 设置时区
-  redis:7.2 \                  # 使用的镜像
-  redis-server /etc/redis/redis.conf  # 指定启动时加载的配置文件
-步骤 4：验证 Redis 部署是否成功
-bash
-运行
+### 容器里的数据为什么不能只放可写层？
 
-# 1. 查看容器状态（正常应为 Up）docker ps | grep redis-prod
+容器删除后可写层会消失，迁移和备份也困难。数据库、上传文件、持久缓存等数据应挂载 volume 或外部存储。应用日志更推荐输出到标准输出，由 Docker/K8s/日志系统采集。
 
-# 2. 进入 Redis 容器并连接客户端docker exec -it redis-prod redis-cli
+### Java 容器内存如何配置？
 
-# 3. 验证密码和连接（替换为你设置的密码）127.0.0.1:6379> AUTH your_strong_password
-# 返回 OK 表示认证成功# 4. 测试数据写入127.0.0.1:6379> SET test_key "docker_redis_test"127.0.0.1:6379> GET test_key
-# 返回 "docker_redis_test" 表示正常# 5. 退出客户端127.0.0.1:6379> exit
-步骤 5：Redis 容器常用运维操作
-bash
-运行
+Java 8u191+ 和较新 JDK 能识别容器限制，但生产仍建议显式设置 `-XX:MaxRAMPercentage`、`-Xms/-Xmx` 或通过 `JAVA_TOOL_OPTIONS` 管理，避免容器内存限制和 JVM 堆/非堆内存不匹配导致 OOMKilled。
 
-# 重启容器docker restart redis-prod
+## 实战场景/代码示例
 
-# 停止容器docker stop redis-prod
+### Spring Boot Dockerfile
 
-# 查看容器日志（排查问题）docker logs -f redis-prod
+```dockerfile
+FROM eclipse-temurin:17-jre-alpine
+WORKDIR /app
+COPY target/user-service.jar /app/app.jar
+ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError"
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+```
 
-# 删除容器（需先停止）docker stop redis-prod && docker rm redis-prod
+### 构建和运行
 
-# 升级 Redis 版本（先备份数据，再删除旧容器，拉取新镜像后重新启动）
+```bash
+docker build -t user-service:1.0 .
+docker run -d --name user-service \
+  -p 8080:8080 \
+  -e SPRING_PROFILES_ACTIVE=prod \
+  -e JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError" \
+  --memory=1g --cpus=1 \
+  --restart=always \
+  user-service:1.0
+```
+
+### 查看状态和日志
+
+```bash
+docker ps
+docker logs -f --tail=200 user-service
+docker inspect user-service
+docker exec -it user-service sh
+```
+
+### docker-compose 示例
+
+```yaml
+services:
+  user-service:
+    image: user-service:1.0
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError
+    restart: always
+```
+
+## 易错点/总结
+
+- 不要把密码写死进镜像或 Dockerfile；
+- 不要用容器可写层保存关键数据；
+- 镜像内尽量只放运行依赖，减少攻击面；
+- Java 服务要关注堆、元空间、线程栈和直接内存总和；
+- `docker exec` 适合临时排查，不应作为长期运维入口；
+- 生产部署建议配合镜像仓库、CI/CD、健康检查和日志采集。
+
+## 参考资料
+
+- Dockerfile reference
+- Docker Compose documentation
+- Eclipse Temurin container images
+
+<!-- interview-renovation:2026-06-24 -->
+
+## 面试复习强化
+
+### 核心概念
+
+从面试角度看，**Docker 部署实操笔记** 可以放在“DevOps”这一类知识中理解。复习时不要只背定义，要能说清：它解决什么问题、依赖哪些前提、正常流程是什么、异常情况下系统会怎样退化或恢复。
+
+### 面试官想考什么
+
+- 是否理解概念背后的设计目标，而不是只记住名词；
+- 是否能把机制和真实工程场景联系起来；
+- 是否能分析边界条件、失败场景、性能与安全取舍；
+- 是否能给出可落地的排查、实现或优化步骤。
+
+### 标准回答
+
+> 兼顾概念、命令、部署流程、可观测性和故障恢复。 追问看是否真操作过：环境差异、权限、网络、存储、日志、进程管理、镜像/容器生命周期。 对于“Docker 部署实操笔记”，回答时建议先给一句话定义，再按“工作流程/关键机制 → 典型场景 → 风险与优化”展开，最后补充一两个线上实践点。
+
+### 深挖追问
+
+- 如果该机制失效，会出现什么现象？如何定位是配置、代码、资源还是外部依赖导致？
+- 它和相邻概念有什么区别？例如语义、适用场景、性能成本、可靠性保证分别是什么？
+- 在高并发、网络抖动、服务重启、数据不一致或权限受限时，需要补充哪些保护措施？
+- 有哪些指标可以证明方案有效？例如延迟、吞吐、错误率、资源使用率、重试次数或业务成功率。
+
+### 示例 / 实战场景
+
+- 设计方案时：先明确业务目标和约束，再选择对应机制，不要为了使用某个技术而引入复杂度。
+- 排查问题时：先确认现象和影响面，再查看日志、监控、配置、版本变更和上下游依赖，最后小步验证修复。
+- 复盘沉淀时：补充自动化测试、容量评估、告警阈值、降级预案和文档，避免同类问题再次发生。
+
+### 本题高频补充
+
+- Docker 回答要区分镜像、容器、仓库、网络、卷、namespace/cgroup，以及可复现构建和运行时隔离。
+
+### 易错点 / 总结
+
+- 只背结论、不讲原因，是面试扣分点；要主动解释“为什么这样设计”。
+- 只讲正常路径、不讲异常路径，会显得缺少生产经验；至少补充超时、重试、降级、回滚或兜底。
+- 不要把理论保证无限放大，工程实现通常还受网络、资源、配置、版本和业务语义约束。
+- 总结一句：生产操作要考虑幂等、最小权限、备份、回滚和审计。
+
