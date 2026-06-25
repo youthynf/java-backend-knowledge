@@ -1,2 +1,9 @@
-total_markdown=504
-issue_files=0
+# 文档质量审计摘要
+
+- total_markdown: 504
+- issue_files: 0
+- issue_count: 0
+
+## 按类型统计
+
+## 问题明细

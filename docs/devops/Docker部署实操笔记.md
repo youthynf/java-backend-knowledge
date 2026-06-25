@@ -93,4 +93,3 @@ services:
 - Dockerfile reference
 - Docker Compose documentation
 - Eclipse Temurin container images
-

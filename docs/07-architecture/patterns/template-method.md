@@ -57,4 +57,3 @@ class ExcelUserImportService extends AbstractImportService<UserRow> {
 - 抽象步骤不要过多，否则子类实现成本高；
 - 多维变化优先考虑组合而不是继承爆炸；
 - Spring 的 `JdbcTemplate`、`RestTemplate` 都体现了模板思想。
-

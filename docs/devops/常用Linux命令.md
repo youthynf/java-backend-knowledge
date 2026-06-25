@@ -91,4 +91,3 @@ jstack <pid> | grep -A 40 <hexTid>
 
 - Linux man pages
 - GNU Coreutils Documentation
-

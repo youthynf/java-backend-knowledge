@@ -234,7 +234,7 @@ jstack <pid>
 # Found one Java-level deadlock:
 # =============================
 # "Thread-1":
-#   waiting to lock monitor 0x0000000xxx (object 0x0000000yyy, a java.lang.Object),
+#   waiting to lock monitor 0x0000000JVM 排障实战 (object 0x0000000yyy, a java.lang.Object),
 #   which is held by "Thread-0"
 # "Thread-0":
 #   waiting to lock monitor 0x0000000zzz (object 0x0000000www, a java.lang.Object),

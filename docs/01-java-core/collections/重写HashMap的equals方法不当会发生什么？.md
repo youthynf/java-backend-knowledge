@@ -1,84 +1,206 @@
-# 重写HashMap的equals方法不当会发生什么？
+# 重写 HashMap 的 equals 方法不当会发生什么？
 
-重写HashMap的equals方法不当会发生什么？
-HashMap比较元素时，先比较hashCode是否相同，相同则继续比较equals()方法是否相同。
+## 核心概念
 
-其中equals()和hashCode()的实现应该遵循以下规则：
-若equals()结果相等，则hashCode()一定相等
-反之，hashCode()相等，但equals()可能不相等；
+严格来说，HashMap 本身不需要我们“重写 equals 方法”。面试里这个问题通常想问的是：**作为 HashMap key 的自定义对象，如果 equals() 和 hashCode() 重写不当，会发生什么问题？**
 
-如果我们只是重写了equals()方法，而没有重写hashCode方法，会存在equals()相同，而hashCode不相同的情况，违反了不允许存储重复数据的集合类的规则。导致的问题是：
-原本相同的对象，因为因为改写了equals()导致不相同，而存放了重复的数据；
-原本不相同的两个对象，因为equals()改写后相同了，而导致数据覆盖。
+HashMap 判断 key 是否相同，主要看两步：
 
----
+1. hash 值是否相同，用来快速定位桶位。
+2. `equals()` 是否返回 true，用来确认是否是同一个逻辑 key。
 
-<!-- interview-review-enhanced -->
+所以自定义对象作为 key 时，必须遵守基本约定：
 
-## 面试复习版
+- 如果 `a.equals(b) == true`，那么 `a.hashCode()` 必须等于 `b.hashCode()`。
+- 如果 `a.hashCode() == b.hashCode()`，`a.equals(b)` 不一定必须为 true。
+- equals 要满足自反性、对称性、传递性、一致性，以及对 null 返回 false。
 
-### 核心概念
-- HashMap 基于数组、链表/红黑树实现，JDK 8 后冲突严重时可树化。
-- 容量通常保持 2 的幂，便于用 (n-1)&hash 定位桶。
-- HashMap 非线程安全。
+## 面试官想考什么
 
-### 面试官想考什么
-- put/get、扩容、树化、哈希扰动。
-- 并发下数据覆盖、可见性和结构破坏风险。
+这道题重点考察：
 
-### 标准回答
-HashMap 通过 hash 定位桶，桶内再用 equals 精确匹配。put 时可能触发扩容，元素会重新分布。它适合单线程或外部同步场景，多线程应使用 ConcurrentHashMap。
+- 你是否知道 equals 和 hashCode 必须成对重写。
+- HashMap put/get 时如何使用 hashCode 和 equals。
+- 只重写 equals、不重写 hashCode 会发生什么。
+- 可变对象作为 key 为什么危险。
+- equals 实现违反约定会造成哪些诡异问题。
 
-### 深挖追问
-- 为什么容量是 2 的幂？
-- 负载因子为什么默认 0.75？
-- JDK 7 和 JDK 8 扩容有什么差异？
+## 标准回答
 
-### 实战场景/代码示例
+如果 HashMap 的 key 对象 equals/hashCode 重写不当，可能导致：
+
+### 1. 逻辑相等的 key 取不到值
+
+如果只重写 `equals()`，但没有重写 `hashCode()`，两个逻辑相等的对象可能有不同 hashCode，最终落到不同桶。
+
 ```java
-Map<String,Integer> map=new HashMap<>(16);
-map.put("id",1);
-Integer v=map.get("id");
+class UserKey {
+    private final Long id;
+
+    UserKey(Long id) {
+        this.id = id;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (!(obj instanceof UserKey)) return false;
+        return java.util.Objects.equals(id, ((UserKey) obj).id);
+    }
+
+    // 没有重写 hashCode：错误
+}
 ```
 
-### 易错点/总结
-- 重写 key 的 equals 必须重写 hashCode。
-- 不要在并发写场景使用 HashMap。
-- 可变对象做 key 风险很高。
+使用时会出现：
 
----
-
-<!-- interview-detail-2026-06-24 -->
-
-## 面试版详细讲解补充
-
-### 核心概念
-- 重写HashMap的equals方法不当会发生什么？ 的核心是理解集合的数据结构、复杂度、线程安全边界以及与 equals/hashCode/扩容策略的关系。
-- 复习时不要只记一句结论，要把“定义、底层原因、使用边界、工程取舍”串起来。
-
-### 面试官想考什么
-- 面试通常考底层结构、扩容/并发问题、为什么这样设计，以及在业务中如何选型。
-- 能否把该知识点和常见线上问题、代码设计、性能/并发/可维护性联系起来。
-
-### 标准回答
-回答 重写HashMap的equals方法不当会发生什么？ 时，先说明适用场景，再讲底层机制和关键参数，最后补充并发环境下的替代方案。集合类默认多数不是线程安全的，需要根据读写比例选择 synchronized 包装、并发容器或不可变集合。
-
-如果是口述面试，建议先给一句结论，再补充 2~3 个关键细节，最后用项目场景收尾。这样既有结构，也能给面试官继续追问的抓手。
-
-### 深挖追问
-- 扩容何时触发？迭代时修改为什么抛 ConcurrentModificationException？并发容器如何降低锁粒度？
-- 如果让你在项目里落地这个知识点，你会如何设计测试用例验证边界？
-- 遇到性能、并发或可维护性问题时，有哪些替代方案？
-
-### 示例/实战场景
 ```java
-List<String> safe = Collections.synchronizedList(new ArrayList<>()); // 简单同步包装，复杂并发优先考虑 JUC 容器
+Map<UserKey, String> map = new HashMap<>();
+map.put(new UserKey(1L), "Tom");
+
+System.out.println(map.get(new UserKey(1L))); // 可能是 null
 ```
 
-实战中建议把该知识点放到具体场景里理解：例如接口参数校验、集合选型、线程池治理、金额计算、JVM 排障或框架扩展点，而不是孤立背概念。
+两个 key 的 id 一样，equals 认为相等，但 hashCode 不同，HashMap 可能根本查到另一个桶里。
 
-### 易错点/总结
-- 不要只背结论，要能结合容量、负载因子、hash 分布、读写比例解释取舍。
-- 面试表达要避免绝对化，例如“永远”“一定”“只会”，很多 Java 行为都与版本、实现、参数和上下文有关。
-- 最后用一句话收束：先讲清楚它解决什么问题，再讲清楚它的限制和替代方案。
+### 2. 重复数据或覆盖异常
 
+如果 equals 写得过宽，可能把本不相同的对象判断成相同 key，导致 put 时覆盖旧值。
+
+如果 equals 写得过窄，又可能让本应相同的对象无法匹配，导致 Map 中出现重复逻辑 key。
+
+### 3. key 修改后无法查找
+
+如果 key 的 hashCode 依赖可变字段，put 之后修改字段，会导致 key 所在桶位置和当前 hashCode 不一致。
+
+```java
+class OrderKey {
+    Long orderId;
+
+    OrderKey(Long orderId) {
+        this.orderId = orderId;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (!(obj instanceof OrderKey)) return false;
+        return java.util.Objects.equals(orderId, ((OrderKey) obj).orderId);
+    }
+
+    @Override
+    public int hashCode() {
+        return java.util.Objects.hash(orderId);
+    }
+}
+```
+
+错误使用：
+
+```java
+OrderKey key = new OrderKey(100L);
+Map<OrderKey, String> map = new HashMap<>();
+map.put(key, "order-100");
+
+key.orderId = 200L;
+System.out.println(map.get(key)); // 可能取不到
+```
+
+因为对象原来按 100 的 hash 放入桶中，现在按 200 的 hash 去查找，自然可能找不到。
+
+### 4. equals 违反约定导致行为不可预测
+
+例如 equals 不满足对称性：
+
+```java
+a.equals(b) == true
+b.equals(a) == false
+```
+
+这种情况下 HashMap 在查找、覆盖、去重时可能出现很难定位的问题。
+
+## 深挖追问
+
+### 1. HashMap put 时是先比较 hashCode 还是 equals？
+
+通常先根据 hashCode 定位桶，再在桶内比较节点。桶内比较时会先看 hash 是否相等，再看 key 是否是同一个引用或 equals 是否相等。
+
+简化逻辑：
+
+```java
+if (node.hash == hash && (node.key == key || key.equals(node.key))) {
+    // 认为是同一个 key，覆盖 value
+}
+```
+
+所以 hashCode 决定“去哪里找”，equals 决定“是不是它”。
+
+### 2. 为什么 equals 相等时 hashCode 必须相等？
+
+因为 HashMap 先用 hashCode 决定桶位置。如果两个逻辑相等的对象 hashCode 不同，它们可能被分配到不同桶，HashMap 就没有机会调用 equals 比较，最终导致 get 不到或重复插入。
+
+### 3. hashCode 相同是否一定 equals 相等？
+
+不一定。hashCode 空间有限，不同对象可能有相同 hashCode，这就是哈希冲突。HashMap 会在同一个桶内继续用 equals 判断是否同一个 key。
+
+### 4. 自定义 key 推荐怎么写？
+
+推荐使用不可变字段作为 key 的身份标识，并同时重写 equals 和 hashCode。可以用 IDE、Lombok、record 自动生成，减少手写错误。
+
+```java
+public record UserKey(Long userId, String tenantId) {
+}
+```
+
+Java record 默认会基于所有组件生成 equals 和 hashCode，很适合作为简单不可变 key。
+
+## 实战场景
+
+### 场景 1：多租户缓存 key
+
+```java
+public final class CacheKey {
+    private final String tenantId;
+    private final Long userId;
+
+    public CacheKey(String tenantId, Long userId) {
+        this.tenantId = tenantId;
+        this.userId = userId;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof CacheKey)) return false;
+        CacheKey that = (CacheKey) o;
+        return java.util.Objects.equals(tenantId, that.tenantId)
+                && java.util.Objects.equals(userId, that.userId);
+    }
+
+    @Override
+    public int hashCode() {
+        return java.util.Objects.hash(tenantId, userId);
+    }
+}
+```
+
+这里必须同时使用 tenantId 和 userId，否则不同租户的同一用户 ID 可能互相覆盖。
+
+### 场景 2：避免可变 key
+
+不要把会变化的 DTO 直接作为 HashMap key。如果必须作为 key，应只使用不可变字段参与 equals/hashCode，或者先转换成不可变 key 对象。
+
+```java
+CacheKey key = new CacheKey(request.getTenantId(), request.getUserId());
+cache.put(key, value);
+```
+
+## 易错点
+
+- 只重写 equals 不重写 hashCode，是 HashMap key 的经典错误。
+- equals 里使用可变字段，put 后字段变化会导致 get/remove 失败。
+- hashCode 相同只是冲突，不代表两个 key 相同。
+- equals 不能只比较部分关键字段，否则可能错误覆盖。
+- 使用数组作为 key 时要注意，数组默认 equals 比较引用，不比较内容。
+
+## 总结
+
+HashMap 的 key 必须保证 equals 和 hashCode 语义一致。面试回答时可以用一句话概括：hashCode 决定桶位置，equals 决定桶内是否同一个 key；如果两者不匹配，就会出现取不到值、重复 key、错误覆盖或修改 key 后失效等问题。工程上优先使用不可变 key，并让 IDE、record 或 Lombok 生成 equals/hashCode。

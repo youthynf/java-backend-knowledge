@@ -1,5 +1,7 @@
 # JUC集合之ConcurrentLinkedQueue详解
 
+## 核心概念
+
 JUC集合之ConcurrentLinkedQueue详解
 ConcurrentLinkedQueue是 Java 并发包 (java.util.concurrent) 提供的一个线程安全的无界非阻塞队列，基于单向链表实现，采用 CAS（Compare-And-Swap）无锁算法保证线程安全，适用于高并发场景。
 

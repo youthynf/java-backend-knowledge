@@ -6,7 +6,7 @@
 
 | 格式 | 说明 | 示例 |
 |------|------|------|
-| -Xxx | 标准参数，所有 JVM 都支持 | -Xms, -Xmx |
+| -JVM 参数速查表 | 标准参数，所有 JVM 都支持 | -Xms, -Xmx |
 | -XX:+Flag | 布尔开关，启用 | -XX:+UseG1GC |
 | -XX:-Flag | 布尔开关，关闭 | -XX:-UseCompressedOops |
 | -XX:key=value | 键值对 | -XX:MaxGCPauseMillis=100 |

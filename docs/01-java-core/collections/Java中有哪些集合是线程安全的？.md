@@ -1,98 +1,162 @@
-# Java中有哪些集合是线程安全的？
+# Java 中有哪些集合是线程安全的？
 
-Java中有哪些集合是线程安全的？
-传统线程安全集合
-在java.util包中的线程安全类主要3个，其他都是非线程安全的：
-Vector：线程安全，内部方法基本都是经过synchronized修饰，内部都是使用对象数组来保存数据，根据需要自动扩容，当数组容量满了，会创建全新的数组，并拷贝原有数组数据；
-HashTable：线程安全的哈希表，每个方法都加上了synchronized关键字，锁住的是整个Table对象，不支持null键和值；
-Stack：继承自Vector，同样存在性能问题；
+## 核心概念
 
-使用 Collections 工具类包装
-底层实现都是通过包装器将所有方法用 synchronized 块包裹，相比直接使用 Vector/Hashtable 更灵活，但复合操作仍需额外同步，迭代器也需要手动同步。
+Java 中线程安全集合可以分成三类：
 
-List<String> syncList = Collections.synchronizedList(new ArrayList<>());
-Map<String, String> syncMap = Collections.synchronizedMap(new HashMap<>());
-Set<String> syncSet = Collections.synchronizedSet(new HashSet<>());
+1. **早期同步容器**：如 `Vector`、`Hashtable`，方法级别加 `synchronized`。
+2. **Collections 包装类**：如 `Collections.synchronizedList()`，给普通集合套一层同步包装。
+3. **并发容器**：如 `ConcurrentHashMap`、`CopyOnWriteArrayList`、`BlockingQueue`，针对并发场景做了专门设计。
 
-在JUC包提供的都是线程安全的集合：
-ConcurrentHashMap：JDK 7使用分段锁（Segment）实现，JDK 8采用CAS + synchronized (锁单个桶)提升并发度。特点是具有高并发性能，支持完全并发的检索和更新，但是弱一致性迭代器。
-CopyOnWriteArrayList：实现方式是写时复制，特点是读操作无锁，写操作复制整个数组，适合读多写少场景，迭代器反映创建时的状态，非实时；
-CopyOnWriteArraySet：基于 CopyOnWriteArrayList 实现，特点同上；
-ConcurrentLinkedQueue：无锁实现的线程安全队列，基于 CAS 操作，是高性能的非阻塞队列；
-BlockingQueue 接口及其实现
+实际开发中，优先考虑 `java.util.concurrent` 包下的并发容器，而不是直接使用 `Vector`、`Hashtable`。
 
-ArrayBlockingQueue：有界阻塞队列（数组实现）
-LinkedBlockingQueue：可选有界/无界（链表实现）
-PriorityBlockingQueue：带优先级的无界队列
-SynchronousQueue：不存储元素的特殊队列
-DelayQueue：元素延迟出队的队列
-ConcurrentSkipListMap 和 ConcurrentSkipListSet：基于跳表(Skip List)实现，并发版本的 TreeMap/TreeSet，保证元素有序。
+## 面试官想考什么
 
----
+这个问题表面是在问“有哪些类”，实际是在考：
 
-<!-- interview-review-enhanced -->
+- 你能不能区分“线程安全”和“高并发性能好”。
+- 你是否知道同步容器和并发容器的区别。
+- 你是否能根据读多写多、生产消费、去重缓存等场景选择合适集合。
+- 你是否知道复合操作仍然可能需要额外同步。
 
-## 面试复习版
+## 标准回答
 
-### 核心概念
-- 早期同步集合有 Vector、Hashtable、Collections.synchronizedXxx。
-- 并发包提供 ConcurrentHashMap、CopyOnWriteArrayList、BlockingQueue 等更细粒度方案。
+Java 常见线程安全集合包括：
 
-### 面试官想考什么
-- 哪些集合线程安全，以及各自适用场景。
-- 同步包装集合和并发集合的区别。
+### 1. Vector
 
-### 标准回答
-线程安全集合要按读写比例和一致性要求选择。读多写少可用 CopyOnWrite；高并发 Map 用 ConcurrentHashMap；生产消费用 BlockingQueue。
+`Vector` 是早期线程安全 List，很多方法使用 `synchronized` 修饰。它能保证单个方法调用的线程安全，但锁粒度大，并发性能一般，现在较少作为首选。
 
-### 深挖追问
-- ConcurrentHashMap 为什么性能更好？
-- synchronizedList 迭代时还需要加锁吗？
-- 弱一致迭代器是什么？
+### 2. Hashtable
 
-### 实战场景/代码示例
+`Hashtable` 是早期线程安全 Map，也通过方法级 `synchronized` 保证线程安全。它不允许 null key 和 null value。现代并发场景通常用 `ConcurrentHashMap` 替代。
+
+### 3. Collections.synchronizedXxx
+
+`Collections` 可以把普通集合包装成同步集合：
+
 ```java
-Map<String,Integer> map=new ConcurrentHashMap<>();
-map.compute("k",(k,v)->v==null?1:v+1);
+List<String> list = Collections.synchronizedList(new ArrayList<>());
+Map<String, String> map = Collections.synchronizedMap(new HashMap<>());
 ```
 
-### 易错点/总结
-- 不要只看“线程安全”标签，需看复合操作是否原子。
-- 并发集合也不能替代业务级事务一致性。
+它的原理是在每个方法外层加同一把锁，简单但锁竞争较重。遍历时仍需要手动加锁。
 
----
+### 4. ConcurrentHashMap
 
-<!-- interview-detail-2026-06-24 -->
+`ConcurrentHashMap` 是高并发 Map。JDK 1.8 中主要通过 CAS + synchronized + Node 数组 + 链表/红黑树实现，降低了锁粒度，适合高并发读写缓存、计数、状态表等场景。
 
-## 面试版详细讲解补充
+### 5. CopyOnWriteArrayList
 
-### 核心概念
-- Java中有哪些集合是线程安全的？ 的核心是理解集合的数据结构、复杂度、线程安全边界以及与 equals/hashCode/扩容策略的关系。
-- 复习时不要只记一句结论，要把“定义、底层原因、使用边界、工程取舍”串起来。
+`CopyOnWriteArrayList` 适合读多写少场景。写操作会复制底层数组，修改副本后再替换引用；读操作通常不加锁，遍历时看到的是快照。
 
-### 面试官想考什么
-- 面试通常考底层结构、扩容/并发问题、为什么这样设计，以及在业务中如何选型。
-- 能否把该知识点和常见线上问题、代码设计、性能/并发/可维护性联系起来。
+典型场景：配置监听器列表、黑白名单快照、读多写少的订阅者列表。
 
-### 标准回答
-回答 Java中有哪些集合是线程安全的？ 时，先说明适用场景，再讲底层机制和关键参数，最后补充并发环境下的替代方案。集合类默认多数不是线程安全的，需要根据读写比例选择 synchronized 包装、并发容器或不可变集合。
+### 6. BlockingQueue
 
-如果是口述面试，建议先给一句结论，再补充 2~3 个关键细节，最后用项目场景收尾。这样既有结构，也能给面试官继续追问的抓手。
+`BlockingQueue` 是线程安全队列，常用于生产者消费者模型。例如：
 
-### 深挖追问
-- 扩容何时触发？迭代时修改为什么抛 ConcurrentModificationException？并发容器如何降低锁粒度？
-- 如果让你在项目里落地这个知识点，你会如何设计测试用例验证边界？
-- 遇到性能、并发或可维护性问题时，有哪些替代方案？
+- `ArrayBlockingQueue`
+- `LinkedBlockingQueue`
+- `PriorityBlockingQueue`
+- `DelayQueue`
+- `SynchronousQueue`
 
-### 示例/实战场景
+线程池中的任务队列就大量使用了阻塞队列。
+
+### 7. ConcurrentLinkedQueue / ConcurrentLinkedDeque
+
+这是基于非阻塞算法的并发队列/双端队列，适合高并发无界队列场景，不提供阻塞等待能力。
+
+## 深挖追问
+
+### 1. 线程安全集合是否所有操作都安全？
+
+单个方法调用通常安全，但复合操作不一定安全。例如：
+
 ```java
-List<String> safe = Collections.synchronizedList(new ArrayList<>()); // 简单同步包装，复杂并发优先考虑 JUC 容器
+if (!list.contains("A")) {
+    list.add("A");
+}
 ```
 
-实战中建议把该知识点放到具体场景里理解：例如接口参数校验、集合选型、线程池治理、金额计算、JVM 排障或框架扩展点，而不是孤立背概念。
+即使 `list` 是 synchronizedList，上面这两步之间也可能被其他线程插入，导致重复添加。需要额外同步，或选择支持原子复合操作的数据结构。
 
-### 易错点/总结
-- 不要只背结论，要能结合容量、负载因子、hash 分布、读写比例解释取舍。
-- 面试表达要避免绝对化，例如“永远”“一定”“只会”，很多 Java 行为都与版本、实现、参数和上下文有关。
-- 最后用一句话收束：先讲清楚它解决什么问题，再讲清楚它的限制和替代方案。
+### 2. synchronizedList 遍历为什么还要手动加锁？
 
+因为迭代器遍历是多次方法调用组成的复合过程。官方推荐：
+
+```java
+List<String> list = Collections.synchronizedList(new ArrayList<>());
+
+synchronized (list) {
+    Iterator<String> it = list.iterator();
+    while (it.hasNext()) {
+        System.out.println(it.next());
+    }
+}
+```
+
+否则遍历过程中其他线程修改集合，仍可能抛出 `ConcurrentModificationException` 或读到不一致状态。
+
+### 3. ConcurrentHashMap 为什么不能完全替代 HashMap？
+
+`ConcurrentHashMap` 为并发付出了额外成本，单线程或局部变量场景没必要使用。并且它不允许 null key/null value，这和 HashMap 不同。普通非并发场景使用 HashMap 更简单。
+
+### 4. CopyOnWriteArrayList 为什么适合读多写少？
+
+因为每次写入都会复制数组，写成本是 O(n)，内存开销也较高。但读操作无需加锁，遍历是稳定快照，所以读多写少时收益明显。
+
+## 实战场景
+
+### 场景 1：本地缓存表
+
+多线程读写用户状态缓存，可以使用 `ConcurrentHashMap`：
+
+```java
+ConcurrentHashMap<Long, String> statusMap = new ConcurrentHashMap<>();
+
+statusMap.put(userId, "ONLINE");
+String status = statusMap.get(userId);
+```
+
+如果要“没有就初始化”，不要写成 `containsKey + put`，推荐：
+
+```java
+UserProfile profile = cache.computeIfAbsent(userId, id -> loadProfile(id));
+```
+
+### 场景 2：生产者消费者
+
+```java
+BlockingQueue<Runnable> queue = new LinkedBlockingQueue<>(1000);
+
+queue.put(task);   // 队列满时阻塞
+Runnable task = queue.take(); // 队列空时阻塞
+```
+
+这种场景不应该用 synchronizedList 硬凑，因为队列的阻塞语义和容量控制更重要。
+
+### 场景 3：监听器列表
+
+```java
+CopyOnWriteArrayList<Listener> listeners = new CopyOnWriteArrayList<>();
+
+for (Listener listener : listeners) {
+    listener.onEvent(event);
+}
+```
+
+监听器通常注册少、通知多，CopyOnWriteArrayList 很合适。
+
+## 易错点
+
+- `Vector`、`Hashtable` 线程安全但不代表性能好。
+- synchronized 包装集合遍历时仍要手动加锁。
+- `ConcurrentHashMap` 不允许 null key/null value。
+- 线程安全集合只能保证自身结构安全，不能自动保证业务操作的原子性。
+- 写多场景慎用 `CopyOnWriteArrayList`，否则复制成本很高。
+
+## 总结
+
+面试回答可以按“同步容器、同步包装类、并发容器”三类展开。实际选型时更重要的是场景：Map 高并发读写选 `ConcurrentHashMap`，读多写少 List 选 `CopyOnWriteArrayList`，生产消费选 `BlockingQueue`，普通单线程场景不要过度使用线程安全集合。

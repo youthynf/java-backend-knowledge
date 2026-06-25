@@ -1,5 +1,7 @@
 # JUC集合之ConcurrentHashMap详解
 
+## 核心概念
+
 JUC集合之ConcurrentHashMap详解
 一、概述
 ConcurrentHashMap 是 Java 并发包(java.util.concurrent)中提供的一个线程安全的哈希表实现，它是对 HashMap 的线程安全版本，但在实现上与 Hashtable 有很大不同，提供了更高的并发性能。

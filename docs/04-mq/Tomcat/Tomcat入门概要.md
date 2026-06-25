@@ -77,17 +77,14 @@ maxConnections=10000  # 最大连接数
                              http://xmlns.jcp.org/xml/ns/javaee/web-app_4_0.xsd"
          version="4.0">
 
-    <!-- ======================== 基本配置 ======================== -->
     <display-name>MyWebApplication</display-name>
     <description>Example web application configuration</description>
     
-    <!-- 上下文参数 -->
     <context-param>
         <param-name>appVersion</param-name>
         <param-value>1.0.0</param-value>
     </context-param>
     
-    <!-- ======================== 监听器配置 ======================== -->
     <listener>
         <listener-class>com.example.AppContextListener</listener-class>
     </listener>
@@ -96,7 +93,6 @@ maxConnections=10000  # 最大连接数
         <listener-class>org.springframework.web.context.ContextLoaderListener</listener-class>
     </listener>
 
-    <!-- ======================== Filter配置 ======================== -->
     <filter>
         <filter-name>LoggingFilter</filter-name>
         <filter-class>com.example.LoggingFilter</filter-class>
@@ -121,7 +117,6 @@ maxConnections=10000  # 最大连接数
         <url-pattern>/secure/*</url-pattern>
     </filter-mapping>
 
-    <!-- ======================== Servlet配置 ======================== -->
     <servlet>
         <servlet-name>HomeServlet</servlet-name>
         <servlet-class>com.example.HomeServlet</servlet-class>
@@ -164,9 +159,7 @@ maxConnections=10000  # 最大连接数
         <url-pattern>*.jsp</url-pattern>
     </servlet-mapping>
 
-    <!-- ======================== Session配置 ======================== -->
     <session-config>
-        <session-timeout>30</session-timeout> <!-- 30分钟 -->
         <cookie-config>
             <http-only>true</http-only>
             <secure>true</secure>
@@ -174,7 +167,6 @@ maxConnections=10000  # 最大连接数
         <tracking-mode>COOKIE</tracking-mode>
     </session-config>
 
-    <!-- ======================== 错误页面配置 ======================== -->
     <error-page>
         <error-code>404</error-code>
         <location>/error/notFound.jsp</location>
@@ -190,7 +182,6 @@ maxConnections=10000  # 最大连接数
         <location>/error/generalError.jsp</location>
     </error-page>
 
-    <!-- ======================== 安全配置 ======================== -->
     <security-constraint>
         <web-resource-collection>
             <web-resource-name>Secure Area</web-resource-name>
@@ -223,7 +214,6 @@ maxConnections=10000  # 最大连接数
         <role-name>manager</role-name>
     </security-role>
 
-    <!-- ======================== JNDI资源引用 ======================== -->
     <resource-ref>
         <res-ref-name>jdbc/MyDB</res-ref-name>
         <res-type>javax.sql.DataSource</res-type>
@@ -236,7 +226,6 @@ maxConnections=10000  # 最大连接数
         <env-entry-value>100</env-entry-value>
     </env-entry>
     
-    <!-- ======================== MIME类型映射 ======================== -->
     <mime-mapping>
         <extension>pdf</extension>
         <mime-type>application/pdf</mime-type>
@@ -251,7 +240,6 @@ maxConnections=10000  # 最大连接数
 全局JNDI资源配置（server.xml）
 
 <GlobalNamingResources>
-    <!-- JDBC数据源 -->
     <Resource name="jdbc/MyDB" 
               auth="Container"
               type="javax.sql.DataSource"
@@ -263,7 +251,6 @@ maxConnections=10000  # 最大连接数
               driverClassName="com.mysql.cj.jdbc.Driver"
               url="jdbc:mysql://localhost:3306/mydb"/>
               
-    <!-- JMS连接工厂 -->
     <Resource name="jms/ConnectionFactory" 
               auth="Container"
               type="javax.jms.ConnectionFactory"

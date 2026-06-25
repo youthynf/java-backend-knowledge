@@ -83,7 +83,6 @@ Kafka 的日志文件分为数据文件(.log)和索引文件(.index)，Kafka 为
 <dependency>
     <groupId>org.apache.kafka</groupId>
     <artifactId>kafka-clients</artifactId>
-    <version>3.6.1</version> <!-- 请使用最新版本 -->
 </dependency>
 生产者
 

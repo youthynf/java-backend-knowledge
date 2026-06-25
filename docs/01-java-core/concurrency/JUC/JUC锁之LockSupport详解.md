@@ -1,296 +1,198 @@
 # JUC锁之LockSupport详解
 
-JUC锁之LockSupport详解
-一、概述
-LockSupport用来创建锁和其他同步类的基本线程阻塞原语. 简而言之, 当调用LockSupport.park()时, 表示当前线程将会等待, 直至获得许可, 当调用LockSupport.unpark()时, 必须把等待获得许可的线程作为参数进行传递, 好让此线程继续运行.
+## 核心概念
 
-二、LockSupport源码分析
-类的属性
+`LockSupport` 是 JUC 中非常底层的线程阻塞与唤醒工具类，核心方法是 `park()` 和 `unpark(Thread)`。它不像 `synchronized`、`wait/notify` 那样直接提供锁语义，而是提供一种更基础的“线程许可证”机制：线程调用 `park()` 时如果没有许可证就阻塞；其他线程调用 `unpark(thread)` 会给目标线程发放一个许可证，让它可以继续执行。
 
-public class LockSupport {
-    // Hotspot implementation via intrinsics API
-    private static final sun.misc.Unsafe UNSAFE;
-    // 表示内存偏移地址
-    private static final long parkBlockerOffset;
-    // 表示内存偏移地址
-    private static final long SEED;
-    // 表示内存偏移地址
-    private static final long PROBE;
-    // 表示内存偏移地址
-    private static final long SECONDARY;
-    
-    static {
-        try {
-            // 获取Unsafe实例
-            UNSAFE = sun.misc.Unsafe.getUnsafe();
-            // 线程类类型
-            Class<?> tk = Thread.class;
-            // 获取Thread的parkBlocker字段的内存偏移地址
-            parkBlockerOffset = UNSAFE.objectFieldOffset
-                (tk.getDeclaredField("parkBlocker"));
-            // 获取Thread的threadLocalRandomSeed字段的内存偏移地址
-            SEED = UNSAFE.objectFieldOffset
-                (tk.getDeclaredField("threadLocalRandomSeed"));
-            // 获取Thread的threadLocalRandomProbe字段的内存偏移地址
-            PROBE = UNSAFE.objectFieldOffset
-                (tk.getDeclaredField("threadLocalRandomProbe"));
-            // 获取Thread的threadLocalRandomSecondarySeed字段的内存偏移地址
-            SECONDARY = UNSAFE.objectFieldOffset
-                (tk.getDeclaredField("threadLocalRandomSecondarySeed"));
-        } catch (Exception ex) { throw new Error(ex); }
-    }
-}
-UNSAFE字段表示sun.mic.Unsafe类, 一般程序中不允许直接调用, 而long类型的表示示例对象相应字段在内存中的偏移地址, 可以通过偏移地址获取或设置该字段的值.
+可以把 `LockSupport` 理解成很多高级并发工具的地基：`AQS`、`ReentrantLock`、`Semaphore`、`CountDownLatch`、线程池中的部分等待唤醒逻辑，都离不开类似的阻塞/唤醒能力。
 
-构造函数
-LockSupport只有一个私有构造函数, 无法被实例化.
+面试里需要记住一句话：**LockSupport 解决的是线程级别的阻塞与唤醒问题，比 wait/notify 更灵活，因为 unpark 可以先于 park 调用，而且不要求持有对象监视器。**
 
-// 私有构造函数，无法被实例化
-private LockSupport() {}
+## 面试官想考什么
 
-核心函数分析
-•  park函数
-存在两个重载版本, 两个区别在于是否设置blocker(主要便于问题定位, 定位在等待什么对象锁). 
+面试官问 `LockSupport`，通常想考这些点：
 
-public static void park() {
-    // 获取许可，设置时间为无限长，直到可以获取许可
-    UNSAFE.park(false, 0L);
-}
+- 你是否知道 `LockSupport` 是 AQS 的底层支撑；
+- 你是否理解 `park/unpark` 的“许可证”模型；
+- 你是否能说清楚它和 `wait/notify` 的区别；
+- 你是否知道 `park()` 可能会被中断、超时或伪唤醒影响；
+- 你是否理解为什么阻塞后通常要放在循环中重新判断条件。
 
-public static void park(Object blocker) {
-    // 获取当前线程
-    Thread t = Thread.currentThread();
-    // 设置Blocker
-    setBlocker(t, blocker);
-    // 获取许可
-    UNSAFE.park(false, 0L);
-    // 重新可运行后再此设置Blocker
-    setBlocker(t, null);
-}
+## 标准回答
 
-private static void setBlocker(Thread t, Object arg) {
-    // 设置线程t的parkBlocker字段的值为arg
-    UNSAFE.putObject(t, parkBlockerOffset, arg);
-}
-调用park函数后, 会禁用当前线程, 线程将处于休眠状态, 除非许可可用. 当其他线程将当前线程作为目标调用unpark函数, 或者某个线程中断当前线程, 或者当调用不合逻辑地(毫无理由地)返回时, 该线程会获得许可, 可以继续执行.
+`LockSupport` 提供了一组静态方法用于阻塞和唤醒线程：
 
-•  parkNanos函数
-此函数表示许可可用前禁用当前线程, 并最多等待指定的等待时间. nanos表示等待多长时间, 相对时间.
+- `park()`：阻塞当前线程；
+- `park(Object blocker)`：阻塞当前线程，并记录阻塞原因，便于排查；
+- `parkNanos(long nanos)`：阻塞指定纳秒时间；
+- `parkUntil(long deadline)`：阻塞到指定时间点；
+- `unpark(Thread thread)`：唤醒指定线程，或者提前给它一个许可证。
 
-public static void parkNanos(Object blocker, long nanos) {
-    if (nanos > 0) { // 时间大于0
-        // 获取当前线程
-        Thread t = Thread.currentThread();
-        // 设置Blocker
-        setBlocker(t, blocker);
-        // 获取许可，并设置了时间
-        UNSAFE.park(false, nanos);
-        // 设置许可
-        setBlocker(t, null);
-    }
-}
+它的核心机制是“每个线程最多持有一个许可证”：
 
-•  parkUtil函数
-此函数表示在指定的时限前禁用当前线程, 除非许可可用. 这里的deadline参数表示绝对时间, 表示指定时间.
+1. 如果线程调用 `park()` 时已经有许可证，会立即消费许可证并返回；
+2. 如果没有许可证，线程会阻塞；
+3. 其他线程调用 `unpark(thread)` 会给目标线程发放许可证；
+4. 多次 `unpark()` 不会累积多个许可证，许可证最多只有一个。
 
-public static void parkUntil(Object blocker, long deadline) {
-    // 获取当前线程
-    Thread t = Thread.currentThread();
-    // 设置Blocker
-    setBlocker(t, blocker);
-    UNSAFE.park(true, deadline);
-    // 设置Blocker为null
-    setBlocker(t, null);
-}
+因此，`unpark()` 可以发生在 `park()` 之前，这一点比 `wait/notify` 更不容易丢信号。
 
-•  unpark函数
-此函数表示如果给定线程的许可不可用, 则使其可用. 如果线程在park上受到阻塞, 则将解除其阻塞状态, 否则保证下一次调用park不会受阻塞. 如果给定线程尚未启动, 则该操作没有任何效果. 核心作用释放许可, 指定线程可以继续运行.
+## 工作原理
 
-public static void unpark(Thread thread) {
-    if (thread != null) // 线程为不空
-        UNSAFE.unpark(thread); // 释放该线程许可
-}
+### 许可证模型
 
+`LockSupport` 的许可证不是计数器，而是一个二值状态：有或没有。
 
-三、线程同步方式
-使用wait/notify实现线程同步
+```text
+初始状态：无许可证
+unpark(thread)：变为有许可证
+park()：如果有许可证则消费并立即返回；如果无许可证则阻塞
+```
 
-class MyThread extends Thread {
-    
-    public void run() {
-        synchronized (this) {
-            System.out.println("before notify");            
-            notify();
-            System.out.println("after notify");    
-        }
-    }
-}
+连续调用两次 `unpark(thread)`，也只会保留一个许可证；随后第一次 `park()` 会立即返回，第二次 `park()` 仍然会阻塞。
 
-public class WaitAndNotifyDemo {
+### blocker 的作用
+
+推荐使用 `park(Object blocker)` 而不是裸 `park()`，因为 blocker 会记录线程为什么被阻塞。排查线程 dump 时，可以通过 `LockSupport.getBlocker(thread)` 或 jstack 信息看到阻塞对象。
+
+例如 AQS 中常见做法是把同步器对象作为 blocker，方便定位线程卡在哪个锁或哪个同步组件上。
+
+### 中断与返回条件
+
+`park()` 返回不一定代表拿到了你想要的条件，它可能因为以下原因返回：
+
+- 被其他线程 `unpark()`；
+- 当前线程被中断；
+- 发生伪唤醒；
+- 使用了带超时的 `parkNanos/parkUntil` 并到期。
+
+所以正确写法通常是：**while 循环检查条件，不满足再 park**。
+
+## 代码示例
+
+### 基础使用
+
+```java
+import java.util.concurrent.locks.LockSupport;
+
+public class LockSupportDemo {
     public static void main(String[] args) throws InterruptedException {
-        MyThread myThread = new MyThread();            
-        synchronized (myThread) {
-            try {        
-                myThread.start();
-                // 主线程睡眠3s
-                Thread.sleep(3000);
-                System.out.println("before wait");
-                // 阻塞主线程
-                myThread.wait();
-                System.out.println("after wait");
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }            
-        }        
+        Thread worker = new Thread(() -> {
+            System.out.println("worker 准备 park");
+            LockSupport.park("waiting for main thread");
+            System.out.println("worker 被唤醒");
+        }, "worker-thread");
+
+        worker.start();
+
+        Thread.sleep(1000);
+        System.out.println("main 调用 unpark");
+        LockSupport.unpark(worker);
     }
 }
+```
 
-// 运行结果
-before wait
-before notify
-after notify
-after wait
-使用wait/notify实现同步时, 必须配合使用synchronized, 同时必须先调用wait, 后调用notify, 否则wait将一直阻塞下去.
+### unpark 先于 park
 
-使用park/unpark实现线程同步
+```java
+Thread worker = new Thread(() -> {
+    // 因为 main 已经提前 unpark，第一次 park 会直接返回
+    LockSupport.park();
+    System.out.println("park 立即返回");
+});
 
-import java.util.concurrent.locks.LockSupport;
+LockSupport.unpark(worker);
+worker.start();
+```
 
-class MyThread extends Thread {
-    private Object object;
+这说明 `LockSupport` 不像 `notify` 那样容易因为“先通知、后等待”而丢失信号。
 
-    public MyThread(Object object) {
-        this.object = object;
-    }
+### 正确的条件等待写法
 
-    public void run() {
-        System.out.println("before unpark");
-        try {
-            Thread.sleep(1000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
+```java
+class OneShotLatch {
+    private volatile boolean open = false;
+    private Thread waiter;
+
+    public void await() {
+        waiter = Thread.currentThread();
+        while (!open) {
+            LockSupport.park(this);
         }
-        // 获取blocker
-        System.out.println("Blocker info " + LockSupport.getBlocker((Thread) object));
-        // 释放许可
-        LockSupport.unpark((Thread) object);
-        // 休眠500ms，保证先执行park中的setBlocker(t, null);
-        try {
-            Thread.sleep(500);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-        // 再次获取blocker
-        System.out.println("Blocker info " + LockSupport.getBlocker((Thread) object));
+    }
 
-        System.out.println("after unpark");
+    public void signal() {
+        open = true;
+        LockSupport.unpark(waiter);
     }
 }
+```
 
-public class test {
-    public static void main(String[] args) {
-        MyThread myThread = new MyThread(Thread.currentThread());
-        myThread.start();
-        System.out.println("before park");
-        // 获取许可
-        LockSupport.park("ParkAndUnparkDemo");
-        System.out.println("after park");
-    }
+重点是 `while (!open)`，不能因为 `park()` 返回就直接认为条件已经满足。
+
+## 实战场景
+
+### 场景一：AQS 线程阻塞唤醒
+
+`ReentrantLock`、`Semaphore`、`CountDownLatch` 等组件底层都依赖 AQS。AQS 在线程获取锁失败时，会把线程封装成节点加入同步队列，然后通过 `LockSupport.park()` 挂起线程；当前驱节点释放锁或状态变化时，再通过 `LockSupport.unpark()` 唤醒后继节点。
+
+### 场景二：自定义轻量级同步工具
+
+如果需要实现一个非常简单的一次性门闩、限流等待器、异步结果等待器，可以用 `LockSupport` 实现线程挂起和唤醒。但生产中不建议轻易手写复杂锁，优先使用 JDK 成熟组件。
+
+### 场景三：定位线程阻塞问题
+
+当使用 `park(Object blocker)` 时，线程 dump 中能看到阻塞对象，有助于判断线程是在等待哪个锁、哪个队列或哪个同步器。相比直接 `park()`，可观测性更好。
+
+## 深挖追问
+
+### 1. LockSupport 和 wait/notify 有什么区别？
+
+- `wait/notify` 必须在 `synchronized` 代码块中使用，`LockSupport` 不要求持有监视器；
+- `notify` 先于 `wait` 会丢信号，`unpark` 先于 `park` 不会丢，因为许可证会保留；
+- `wait` 会释放对象监视器，`park` 不会自动释放任何锁；
+- `notify` 随机唤醒等待该对象监视器的线程，`unpark` 可以精确唤醒指定线程；
+- `wait` 抛出 `InterruptedException`，`park` 不抛异常，但会因为中断返回，并保留中断标记。
+
+### 2. LockSupport 和 Thread.sleep 有什么区别？
+
+- `sleep` 主要用于让当前线程休眠固定时间；
+- `park` 可以被 `unpark` 精确唤醒，也可以设置 blocker；
+- `sleep` 不会消耗许可证，`park` 与许可证模型相关；
+- 二者都不会自动释放已经持有的锁。
+
+### 3. park 被中断会怎样？
+
+线程在 `park()` 阻塞时，如果被中断，`park()` 会返回，但不会抛出 `InterruptedException`，线程的中断标记仍然存在。后续再次调用 `park()` 时，如果中断标记未清除，也可能立即返回。
+
+如果业务需要响应中断，应该显式判断：
+
+```java
+if (Thread.currentThread().isInterrupted()) {
+    // 清理资源或退出
 }
+```
 
-// 运行结果
-before park
-before unpark
-Blocker info ParkAndUnparkDemo
-after park
-Blocker info null
-after unpark
-park与unpark不需要配合synchronized使用, 先调用unpark, 后调用park时, 仍能正确实现同步, 不会造成wait/notify调用顺序不当所引起的阻塞. 因此park/unpark相比wait/notify更加的灵活.
+### 4. 为什么 park 返回后要重新判断条件？
 
-三、响应中断
-主线程park阻塞后, 接收到中断信号时, 会退出阻塞状态, 继续运行. 此时的interrupt起到的作用和unpark一样.
+因为 `park()` 返回可能是被唤醒、中断、超时或伪唤醒导致的，并不等价于业务条件成立。同步工具通常都使用循环判断，防止线程错误地继续执行。
 
-import java.util.concurrent.locks.LockSupport;
+## 易错点总结
 
-class MyThread extends Thread {
-    private Object object;
+1. **unpark 可以先于 park 调用，不会丢信号。**
+2. **许可证最多只有一个，多次 unpark 不会累积多个许可。**
+3. **park 不会释放锁，持锁 park 很容易造成死锁或长时间阻塞。**
+4. **park 返回不代表条件满足，必须配合循环判断条件。**
+5. **park 被中断不会抛异常，而是直接返回并保留中断标记。**
+6. **推荐使用 park(Object blocker)，方便线程 dump 排查问题。**
+7. **业务开发通常不直接使用 LockSupport 实现复杂锁，优先使用 AQS 系列成熟组件。**
 
-    public MyThread(Object object) {
-        this.object = object;
-    }
+## 总结
 
-    public void run() {
-        System.out.println("before interrupt");        
-        try {
-            // 休眠3s
-            Thread.sleep(3000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }    
-        Thread thread = (Thread) object;
-        // 中断线程
-        thread.interrupt();
-        System.out.println("after interrupt");
-    }
-}
+`LockSupport` 是 JUC 中非常底层但非常重要的工具。它通过许可证模型提供线程阻塞与唤醒能力，支撑了 AQS 以及大量高级并发组件。面试时要重点讲清楚 `park/unpark` 的许可证机制、和 `wait/notify` 的区别、以及为什么 park 返回后必须重新检查条件。
 
-public class InterruptDemo {
-    public static void main(String[] args) {
-        MyThread myThread = new MyThread(Thread.currentThread());
-        myThread.start();
-        System.out.println("before park");
-        // 获取许可
-        LockSupport.park("ParkAndUnparkDemo");
-        System.out.println("after park");
-    }
-}
+## 参考资料
 
-四、更深入理解
-Thread.sleep() 和 Object.wait() 区别
-•  Thread.sleep()不会释放占有的锁，Object.wait()会释放占有的锁；
-•  Thread.sleep()必须传入时间，Object.wait()可传可不传，不传表示一直阻塞下去；
-•  Thread.sleep()到时间了会自动唤醒，然后继续执行；Object.wait()不带时间的，需要另一个线程使用Object.notify()唤醒；
-•  Object.wait()带时间的，假如没有被notify，到时间了会自动唤醒，这时又分好两种情况，一是立即获取到了锁，线程自然会继续执行；二是没有立即获取锁，线程进入同步队列等待获取锁；
-
-Object.wait()和Condition.await()的区别
-Object.wait()和Condition.await()的原理是基本一致的，不同的是Condition.await()底层是调用LockSupport.park()来实现阻塞当前线程的。实际上，Condition.wait()在阻塞当前线程之前还干了两件事：一是把当前线程添加到条件队列中，二是“完全”释放锁，也就是让state状态变量变为0，然后才是调用LockSupport.park()阻塞当前线程。
-Thread.sleep()和LockSupport.park()的区别
-LockSupport.park()还有几个兄弟方法——parkNanos()、parkUtil()等，我们这里说的park()方法统称这一类方法。
-•  从功能上来说，Thread.sleep()和LockSupport.park()方法类似，都是阻塞当前线程的执行，且都不会释放当前线程占有的锁资源；
-•  Thread.sleep()没法从外部唤醒，只能自己醒过来；LockSupport.park()方法可以被另一个线程调用LockSupport.unpark()方法唤醒；
-•  Thread.sleep()方法声明上抛出了InterruptedException中断异常，所以调用者需要捕获这个异常或者再抛出；LockSupport.park()方法不需要捕获中断异常；
-•  Thread.sleep()本身就是一个native方法；LockSupport.park()底层是调用的Unsafe的native方法；
-Object.wait()和LockSupport.park()的区别
-•  Object.wait()方法需要在synchronized块中执行；LockSupport.park()可以在任意地方执行；
-•  Object.wait()方法声明抛出了中断异常，调用者需要捕获或者再抛出；LockSupport.park()不需要捕获中断异常；
-•  Object.wait()不带超时的，需要另一个线程执行notify()来唤醒，但不一定继续执行后续内容；
-•  LockSupport.park()不带超时的，需要另一个线程执行unpark()来唤醒，一定会继续执行后续内容；
-
-总结: Object.wait(), Condition.await() 都会释放占有的锁资源, 而LockSupport.park(), Thread.sleep()都不会释放占有的锁资源.
-
-## 面试总结
-
-围绕「JUC锁之LockSupport详解」，面试官通常不只考概念定义，更关注你能否把机制、使用场景和线上问题串起来。
-
-### 核心回答
-
-1. JUC 提供锁、原子类、并发集合、线程池和同步工具，核心目标是降低并发编程复杂度。
-2. 多数 JUC 工具底层围绕 CAS、volatile、AQS、LockSupport 和内存屏障构建。
-3. 选择工具时要先明确共享状态、等待关系、吞吐要求和失败策略。
-
-### 高频追问
-
-- 这个工具和 synchronized/wait-notify 相比解决了什么问题？
-- 它是独占、共享还是无锁算法？
-- 高并发下可能出现什么性能瓶颈？
-
-### 实战落地
-
-- **选型前**：先判断是互斥访问、线程协作、任务编排，还是限流隔离。
-- **编码时**：控制共享变量范围，明确锁对象、超时策略、异常处理和资源释放。
-- **上线后**：观察线程数、队列长度、阻塞时间、拒绝次数和 RT 抖动，必要时用线程 Dump 验证。
-
-### 易错点
-
-- 不要只背 API，要能说明适用场景和边界。
-- 并发集合只能保证单次操作线程安全，复合业务逻辑仍可能需要额外同步。
+- JDK `LockSupport` 源码
+- JDK `AbstractQueuedSynchronizer` 源码
+- Java Concurrency in Practice

@@ -1,5 +1,7 @@
 # JUC集合之CopyOnWriteArrayList详解
 
+## 核心概念
+
 JUC集合之CopyOnWriteArrayList详解
 CopyOnWriteArrayList 是 Java 并发包（java.util.concurrent）中为高并发读多写少场景设计的线程安全集合，其核心原理是写时复制（Copy-On-Write）。以下是其原理详解：
 

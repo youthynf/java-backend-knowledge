@@ -1,191 +1,217 @@
-# AQS是什么？
+# AQS 是什么？
 
-AQS是什么？
-一、概述
-AQS（AbstractQueuedSynchronizer）是一个用来构建锁和同步器的框架，位于Java 并发包 (java.util.concurrent.locks)下，它为实现阻塞锁和相关同步器（如信号量、事件等）提供了一个FIFO等待队列的基础实现，使用AQS能简单且高效地构造出应用广泛的大量的同步器，比如我们提到的ReentrantLock，Semaphore，其他的诸如ReentrantReadWriteLock，SynchronousQueue，FutureTask等等皆是基于AQS的。当然，我们自己也能利用AQS非常轻松容易地构造出符合我们自己需求的同步器。
+## 核心概念
 
-二、核心思想
-AQS核心思想是，如果被请求的共享资源空闲，则将当前请求资源的线程设置为有效的工作线程，并且将共享资源设置为锁定状态。如果被请求的共享资源被占用，那么就需要一套线程阻塞等待以及被唤醒时锁分配的机制，这个机制AQS是用CLH队列锁实现的，即将暂时获取不到锁的线程加入到队列中。
-CLH(Craig,Landin,and Hagersten)队列是一个虚拟的双向队列(虚拟的双向队列即不存在队列实例，仅存在结点之间的关联关系)。AQS是将每条请求共享资源的线程封装成一个CLH锁队列的一个结点(Node)来实现锁的分配。
+AQS，全称 `AbstractQueuedSynchronizer`，是 Java 并发包中用来构建锁和同步器的基础框架。它位于 `java.util.concurrent.locks` 包下，很多常见并发工具都基于 AQS 实现，例如：
 
-AQS使用一个int成员变量state来表示同步状态，通过内置的FIFO队列来完成获取资源线程的排队工作。AQS使用CAS对该同步状态进行原子操作，实现对其值的修改。状态信息通过protected的getState、setState、compareAndSetState进行操作。
+- `ReentrantLock`
+- `ReentrantReadWriteLock`
+- `Semaphore`
+- `CountDownLatch`
+- `FutureTask`
 
-//返回同步状态的当前值
-protected final int getState() {  
-        return state;
+AQS 的核心思想可以概括为：**用一个 volatile 的 int 类型 state 表示同步状态，用一个 FIFO 等待队列管理获取资源失败的线程，通过 CAS 修改 state，通过 LockSupport 挂起和唤醒线程。**
+
+```java
+private volatile int state;
+```
+
+如果线程获取同步状态成功，就继续执行；如果获取失败，就把当前线程封装成节点加入等待队列，并在合适时机阻塞，等待前驱节点释放资源后再被唤醒。
+
+## 面试官想考什么
+
+这道题通常想考察：
+
+- AQS 解决了什么问题。
+- `state` 和等待队列分别负责什么。
+- 独占模式和共享模式有什么区别。
+- `ReentrantLock`、`Semaphore`、`CountDownLatch` 如何基于 AQS 实现。
+- 获取锁失败后线程如何排队、阻塞、唤醒。
+
+## 标准回答
+
+AQS 是 Java 并发工具的基础同步框架。它把同步器的通用逻辑抽象出来，包括同步状态管理、等待队列维护、线程阻塞和唤醒等。具体同步语义则交给子类实现，比如独占锁、共享锁、信号量、倒计时门闩等。
+
+AQS 主要由三部分组成：
+
+### 1. 同步状态 state
+
+`state` 是 AQS 中最核心的状态字段。
+
+```java
+protected final int getState() {
+    return state;
 }
- // 设置同步状态的值
-protected final void setState(int newState) { 
-        state = newState;
+
+protected final void setState(int newState) {
+    state = newState;
 }
-//原子地(CAS操作)将同步状态值设置为给定值update如果当前同步状态的值等于expect(期望值)
+
 protected final boolean compareAndSetState(int expect, int update) {
-        return unsafe.compareAndSwapInt(this, stateOffset, expect, update);
+    // CAS 修改 state
+}
+```
+
+不同同步器对 `state` 的含义不同：
+
+- `ReentrantLock`：state 表示锁重入次数。
+- `Semaphore`：state 表示剩余许可证数量。
+- `CountDownLatch`：state 表示还需要倒数的次数。
+- `ReentrantReadWriteLock`：state 同时编码读锁数量和写锁重入次数。
+
+### 2. FIFO 等待队列
+
+当线程获取同步状态失败时，AQS 会把线程封装成 Node 节点，加入一个 FIFO 双向等待队列。
+
+队列中的节点大致保存：
+
+- 当前线程。
+- 前驱节点和后继节点。
+- 节点等待状态。
+- 独占模式或共享模式标识。
+
+AQS 的等待队列常被称为 CLH 队列的变体。它不是原始自旋 CLH 锁，而是结合了阻塞和唤醒机制，更适合 JVM 线程调度。
+
+### 3. 模板方法
+
+AQS 提供了大量模板方法，子类只需要实现关键的获取和释放逻辑。
+
+独占模式常见方法：
+
+```java
+protected boolean tryAcquire(int arg) {
+    throw new UnsupportedOperationException();
 }
 
-三、核心结构
+protected boolean tryRelease(int arg) {
+    throw new UnsupportedOperationException();
+}
+```
 
-// 主要组成
-private volatile int state;          // 同步状态
-private transient volatile Node head; // 等待队列头节点
-private transient volatile Node tail; // 等待队列尾节点
+共享模式常见方法：
 
-// 内部 Node 类
-static final class Node {
-    volatile int waitStatus;        // 等待状态
-    volatile Node prev;             // 前驱节点
-    volatile Node next;             // 后继节点
-    volatile Thread thread;         // 关联线程
-    Node nextWaiter;                // 条件队列专用
+```java
+protected int tryAcquireShared(int arg) {
+    throw new UnsupportedOperationException();
 }
 
-四、关键方法
-同步器的设计是基于模板方法模式的，如果需要自定义同步器的一般方式是：使用者继承AbstractQueuedSynchronizer并重写指定的方法，这些重写方法无非是对于共享资源state的获取和释放。将AQS组合在自定义同步组件的实现中，并调用其模板方法，而这些模板方法会调用使用者重写的方法。
-需要子类实现的方法
+protected boolean tryReleaseShared(int arg) {
+    throw new UnsupportedOperationException();
+}
+```
 
-isHeldExclusively()//该线程是否正在独占资源。只有用到condition才需要去实现它。
-tryAcquire(int)//独占方式。尝试获取资源，成功则返回true，失败则返回false。
-tryRelease(int)//独占方式。尝试释放资源，成功则返回true，失败则返回false。
-tryAcquireShared(int)//共享方式。尝试获取资源。负数表示失败；0表示成功，但没有剩余可用资源；正数表示成功，且有剩余资源。 
-tryReleaseShared(int)//共享方式。尝试释放资源，成功则返回true，失败则返回false。
+AQS 负责排队、阻塞和唤醒，子类负责判断“能不能获取资源”和“如何释放资源”。
 
-模板方法（可直接使用）
+## 获取和释放流程
 
-acquire(int) ：获取独占锁（不可中断）；
-acquireInterruptibly(int)：可中断获取独占锁；
-tryAcquireNanos(int, long)：带超时的获取独占锁；
-release(int)：释放独占锁；
-acquireShared(int)：获取共享锁；
-releaseShared(int)：释放共享锁；
+### 1. 独占模式获取资源
 
-以ReentrantLock为例，state初始化为0，表示未锁定状态。A线程lock()时，会调用tryAcquire()独占该锁并将state+1。此后，其他线程再tryAcquire()时就会失败，直到A线程unlock()到state=0(即释放锁)为止，其它线程才有机会获取该锁。当然，释放锁之前，A线程自己是可以重复获取此锁的(state会累加)，这就是可重入的概念。但要注意，获取多少次就要释放多么次，这样才能保证state是能回到零态的。
-五、实现原理
-1. 独占模式（如 ReentrantLock）
-获取锁流程：
-•  调用tryAcquire()尝试获取锁；
-•  失败后创建Node加入等待队列尾部；
-•  自旋检查前驱节点是否为头节点；
-•  如果是则再次尝试获取锁；
-•  否则挂起线程（通过 LockSupport.park()）；
+以 `ReentrantLock` 为例，线程加锁时会尝试通过 CAS 把 `state` 从 0 改为 1。
 
-释放锁流程：
-•  调用 tryRelease() 释放资源；
-•  唤醒后继节点线程（unparkSuccessor()）；
+```text
+线程调用 lock()
+  -> tryAcquire 尝试获取锁
+  -> 成功：设置 owner，继续执行
+  -> 失败：加入 AQS 队列
+  -> 前驱是 head 时再次尝试获取
+  -> 仍失败：park 阻塞
+```
 
-2. 共享模式（如 Semaphore）
-获取锁流程：
-•  调用tryAcquireShared()尝试获取共享资源
-•  返回值≥0表示成功，<0表示失败
-•  失败后进入等待队列
-•  被唤醒后传播唤醒信号（doReleaseShared()）
+释放锁时会减少 state。如果 state 变成 0，说明锁完全释放，AQS 会唤醒队列中的后继节点。
 
-六、状态管理
-AQS 使用 state 变量表示资源状态：
-•  ReentrantLock：state=0 表示未锁定，>0 表示重入次数
-•  Semaphore：state 表示可用许可数
-•  CountDownLatch：state 表示初始计数
+### 2. 共享模式获取资源
 
-七、AQS在JUC中的应用
-•  ReentrantLock：使用独占模式，state表示重入次数；
-•  ReentrantReadWriteLock：使用读共享/写独占模式，state的高16位读状态，低16位写状态；
-•  Semaphore：使用共享模式，state表示可用许可数；
-•  CountDownLatch：使用共享模式，state表示初始计数；
-•  FutureTask：使用独占模式，state表示任务状态（未开始/运行中/已完成）；
+以 `Semaphore` 为例，线程获取许可证时会尝试减少 state。只要许可证数量足够，多个线程可以同时获取成功。
 
-八、AQS源码关键点
-节点状态（waitStatus）
+`CountDownLatch` 也是共享模式。等待线程调用 `await()` 时，如果 state 不为 0，就进入等待队列；其他线程调用 `countDown()` 让 state 减 1；当 state 变成 0 时，所有等待线程都可以继续执行。
 
-static final int CANCELLED =  1;  // 节点已取消
-static final int SIGNAL    = -1;  // 后继节点需要唤醒
-static final int CONDITION = -2;  // 节点在条件队列中
-static final int PROPAGATE = -3;  // 共享模式下传播唤醒
+## 深挖追问
 
-获取锁核心逻辑（acquireQueued）
+### 1. AQS 为什么既有独占模式又有共享模式？
 
-final boolean acquireQueued(final Node node, int arg) {
-    boolean failed = true;
-    try {
-        boolean interrupted = false;
-        for (;;) {
-            final Node p = node.predecessor();
-            if (p == head && tryAcquire(arg)) {
-                setHead(node);
-                p.next = null; // help GC
-                failed = false;
-                return interrupted;
-            }
-            if (shouldParkAfterFailedAcquire(p, node) &&
-                parkAndCheckInterrupt())
-                interrupted = true;
+因为不同同步器的资源占用语义不同。
+
+独占模式表示同一时刻只能有一个线程持有资源，例如 `ReentrantLock` 的写锁。共享模式表示多个线程可以同时获取资源，例如 `Semaphore` 的多个许可证，或 `CountDownLatch` 达到条件后多个线程同时通过。
+
+### 2. ReentrantLock 如何实现可重入？
+
+`ReentrantLock` 使用 state 记录重入次数。如果当前锁没有被持有，线程通过 CAS 把 state 从 0 改为 1，并设置 owner。若当前线程已经是 owner，再次加锁时只需要把 state 加 1。
+
+释放时 state 减 1，只有减到 0 时才真正释放锁并唤醒后继线程。
+
+### 3. AQS 如何避免线程一直自旋浪费 CPU？
+
+AQS 不会让失败线程长期空转。线程进入等待队列后，如果短暂尝试仍无法获取资源，会通过 `LockSupport.park()` 挂起。释放资源的线程再通过 `LockSupport.unpark()` 唤醒后继节点。
+
+这样既保留了队列化竞争的公平性基础，也避免了大量线程忙等消耗 CPU。
+
+### 4. 公平锁和非公平锁在 AQS 中有什么区别？
+
+公平锁获取锁前会检查等待队列中是否已有前驱节点，如果有，就排队等待。非公平锁则允许线程先尝试抢锁，即使队列中已有等待线程，也可能插队成功。
+
+`ReentrantLock` 默认是非公平锁，因为吞吐量通常更高；如果业务要求严格先来先服务，可以使用公平锁。
+
+## 实战场景
+
+### 场景 1：ReentrantLock
+
+```java
+Lock lock = new ReentrantLock();
+
+lock.lock();
+try {
+    // 临界区
+} finally {
+    lock.unlock();
+}
+```
+
+底层通过 AQS 独占模式维护 state 和等待队列。
+
+### 场景 2：CountDownLatch
+
+```java
+CountDownLatch latch = new CountDownLatch(3);
+
+for (int i = 0; i < 3; i++) {
+    new Thread(() -> {
+        try {
+            // 执行任务
+        } finally {
+            latch.countDown();
         }
-    } finally {
-        if (failed)
-            cancelAcquire(node);
-    }
+    }).start();
 }
 
-九、AQS设计优势
-灵活性：通过模板方法支持多种同步器实现
-高性能：CLH 队列减少锁竞争
-可扩展：支持独占和共享两种模式
-可靠性：完善的取消和中断处理机制
-十、自定义AQS示例（实现非重入锁）
+latch.await();
+System.out.println("all done");
+```
 
-class NonReentrantLock implements Lock {
-    private static class Sync extends AbstractQueuedSynchronizer {
-        protected boolean tryAcquire(int acquires) {
-            if (compareAndSetState(0, 1)) {
-                setExclusiveOwnerThread(Thread.currentThread());
-                return true;
-            }
-            return false;
-        }
-        
-        protected boolean tryRelease(int releases) {
-            if (getState() == 0)
-                throw new IllegalMonitorStateException();
-            setExclusiveOwnerThread(null);
-            setState(0);
-            return true;
-        }
-    }
-    
-    private final Sync sync = new Sync();
-    
-    public void lock() { sync.acquire(1); }
-    public void unlock() { sync.release(1); }
-    // 其他 Lock 方法实现...
+这里 state 初始值为 3，每次 `countDown()` 减 1，减到 0 时唤醒所有等待线程。
+
+### 场景 3：Semaphore 限流
+
+```java
+Semaphore semaphore = new Semaphore(10);
+
+semaphore.acquire();
+try {
+    // 最多 10 个线程同时执行
+} finally {
+    semaphore.release();
 }
+```
 
-十一、AQS使用注意事项
-实现 tryAcquire/tryRelease 时要保证线程安全；
-状态变量 state 需要使用原子操作更新；
-注意处理中断和超时情况；
-共享模式需要正确实现传播逻辑；
+Semaphore 通过 AQS 共享模式控制许可证数量，适合做并发访问控制。
 
-## 面试总结
+## 易错点
 
-围绕「AQS是什么？」，面试官通常不只考概念定义，更关注你能否把机制、使用场景和线上问题串起来。
+- AQS 不是具体锁，而是构建锁和同步器的框架。
+- state 的含义由具体同步器定义，不一定只表示“锁是否被占用”。
+- AQS 队列是 CLH 思想的变体，不是简单的普通链表。
+- 获取失败的线程不会一直忙等，而是会 park 阻塞。
+- 非公平锁不等于完全无序，它只是允许新线程先尝试抢锁。
 
-### 核心回答
+## 总结
 
-1. AQS 用一个 volatile state 表示同步状态，用 CLH 变体队列管理等待线程。
-2. 独占锁、共享锁只是 state 获取/释放语义不同，排队、阻塞、唤醒框架由 AQS 统一完成。
-3. ReentrantLock、Semaphore、CountDownLatch 等工具类的差异，本质在于如何定义 tryAcquire/tryRelease。
-
-### 高频追问
-
-- AQS 为什么使用双向队列？
-- 公平锁和非公平锁在入队前有什么差异？
-- 条件队列和同步队列如何转移？
-
-### 实战落地
-
-- **选型前**：先判断是互斥访问、线程协作、任务编排，还是限流隔离。
-- **编码时**：控制共享变量范围，明确锁对象、超时策略、异常处理和资源释放。
-- **上线后**：观察线程数、队列长度、阻塞时间、拒绝次数和 RT 抖动，必要时用线程 Dump 验证。
-
-### 易错点
-
-- 不要把 AQS 理解成一种锁，它是构建锁和同步器的框架。
-- 面试回答要把 state、CAS、队列、park/unpark 串起来，而不是只背类名。
+AQS 是 JUC 的核心基础设施，它用 state 表示同步状态，用 FIFO 队列管理等待线程，用 CAS 保证状态修改的原子性，用 park/unpark 完成阻塞唤醒。面试回答时要抓住“state + 队列 + CAS + 模板方法 + 独占/共享模式”这条主线，再结合 ReentrantLock、Semaphore、CountDownLatch 举例说明。

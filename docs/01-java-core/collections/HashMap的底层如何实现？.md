@@ -1,99 +1,158 @@
-# HashMap的底层如何实现？
+# HashMap 的底层如何实现？
 
-HashMap的底层如何实现？
-一、HashMap底层数据结构实现
-JDK 1.7及之前：底层通过【数组+链表】实现。HashMap通过哈希算法将元素的键（key）映射到数组的槽位（bucket），如果多个键映射到同一个槽位，它们会以链表的形式存储再同一个槽位上。因为链表的查询时间复杂度是O(n)，所以冲突严重时，链表会非常长，效率就很低；
-JDK 1.8及之后：优化成使用【哈希表+链表+红黑树】实现。当一个链表长度超过8并且数组大于等于64时，链表转成红黑树，通过红黑树查找时间复杂度是O(logN)，提升查询性能。当链表长度小于6时，扩容或删除元素会重新退化为链表。
+## 核心概念
 
-二、HashMap非线程安全
-并发修改时会发生数据丢失：多个线程并发执行put操作时，可能计算出相同的数组索引，后一个线程操作可能覆盖前一个线程的写入数据；
-死循环问题：在扩容时进行链表转移，多线程可能导致链表成环，主要发生在JDK 1.7及之前版本的transfer()方法中，使用的是头插法，JDK 1.8改用尾插法，解决了这个问题；
-size计数不准确：size++不是原子操作，多线程下可能导致size计数错误。
-迭代器快速失败：使用迭代器时其他线程修改了map结构，会抛出ConcurrentModificationException异常，即使单线程环境下，在迭代时，使用map.remove(key)也会导致抛异常。
+HashMap 是 Java 中最常用的哈希表实现，它用 **数组 + 链表 + 红黑树** 存储键值对，目标是在大多数情况下提供接近 O(1) 的 put/get 性能。
 
-三、JDK 1.7及之前版本的Entry链死循环问题
-多线程并发扩容时需要进行链表转移，假设线程A正准备扩容被中断，而线程B已完成扩容，由于使用头插法，线程B操作完成之后，链表中的指针指向反过来了，例如原来3-》7-》5，扩容后变成7-》3，而此时线程A被恢复，头结点指针是3，下一个节点的指针指向7，由于数据共享，所以此时7已经是指向3了，因此实际上线程A的认知中的关系已经是3-》7-》3，形成了死循环。
+理解 HashMap 底层，核心抓四件事：
 
-四、线程不安全的解决方案
-使用线程安全的替代类
+1. **哈希定位**：通过 key 的 hash 值定位数组下标。
+2. **冲突处理**：不同 key 可能落到同一个桶，先用链表存储。
+3. **树化优化**：链表过长时转红黑树，降低极端冲突下的查询成本。
+4. **扩容迁移**：元素数量超过阈值后扩容，减少冲突概率。
 
-// 方法1: 使用Hashtable (不推荐，性能差)
-Map<String, String> map = new Hashtable<>();
+JDK 1.8 之后 HashMap 的桶结构大致如下：
 
-// 方法2: 使用Collections.synchronizedMap
-Map<String, String> map = Collections.synchronizedMap(new HashMap<>());
-
-// 方法3: 使用ConcurrentHashMap (推荐)
-Map<String, String> map = new ConcurrentHashMap<>();
-
----
-
-<!-- interview-review-enhanced -->
-
-## 面试复习版
-
-### 核心概念
-- HashMap 基于数组、链表/红黑树实现，JDK 8 后冲突严重时可树化。
-- 容量通常保持 2 的幂，便于用 (n-1)&hash 定位桶。
-- HashMap 非线程安全。
-
-### 面试官想考什么
-- put/get、扩容、树化、哈希扰动。
-- 并发下数据覆盖、可见性和结构破坏风险。
-
-### 标准回答
-HashMap 通过 hash 定位桶，桶内再用 equals 精确匹配。put 时可能触发扩容，元素会重新分布。它适合单线程或外部同步场景，多线程应使用 ConcurrentHashMap。
-
-### 深挖追问
-- 为什么容量是 2 的幂？
-- 负载因子为什么默认 0.75？
-- JDK 7 和 JDK 8 扩容有什么差异？
-
-### 实战场景/代码示例
-```java
-Map<String,Integer> map=new HashMap<>(16);
-map.put("id",1);
-Integer v=map.get("id");
+```text
+Node<K,V>[] table
+  ├── null
+  ├── Node -> Node -> Node
+  ├── TreeNode(红黑树)
+  └── Node
 ```
 
-### 易错点/总结
-- 重写 key 的 equals 必须重写 hashCode。
-- 不要在并发写场景使用 HashMap。
-- 可变对象做 key 风险很高。
+## 面试官想考什么
 
----
+面试官通常不是只想听“数组加链表加红黑树”，而是想确认你是否理解 HashMap 为什么快、什么时候会变慢、以及扩容和并发场景下有什么坑。
 
-<!-- interview-detail-2026-06-24 -->
+常见考点：
 
-## 面试版详细讲解补充
+- `hash()` 为什么还要做高低位扰动？
+- table 长度为什么通常是 2 的幂？
+- put 时如何定位桶位？
+- 链表什么时候转红黑树？
+- 扩容时元素为什么可以只留在原位置或移动到 `oldCap + index`？
+- HashMap 为什么线程不安全？
 
-### 核心概念
-- HashMap的底层如何实现？ 的核心是理解集合的数据结构、复杂度、线程安全边界以及与 equals/hashCode/扩容策略的关系。
-- 复习时不要只记一句结论，要把“定义、底层原因、使用边界、工程取舍”串起来。
+## 标准回答
 
-### 面试官想考什么
-- 面试通常考底层结构、扩容/并发问题、为什么这样设计，以及在业务中如何选型。
-- 能否把该知识点和常见线上问题、代码设计、性能/并发/可维护性联系起来。
+HashMap 底层维护一个 `Node<K,V>[] table` 数组，每个数组位置叫一个桶。插入元素时，会先根据 key 计算 hash，然后通过 `(n - 1) & hash` 定位桶下标。
 
-### 标准回答
-回答 HashMap的底层如何实现？ 时，先说明适用场景，再讲底层机制和关键参数，最后补充并发环境下的替代方案。集合类默认多数不是线程安全的，需要根据读写比例选择 synchronized 包装、并发容器或不可变集合。
+如果桶为空，直接放入新节点；如果桶不为空，就说明发生了哈希冲突。HashMap 会先比较 hash 和 key：如果找到相同 key，就覆盖旧值；如果没有相同 key，就把新节点追加到链表或插入红黑树。
 
-如果是口述面试，建议先给一句结论，再补充 2~3 个关键细节，最后用项目场景收尾。这样既有结构，也能给面试官继续追问的抓手。
+当同一个桶中的链表长度达到树化阈值时，HashMap 会尝试把链表转成红黑树。JDK 1.8 中树化条件不是只看链表长度，还要求数组容量达到一定值：
 
-### 深挖追问
-- 扩容何时触发？迭代时修改为什么抛 ConcurrentModificationException？并发容器如何降低锁粒度？
-- 如果让你在项目里落地这个知识点，你会如何设计测试用例验证边界？
-- 遇到性能、并发或可维护性问题时，有哪些替代方案？
+- 链表长度达到 `TREEIFY_THRESHOLD = 8`
+- table 容量至少达到 `MIN_TREEIFY_CAPACITY = 64`
 
-### 示例/实战场景
-```java
-List<String> safe = Collections.synchronizedList(new ArrayList<>()); // 简单同步包装，复杂并发优先考虑 JUC 容器
+如果容量还小，HashMap 更倾向于先扩容，因为冲突多可能只是数组太小导致的。
+
+HashMap 通过 `size > threshold` 触发扩容，其中：
+
+```text
+threshold = capacity * loadFactor
 ```
 
-实战中建议把该知识点放到具体场景里理解：例如接口参数校验、集合选型、线程池治理、金额计算、JVM 排障或框架扩展点，而不是孤立背概念。
+默认负载因子是 `0.75`，这是空间利用率和查询性能之间的折中。扩容时容量通常翻倍，元素会被重新分布到新数组中。
 
-### 易错点/总结
-- 不要只背结论，要能结合容量、负载因子、hash 分布、读写比例解释取舍。
-- 面试表达要避免绝对化，例如“永远”“一定”“只会”，很多 Java 行为都与版本、实现、参数和上下文有关。
-- 最后用一句话收束：先讲清楚它解决什么问题，再讲清楚它的限制和替代方案。
+## 深挖追问
 
+### 1. 为什么 table 长度要是 2 的幂？
+
+因为 HashMap 用位运算计算下标：
+
+```java
+index = (table.length - 1) & hash;
+```
+
+当 `table.length` 是 2 的幂时，`table.length - 1` 的二进制低位全是 1，可以让 hash 的低位充分参与寻址，效果等价于取模，但性能比 `%` 更好。
+
+例如容量为 16：
+
+```text
+16 - 1 = 15 = 0000 1111
+index = hash & 0000 1111
+```
+
+### 2. 为什么 hash 要做高低位扰动？
+
+JDK 1.8 的 hash 计算会把高 16 位和低 16 位异或：
+
+```java
+static final int hash(Object key) {
+    int h;
+    return (key == null) ? 0 : (h = key.hashCode()) ^ (h >>> 16);
+}
+```
+
+因为数组下标主要依赖 hash 的低位。如果某些 key 的 hashCode 高位差异明显、低位差异不明显，不扰动就容易集中到同一个桶。高低位异或可以让高位信息参与低位寻址，减少冲突。
+
+### 3. 链表转红黑树后一定更快吗？
+
+不一定。红黑树节点更大，维护旋转、变色也有成本。只有当桶内元素较多时，红黑树的 O(log n) 查询优势才明显。所以 HashMap 设置了树化阈值，而不是一冲突就树化。
+
+### 4. 扩容时为什么不用重新完整取模？
+
+JDK 1.8 扩容容量翻倍后，一个节点的新位置只取决于 hash 中新增参与计算的那一位：
+
+```text
+(hash & oldCap) == 0 -> 留在原下标
+(hash & oldCap) != 0 -> 移动到 原下标 + oldCap
+```
+
+这让扩容迁移更高效，也减少了重新计算的成本。
+
+## 实战场景
+
+### 场景 1：自定义对象作为 key
+
+如果用自定义对象作为 HashMap 的 key，必须正确重写 `equals()` 和 `hashCode()`。
+
+```java
+class UserKey {
+    private final Long userId;
+
+    UserKey(Long userId) {
+        this.userId = userId;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof UserKey)) return false;
+        UserKey other = (UserKey) o;
+        return java.util.Objects.equals(userId, other.userId);
+    }
+
+    @Override
+    public int hashCode() {
+        return java.util.Objects.hash(userId);
+    }
+}
+```
+
+如果只重写 `equals()` 不重写 `hashCode()`，逻辑上相等的 key 可能落到不同桶，导致 get 取不到数据。
+
+### 场景 2：预估容量减少扩容
+
+如果要一次放入大量元素，可以提前设置容量，减少扩容成本。
+
+```java
+int expectedSize = 10_000;
+int capacity = (int) (expectedSize / 0.75f) + 1;
+Map<String, Object> map = new HashMap<>(capacity);
+```
+
+这在批量导入、缓存预热、构建索引时很有用。
+
+## 易错点
+
+- HashMap 不是有序集合，遍历顺序不能依赖。
+- HashMap 允许一个 `null` key，且 null key 通常放在 0 号桶。
+- 链表长度达到 8 不一定马上树化，容量小于 64 时优先扩容。
+- 红黑树退化回链表也有阈值，通常桶内元素减少到较少时会退化。
+- HashMap 线程不安全，并发写入可能导致数据覆盖、丢失或结构异常。
+
+## 总结
+
+一句话概括：HashMap 用数组做快速寻址，用链表处理普通冲突，用红黑树优化极端冲突，用扩容控制整体冲突概率。面试回答时不要只背结构，要把 hash 定位、冲突处理、树化条件、扩容迁移和线程安全一起讲清楚。

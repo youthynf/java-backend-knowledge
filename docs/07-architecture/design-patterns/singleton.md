@@ -55,4 +55,3 @@ private static volatile Singleton instance;
 ```
 
 `volatile` 既保证可见性，也禁止对象创建过程中的指令重排。
-

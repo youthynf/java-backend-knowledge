@@ -79,8 +79,8 @@ Controller 选举：Kafka 集群中，通过 ZooKeeper 创建 “临时节点”
 消费者组管理：存储消费者组的 offset（消费进度）、消费者与分区的分配关系，确保消费者重连后能继续消费。
 
 Dubbo 服务注册发现
-服务注册：服务提供者启动时，在 ZooKeeper 上创建 “持久节点”（如 /dubbo/com.xxx.UserService/providers/ip:port），注册自身地址；
-服务发现：服务消费者启动时，订阅 /dubbo/com.xxx.UserService/providers 节点的子节点变更，获取所有提供者地址；
+服务注册：服务提供者启动时，在 ZooKeeper 上创建 “持久节点”（如 /dubbo/com.Zookeeper入门概要.UserService/providers/ip:port），注册自身地址；
+服务发现：服务消费者启动时，订阅 /dubbo/com.Zookeeper入门概要.UserService/providers 节点的子节点变更，获取所有提供者地址；
 配置同步：Dubbo 的路由规则、负载均衡策略等配置存储在 ZooKeeper，修改后通过 Watcher 通知所有消费者 / 提供者。
 
 分布式锁实现（临时顺序节点方案）

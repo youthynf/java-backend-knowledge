@@ -58,4 +58,3 @@ class VipDiscountStrategy implements DiscountStrategy {
 ```
 
 这段代码把折扣规则抽象成策略接口，新增会员等级或活动规则时只增加实现类，主流程依赖 `DiscountStrategy` 抽象，体现开闭原则和依赖倒置原则。
-

@@ -1,5 +1,7 @@
 # JUC集合之BlockingQueue详解
 
+## 核心概念
+
 JUC集合之BlockingQueue详解
 BlockingQueue和BlockingDeque
 BlockingQueue
