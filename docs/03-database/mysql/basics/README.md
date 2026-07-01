@@ -1,40 +1,26 @@
-# 基础知识
+# MySQL 基础
 
-这一部分围绕 MySQL 查询执行、索引、事务、锁和日志体系展开。复习时要把 SQL 现象、执行计划、存储结构和并发控制串起来。
+本目录覆盖 MySQL 数据类型、表设计、行存储、SQL 执行流程、连表与子查询等基础知识点，是后续索引、事务、优化等专题的预备知识。
 
-## 面试复习重点
+## 目录
 
-- 核心概念是什么，解决了什么问题，和相邻知识点如何区分。
-- 面试官常从实现原理、适用场景、异常边界和性能影响继续追问。
-- 生产落地时要结合监控、日志、压测和故障预案验证方案。
+### 数据建模与类型
 
-## 建议掌握程度
+- [SQL 和 NoSQL 有什么区别](SQL和NoSQL有什么区别？.md) — 关系型与非关系型的取舍与典型选型
+- [MySQL 有哪些常用数据类型](MySQL有哪些常用数据类型？.md) — 数值/字符串/时间/JSON 类型选型与坑
+- [CHAR 和 VARCHAR 区别是什么](CHAR和VARCHAR区别是什么？.md) — 定长 vs 变长，N 的字符/字节含义
+- [Text 数据类型可以无限大吗](Text数据类型可以无限大吗？.md) — TEXT 四档上限、行溢出与拆表设计
+- [MySQL 时间类型如何选择](MySQL时间类型如何选择？.md) — DATETIME vs TIMESTAMP，2038 问题与跨时区
+- [数据库三大范式是什么](数据库三大范式是什么？.md) — 1NF/2NF/3NF 与反范式的工程取舍
 
-- **能讲清概念**：先用自己的话解释定义、背景和解决的问题。
-- **能画出链路**：把核心流程、关键组件和状态变化串起来。
-- **能回答追问**：准备优缺点、适用场景、常见坑和替代方案。
-- **能落地排查**：结合日志、指标、工具和案例说明如何定位问题。
+### 存储与执行
 
-## 文章导航
+- [MySQL 一行记录如何存储](MySQL一行记录如何存储？.md) — 行格式、隐藏列、行溢出与 VARCHAR 上限
+- [一条 SELECT 语句执行期间发生了什么](一条select语句执行期间发生了什么？.md) — 连接器→解析器→优化器→执行器→引擎
+- [一条 UPDATE 语句执行期间发生了什么](一条update语句执行期间发生了什么？.md) — undo log/redo log/binlog 与两阶段提交
 
-- [数据库三大范式是什么？](/03-database/mysql/basics/数据库三大范式是什么？.md)
-- [一条select语句执行期间发生了什么？](/03-database/mysql/basics/一条select语句执行期间发生了什么？.md)
-- [一条update语句执行期间发生了什么？](/03-database/mysql/basics/一条update语句执行期间发生了什么？.md)
-- [CHAR和VARCHAR区别是什么？](/03-database/mysql/basics/CHAR和VARCHAR区别是什么？.md)
-- [Distinct与Group-By性能比较？](/03-database/mysql/basics/Distinct与Group-By性能比较？.md)
-- [EXISTS与IN性能比较？](/03-database/mysql/basics/EXISTS与IN性能比较？.md)
-- [MySQL连表查询语法有哪些？](/03-database/mysql/basics/MySQL连表查询语法有哪些？.md)
-- [MySQL时间类型选择？](/03-database/mysql/basics/MySQL时间类型选择？.md)
-- [MySQL数据类型介绍？](/03-database/mysql/basics/MySQL数据类型介绍？.md)
-- [MySQL一行记录时怎么存储的？](/03-database/mysql/basics/MySQL一行记录时怎么存储的？.md)
-- [NOSQL与SQL有什么区别？](/03-database/mysql/basics/NOSQL与SQL有什么区别？.md)
-- [Text数据类型可以无限大吗？](/03-database/mysql/basics/Text数据类型可以无限大吗？.md)
+### 查询语法与性能
 
-## 面试表达模板
-
-回答这类问题时，建议按下面顺序组织：
-
-1. 先给结论：一句话说明它是什么、解决什么问题。
-2. 再讲原理：说明核心组件、关键流程和数据结构。
-3. 补充场景：结合项目或线上问题说明什么时候用、怎么用。
-4. 说明边界：讲清楚缺点、风险、替代方案和排查手段。
+- [MySQL 连表查询语法有哪些](MySQL连表查询语法有哪些？.md) — INNER/LEFT/RIGHT/CROSS JOIN 与 ON/WHERE 区别
+- [Distinct 和 Group By 性能有什么区别](Distinct和Group-By性能有什么区别？.md) — 5.7 隐式排序与 8.0 移除后的性能对比
+- [EXISTS 和 IN 性能有什么区别](EXISTS和IN性能有什么区别？.md) — semi-join 改写、索引影响与 NOT IN 的 NULL 坑

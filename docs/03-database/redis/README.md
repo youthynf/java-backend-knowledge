@@ -23,7 +23,14 @@
 
 ## 核心概念
 
-- [data-structures](/03-database/redis/data-structures.md)
+- [基础](/03-database/redis/basics/)
+- [数据结构](/03-database/redis/data-structure/)
+- [持久化](/03-database/redis/persistence/)
+- [集群](/03-database/redis/cluster/)
+- [缓存](/03-database/redis/cache/)
+- [线程模型](/03-database/redis/thread-model/)
+- [事务](/03-database/redis/transaction/)
+- [应用](/03-database/redis/application/)
 
 ## 标准回答
 

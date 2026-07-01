@@ -1,107 +1,201 @@
-# RocketMQ与Kafka有什么区别？
+# RocketMQ 与 Kafka 有什么区别
 
-RocketMQ与Kafka有什么区别？
-RocketMQ 是什么？
-RocketMQ 是阿里自研的国产消息队列，目前已经是 Apache 的顶级项目。和其他消息队列一样，它接受来自生产者的消息，将消息分类，每一类是一个 topic，消费者根据需要订阅 topic，获取里面的消息。
-RocketMQ 和 Kafka的区别概述
-RocketMQ 的架构其实参考了 Kafka 的设计思想，同时又在 Kafka 的基础上做了一些调整。这些调整，用一句话总结就是，"和 Kafka 相比，RocketMQ 在架构上做了减法，在功能上做了加法"。我们来看下这句话的含义。
+## 核心概念
 
-在架构上做减法
-kakfa 也是通过多个 topic 对消息进行分类。
-为了提升单个 topic 的并发性能，将单个 topic 拆为多个 partition。
-为了提升系统扩展性，将多个 partition 分别部署在不同 broker 上。
-为了提升系统的可用性，为 partition 加了多个副本。
-为了协调和管理 Kafka 集群的数据信息，引入Zookeeper作为协调节点。
+RocketMQ 是阿里自研的国产消息队列，目前是 Apache 顶级项目。它接受生产者消息，按 Topic 分类，消费者按需订阅 Topic 获取消息。RocketMQ 的架构参考了 Kafka 的设计思想，同时又在 Kafka 基础上做了调整。一句话总结：**"和 Kafka 相比，RocketMQ 在架构上做了减法，在功能上做了加法。"** 架构减法让它更轻、更易运维；功能加法让它更贴近业务消息场景。
 
-简化协调节点
-Zookeeper 在 Kafka 架构中会和 broker 通信，维护 Kafka 集群信息。一个新的 broker 连上 Zookeeper 后，其他 broker 就能立马感知到它的加入，像这种能在分布式环境下，让多个实例同时获取到同一份信息的服务，就是所谓的分布式协调服务。但 Zookeeper 作为一个通用的分布式协调服务，它不仅可以用于服务注册与发现，还可以用于分布式锁、配置管理等场景。Kafka 其实只用到了它的部分功能，多少有点杀鸡用牛刀的味道。太重了。所以 RocketMQ 直接将 Zookeeper 去掉，换成了 nameserver，用一种更轻量的方式，管理消息队列的集群信息。生产者通过 nameserver 获取到 topic 和 broker 的路由信息，然后再与 broker 通信，实现服务发现和负载均衡的效果。
-开发 Kafka 的大佬们后来也意识到了 Zookeeper 过重的问题，所以从 2.8.0 版本就支持将 Zookeeper 移除，通过 在 broker 之间加入一致性算法 raft 实现同样的效果，这就是所谓的 KRaft 或 Quorum 模式。
+## 标准回答
 
-简化分区
-Kafka 会将 topic 拆分为多个 partition，用来提升并发性能。在 RocketMQ 里也一样，将 topic 拆分成了多个分区，但换了个名字，叫 Queue,也就是"队列"。Kafka 中的 partition 会存储完整的消息体，而 RocketMQ 的 Queue 上却只存一些简要信息，比如消息偏移 offset，而消息的完整数据则放到"一个"叫 commitlog 的文件上，通过 offset 我们可以定位到 commitlog 上的某条消息。 Kafka 消费消息，broker 只需要直接从 partition 读取消息返回就好，也就是读第一次就够了。而在 RocketMQ 中，broker 则需要先从 Queue 上读取到 offset 的值，再跑到 commitlog 上将完整数据读出来，也就是需要读两次。
-看起来 Kafka 的设计更高效？为什么 RocketMQ 不采用 Kafka 的设计？
-Kafka 的 partition 分区，其实在底层由很多段（segment）组成，每个 segment 可以认为就是个小文件。将消息数据写入到 partition 分区，本质上就是将数据写入到某个 segment 文件下。为了提升性能，Kafka 对每个小文件都是顺序写。如果只有一个 segment 文件，那写文件的性能会很好。 但当 topic 变多之后，topic 底下的 partition 分区也会变多，对应的 partition 底下的 segment 文件也会变多。同时写多个 topic 底下的 partition，就是同时写多个文件，虽然每个文件内部都是顺序写，但多个文件存放在磁盘的不同地方，原本顺序写磁盘就可能劣化变成了随机写。于是写性能就降低了。
-为了缓解同时写多个文件带来的随机写问题，RocketMQ 索性将单个 broker 底下的多个 topic 数据，全都写到"一个"逻辑文件 CommitLog 上，这就消除了随机写多文件的问题，将所有写操作都变成了顺序写。大大提升了 RocketMQ 在多 topic 场景下的写性能。
-注意上面提到的"一个"是带引号的，虽然逻辑上它是一个大文件，但实际上这个 CommitLog 由多个小文件组成。每个文件的大小是固定的，当一个文件被写满后，会创建一个新的文件来继续存储新的消息。这种方式可以方便地管理和清理旧的消息。
+RocketMQ 和 Kafka 都能做分布式消息，但设计侧重点不同。Kafka 更偏日志流和高吞吐流处理，RocketMQ 更贴近业务消息，常见能力包括延迟消息、事务消息和 Tag 过滤。选型应综合吞吐、可靠性、顺序性、延迟消息、生态、团队运维经验：
 
-简化备份模型
-Kafka 会将 partiton 分散到多个 broker 中，并为 partiton 配置副本，将 partiton 分为 leader和 follower，也就是主和从。broker 中既可能有 A topic 的主 partiton，也可能有 B topic 的从 partiton。主从 partiton 之间会建立数据同步，本质上就是同步 partiton 底下的 segment 文件数据。RocketMQ 将 broker 上的所有 topic 数据到写到 CommitLog 上。如果还像 Kafka 那样给每个分区单独建立同步通信，就还得将 CommitLog 里的内容拆开，这就还是退化为随机读了。于是 RocketMQ 索性以 broker 为单位区分主从，主从之间同步 CommitLog 文件，保持高可用的同时，也大大简化了备份模型。
+- **日志采集、埋点、流计算、大吞吐顺序写场景** → Kafka。
+- **订单、交易、延迟任务、事务消息等业务消息场景** → RocketMQ。
 
-在功能上做加法
-消息过滤
-Kafka 支持通过 topic 将数据进行分类，比如订单数据和用户数据是两个不同的 topic，但如果我还想再进一步分类呢？比如同样是用户数据，还能根据 vip 等级进一步分类。假设我们只需要获取 vip6 的用户数据，在 Kafka 里，消费者需要消费 topic 为用户数据的所有消息，再将 vip6 的用户过滤出来。而 RocketMQ 支持对消息打上标记，也就是打 tag，消费者能根据 tag 过滤所需要的数据。比如我们可以在部分消息上标记 tag=vip6，这样消费者就能只获取这部分数据，省下了消费者过滤数据时的资源消耗。相当于 RocketMQ 除了支持通过 topic 进行一级分类，还支持通过 tag 进行二级分类。
+两者都需要消费幂等、监控告警和补偿机制。
 
-支持事务
-Kafka 支持事务，比如生产者发三条消息 ABC，这三条消息要么同时发送成功，要么同时发送失败。这确实也叫事务，但跟我们要的不太一样。写业务代码的时候，我们更想要的事务是，"执行一些自定义逻辑"和"生产者发消息"这两件事，要么同时成功，要么同时失败。而这正是 RocketMQ 支持的事务能力。
+## 架构减法
 
-加入延时队列
-如果我们希望消息投递出去之后，消费者不能立马消费到，而是过个一定时间后才消费，也就是所谓的延时消息，就像文章开头的定时外卖那样。如果我们使用 Kafka， 要实现类似的功能的话，就会很费劲。但 RocketMQ 天然支持延时队列，我们可以很方便实现这一功能。
+### 简化协调节点：NameServer 替代 ZooKeeper
 
-加入死信队列
-消费消息是有可能失败的，失败后一般可以设置重试。如果多次重试失败，RocketMQ 会将消息放到一个专门的队列，方便我们后面单独处理。这种专门存放失败消息的队列，就是死信队列。Kafka 原生不支持这个功能，需要我们自己实现。
+Kafka 历史上用 ZooKeeper 维护集群信息（Broker、Topic、分区、Controller 选举）。ZooKeeper 是通用分布式协调服务，功能强大但对 Kafka 来说"杀鸡用牛刀"，运维成本高。RocketMQ 直接去掉 ZooKeeper，换成 **NameServer**——一个更轻量的路由注册中心。
 
-消息回溯
-Kafka 支持通过调整 offset 来让消费者从某个地方开始消费，而 RocketMQ，除了可以调整 offset, 还支持调整时间（kafka在0.10.1后支持调时间）。
+NameServer 特点：
 
-总结
-RocketMQ 和 Kafka 相比，在架构上做了减法，在功能上做了加法
-跟 Kafka 的架构相比，RocketMQ 简化了协调节点和分区以及备份模型。同时增强了消息过滤、消息回溯和事务能力，加入了延迟队列，死信队列等新特性。
-凡事皆有代价，RocketMQ 牺牲了一部分性能，换取了比 kafka 更强大的功能特性。
+- **无状态**：每个 NameServer 节点独立，互不通信，不依赖一致性协议。
+- **Broker 注册**：Broker 启动后向所有 NameServer 注册，每隔 30 秒心跳；NameServer 90 秒未收到心跳则剔除 Broker。
+- **客户端发现**：生产者/消费者从任一 NameServer 拉取路由信息（Topic → Broker → Queue），本地缓存 30 秒刷新。
 
-## 面试总结
-### 核心概念
+Kafka 后来也意识到 ZooKeeper 过重，从 2.8.0 引入 KRaft 模式（Raft 共识）逐步移除 ZooKeeper，3.3+ 标记生产可用。这一点上 RocketMQ 走得更早。
 
-RocketMQ 和 Kafka 都能做分布式消息，但设计侧重点不同。Kafka 更偏日志流和高吞吐流处理，RocketMQ 更贴近业务消息，常见能力包括延迟消息、事务消息和 Tag 过滤。
+### 简化分区：Queue 只存偏移，消息统一写 CommitLog
 
-### 面试官想考什么
+Kafka 把 Topic 拆成多个 Partition，每个 Partition 是独立的日志文件（由多个 segment 组成），消息直接写到对应 Partition 的 segment 文件。这样单 Partition 顺序写性能很好，但 **Topic 变多后，同时写多个 Partition 文件会让磁盘从顺序写退化为随机写**。
 
-面试官想看你能否根据场景选型，而不是简单比较谁更强。
+RocketMQ 的解决方案：
 
-### 标准回答
+- **Queue（队列）**：相当于 Kafka 的 Partition，是并发和顺序的基本单位。但 Queue 上只存简要信息（消息偏移 offset、size、tag hashcode），不存消息体。
+- **CommitLog**：单个 Broker 上所有 Topic 的消息体统一写入"一个"逻辑文件 CommitLog（物理上由多个 1GB 文件组成）。所有写操作都变成对 CommitLog 的顺序追加，消除多 Topic 随机写问题。
+- **ConsumeQueue**：每个 Queue 对应一个 ConsumeQueue 文件，存 CommitLog 中的偏移、消息大小、Tag hashcode，作为消费索引。
 
-Kafka 适合日志采集、埋点、流计算、大吞吐顺序写场景；RocketMQ 适合订单、交易、延迟任务、事务消息等业务消息场景。选型应综合吞吐、可靠性、顺序性、延迟消息、生态、团队运维经验。
+代价是消费时需要两次读：先读 ConsumeQueue 拿到 offset，再读 CommitLog 拿到消息体。Kafka 只需读一次 Partition 文件。这是 RocketMQ 在多 Topic 场景用读放大换写性能的设计取舍。
 
-### 深挖追问
+### 简化备份模型：以 Broker 为单位主从同步
 
-- 如果消息处理成功但确认失败会怎样？
-- 如何设计幂等键和补偿任务？
-- 该方案在高并发或故障恢复时有什么边界？
+Kafka 给每个 Partition 单独建副本，主从 Partition 间同步 segment 文件。RocketMQ 所有 Topic 数据都写到 CommitLog，如果像 Kafka 那样按分区同步就得把 CommitLog 拆开，退化为随机读。于是 RocketMQ **以 Broker 为单位区分主从**，主从间直接同步 CommitLog 文件，保持高可用的同时大大简化备份模型。
 
-### 实战场景/示例
+## 功能加法
 
-用户行为日志进实时计算常选 Kafka；订单超时关闭、交易事务消息可优先评估 RocketMQ。
+### 消息过滤（Tag）
 
-### 易错点/总结
+Kafka 只能通过 Topic 一级分类。RocketMQ 支持 Tag 二级分类：消息打上 Tag（如 `vip6`），消费者按 Tag 过滤订阅。Broker 端先按 Tag hashcode 过滤 ConsumeQueue，消费端再做精确 Tag 过滤，省下消费者过滤资源。
 
-MQ 不是银弹。不要只说“加 MQ 解耦”，还要说明可靠投递、重复消费、顺序性、延迟、监控和补偿。
+### 事务消息
 
-## 补充要点
-### 核心概念
+Kafka 事务解决的是"多条消息要么同时发送成功要么同时失败"。RocketMQ 事务消息解决的是**"执行本地事务"和"发送消息"两件事的原子性**——要么本地事务成功且消息发送成功，要么本地事务失败且消息不发送。流程是：先发送半消息（对消费者不可见）→ 执行本地事务 → 根据本地事务结果 commit 或 rollback 半消息 → 若半消息状态未知，Broker 主动回查生产者。
 
-Kafka 更像分布式日志平台，强项是高吞吐、流式处理和日志采集；RocketMQ 更偏业务消息，内置事务消息、延迟消息、顺序消息、Tag 过滤、失败重试和死信等能力。
+### 延迟消息
 
-### 面试官想考什么
+消息发送后不能立即消费，要等一定时间后才能被消费。RocketMQ 4.x 内置 18 个延迟级别（1s/5s/10s/30s/1m/2m/3m/4m/5m/6m/7m/8m/9m/10m/20m/30m/1h/2h），5.x 支持任意延迟。Kafka 要实现延迟消息比较费劲，需自建延迟队列或用时间轮。
 
-- 是否能从模型、功能、性能、场景而不是“谁更好”来比较。
-- 是否知道 Kafka 的 Partition 与 RocketMQ 的 Queue 都是并行和顺序的基本单位。
-- 是否理解 RocketMQ 事务消息是最终一致方案，不是强一致分布式事务。
+### 死信队列
 
-### 标准回答
+消费失败重试多次（默认 16 次）后，消息进入死信队列（DLQ），方便后续单独处理。Kafka 原生不支持，需自己实现。
 
-Kafka 以 Topic-Partition 日志模型为核心，依赖消费者组和 offset 管理，适合日志、埋点、大数据管道、流处理等高吞吐场景。RocketMQ 由 NameServer、Broker、Topic、Queue、Producer、Consumer 组成，功能更贴近电商交易等业务消息，支持事务消息、延迟消息、顺序消息、消费重试和死信队列。选型上，如果更看重吞吐、生态和流处理选 Kafka；如果业务需要事务消息、延迟消息、顺序消息且希望中间件内置更多业务语义，可选 RocketMQ。
+### 消息回溯
 
-### 深挖追问
+Kafka 支持调整 offset 从某位置消费。RocketMQ 除了调整 offset，还支持按时间回溯（Kafka 0.10.1+ 也支持按时间）。
 
-- **RocketMQ 事务消息流程？** 先发送半消息，执行本地事务，再提交/回滚；Broker 对未知状态进行事务回查。
-- **两者顺序消息怎么保证？** 同一业务 key 路由到同一 Partition/Queue，消费端串行处理。
-- **为什么 Kafka 吞吐通常更高？** 日志模型更纯粹，顺序写、PageCache、批量和零拷贝优化成熟，业务语义相对少。
+### 消费重试
 
-### 示例/实战场景
+RocketMQ 消费失败自动重试，重试间隔递增（10s/30s/1m/2m...），达到最大次数后进入死信队列。Kafka 没有原生重试机制，需自己实现重试 Topic。
 
-日志采集、用户行为流、Flink 实时计算通常选 Kafka；订单创建后延迟 30 分钟未支付自动取消、支付本地事务后发通知消息，更适合 RocketMQ 的延迟消息和事务消息。
+## 选型对比
 
-### 易错点/总结
+| 维度 | Kafka | RocketMQ |
+|------|-------|----------|
+| 定位 | 日志流平台 | 业务消息中间件 |
+| 协调节点 | ZooKeeper（旧）/ KRaft（新） | NameServer（无状态） |
+| 存储模型 | 每 Partition 独立日志 | 全 Topic 统一 CommitLog + ConsumeQueue 索引 |
+| 副本模型 | Partition 级副本 | Broker 级主从 |
+| 事务消息 | 多消息原子性 | 本地事务 + 消息原子性 |
+| 延迟消息 | 不原生支持 | 18 级（4.x）/ 任意延迟（5.x） |
+| 顺序消息 | 单分区内有序 | 单 Queue 内有序 |
+| 消息过滤 | Topic 级 | Topic + Tag 二级 |
+| 死信队列 | 不原生支持 | 原生支持 |
+| 消费重试 | 不原生支持 | 原生支持（递增退避） |
+| 吞吐量 | 极高（顺序写 + sendfile 零拷贝） | 高（10w 级 TPS，约为 Kafka 的 60%-70%） |
+| 适用场景 | 日志、埋点、流计算、数据管道 | 订单、交易、延迟任务、事务消息 |
 
-- 不要简单说 RocketMQ “一定比 Kafka 好/差”，要结合场景。
-- RocketMQ 事务消息解决的是本地事务与消息发送的最终一致，不负责下游消费一定成功。
-- 两者都需要消费幂等、监控告警和补偿机制。
+## 代码示例
+
+### RocketMQ 事务消息
+
+订单创建后发送事务消息，本地事务（扣库存）成功则消息提交，失败则回滚。
+
+```java
+public class OrderTransactionProducer {
+
+    public static void main(String[] args) throws Exception {
+        TransactionMQProducer producer = new TransactionMQProducer("order-tx-group");
+        producer.setNamesrvAddr("localhost:9876");
+        // 事务回查监听器：Broker 主动询问本地事务状态
+        producer.setTransactionListener(new TransactionListener() {
+            @Override
+            public LocalTransactionState executeLocalTransaction(Message msg, Object arg) {
+                try {
+                    // 执行本地事务：扣库存、写订单
+                    orderService.createOrder((OrderInfo) arg);
+                    return LocalTransactionState.COMMIT_MESSAGE;
+                } catch (Exception e) {
+                    return LocalTransactionState.ROLLBACK_MESSAGE;
+                }
+            }
+
+            @Override
+            public LocalTransactionState checkLocalTransaction(MessageExt msg) {
+                // Broker 回查：根据消息体查订单是否已创建
+                String orderId = msg.getKeys();
+                return orderService.exists(orderId)
+                        ? LocalTransactionState.COMMIT_MESSAGE
+                        : LocalTransactionState.ROLLBACK_MESSAGE;
+            }
+        });
+        producer.start();
+
+        Message msg = new Message("order-topic", "create",
+                orderInfo.getOrderId(), JSON.toJSONBytes(orderInfo));
+        // 发送半消息，触发本地事务
+        producer.sendMessageInTransaction(msg, orderInfo);
+    }
+}
+```
+
+### 延迟消息
+
+订单创建后 30 分钟未支付自动取消。
+
+```java
+DefaultMQProducer producer = new DefaultMQProducer("delay-producer-group");
+producer.setNamesrvAddr("localhost:9876");
+producer.start();
+
+Message msg = new Message("order-timeout-topic",
+        "cancel", orderId, "cancel order".getBytes(StandardCharsets.UTF_8));
+// 4.x：设置延迟级别（18 对应 30m）
+msg.setDelayTimeLevel(16); // 30m
+// 5.x：设置任意延迟时间
+// msg.setDeliverTimeMs(System.currentTimeMillis() + 30 * 60 * 1000);
+producer.send(msg);
+```
+
+## 实战场景
+
+| 场景 | 推荐方案 | 理由 |
+|------|----------|------|
+| 用户行为日志进实时计算 | Kafka | 大吞吐、流处理生态成熟 |
+| 订单超时未支付自动取消 | RocketMQ 延迟消息 | 原生支持，无需自建 |
+| 支付本地事务后发通知 | RocketMQ 事务消息 | 本地事务与消息原子性 |
+| 多团队按 Tag 订阅业务事件 | RocketMQ Tag 过滤 | 二级分类，省消费端资源 |
+| 海量埋点写入数据湖 | Kafka | 吞吐优势明显 |
+| 交易状态机顺序消费 | RocketMQ 顺序消息 | 单 Queue 内有序 |
+
+## 深挖追问
+
+### RocketMQ 事务消息流程？
+
+先发送半消息（对消费者不可见，存入 `RMQ_SYS_TRANS_HALF_TOPIC`）→ 执行本地事务 → 根据本地事务结果 commit（消息转回原 Topic，可见）或 rollback（删除半消息）→ 若半消息状态未知（如生产者宕机），Broker 定时回查生产者，调用 `checkLocalTransaction` 获取本地事务状态。回查有次数限制（默认 15 次），超时后按 rollback 处理。
+
+### 两者顺序消息怎么保证？
+
+同一业务 key 路由到同一 Partition/Queue，消费端串行处理。Kafka 是单分区内有序，RocketMQ 是单 Queue 内有序。RocketMQ 顺序消费用 `MessageListenerOrderly`，Broker 会用锁保证单 Queue 同一时刻只被一个消费线程处理；Kafka 需要消费端自己保证单分区单线程。
+
+### 为什么 Kafka 吞吐通常更高？
+
+日志模型更纯粹，顺序写、PageCache、批量、压缩、sendfile 零拷贝优化成熟，业务语义相对少。RocketMQ 用 mmap 零拷贝（消费端需要读消息内容做过滤、重试、死信等业务逻辑，不能用 sendfile），且消费端要读 ConsumeQueue 再读 CommitLog（读放大）。压测显示 Kafka 比 RocketMQ 快 50% 左右，但 RocketMQ 仍能每秒处理 10w 量级数据。
+
+### RocketMQ 事务消息是强一致分布式事务吗？
+
+不是。它是最终一致方案：保证"本地事务"和"消息发送"的原子性，但下游消费是否成功由消费幂等和重试保证。如果下游消费一直失败，仍需对账补偿。事务消息解决的是消息发送端的一致性，不负责下游消费一定成功。
+
+### NameServer 和 ZooKeeper 的区别？
+
+NameServer 无状态、节点间不通信、最终一致（客户端拉取路由），轻量但可用性高（任一节点可用即可服务）。ZooKeeper 强一致（ZAB 协议）、节点间同步、功能丰富但重。RocketMQ 选择 NameServer 是因为消息队列对路由一致性要求不高，30 秒刷新已足够。
+
+## 易错点
+
+- **简单说 RocketMQ "一定比 Kafka 好/差"**：要结合场景。日志流场景 Kafka 更强，业务消息场景 RocketMQ 更合适。
+- **把 RocketMQ 事务消息当强一致分布式事务**：它是最终一致方案，下游消费仍要幂等和补偿。
+- **忽略 RocketMQ 性能开销**：CommitLog 统一写 + ConsumeQueue 索引 + mmap 零拷贝带来业务能力，但吞吐低于 Kafka。
+- **延迟消息级别记错**：4.x 是 18 个固定级别，不能任意延迟；5.x 才支持任意延迟。
+- **Tag 过滤不是精确过滤**：Broker 端按 Tag hashcode 过滤可能有 hash 冲突，消费端还需做精确 Tag 比对。
+
+## 总结
+
+RocketMQ 和 Kafka 相比，架构上做了减法（NameServer 替代 ZooKeeper、Queue 只存 offset、Broker 级主从），功能上做了加法（Tag 过滤、事务消息、延迟消息、死信队列、消费重试、消息回溯）。凡事皆有代价，RocketMQ 牺牲了一部分性能，换取了比 Kafka 更强大的业务消息特性。选型上，大数据场景（Spark/Flink 关键词频繁出现）用 Kafka；业务消息场景（订单、交易、延迟、事务）用 RocketMQ。
+
+## 参考资料
+
+- [RocketMQ Architecture](https://rocketmq.apache.org/zh/docs/introduction/02architecture)
+- [RocketMQ 事务消息](https://rocketmq.apache.org/zh/docs/featureBehavior/03transactionmessage)
+- [RocketMQ 延迟消息](https://rocketmq.apache.org/zh/docs/featureBehavior/04delaymessage)
+- [Kafka Documentation](https://kafka.apache.org/documentation/)

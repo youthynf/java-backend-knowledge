@@ -1,39 +1,180 @@
-# TCP连接在拔掉网线后会发生什么？
+# TCP 连接在拔掉网线后会发生什么
+
 ## 核心概念
 
-拔掉网线后，有数据传输
-如果客户端拔掉网线后，服务端向客户端发送数据报文会得不到响应，在等待一定时长后，服务端就会触发超时重传机制，重传未得到响应的数据报文。
-如果在服务端重传报文的过程中，客户端刚好把网线插回去了，由于拔掉网线并不会改变客户端的TCP连接状态，并且还是处于【ESTABLISHED】状态，所以这是客户端是可以正常接收服务端发来的数据报文的，然后客户端就会恢复ACK响应报文。
-如果在服务端重传报文的过程中，客户端一直没有把网线插回去，服务算超时重传报文的次数达到一定阈值后，内核就会判定该TCP有问题，然后通过Socket告诉应用程序该TCP连接出问题，于是服务端的TCP连接就会断开。而等客户端重新插回网线后，如果客户端向服务端发送了数据，由于服务端已经没有与客户端相同的四元组的TCP连接了，所以服务端内核会回复RST报文，客户端收到后就会释放该TCP连接。
+拔网线后 TCP 连接的命运取决于**有没有数据传输**和**是否开启 keepalive**。TCP 是逻辑连接，物理层断了 TCP 状态机不会立即感知。要么靠数据传输触发超时重传发现，要么靠 keepalive 探测发现，否则连接会一直保持 `ESTABLISHED`。
 
-拔掉网线后，没有数据传输
-需要看是否开启了TCP keepalive机制，即TCP保活机制。
-如果没有开启TCP keepalive机制，在客户端拔掉网线后，并且双方都没有进行数据传输，那么客户端和服务端的TCP连接将会一直保持存在；
-如果开启了TCP keepalive机制，客户端拔掉网线后，即使双方都没有进行数据传输，在持续一段时间后，TCP就会发送探测报文。如果对端正常工作，当TCP保活机制的探测报文发送给对端，对端就会正常响应，这样TCP保活时间会倍重置，等待下一个TCP保活时间到来；如果对端主机宕机（注意不是进程崩溃，进程崩溃后操作系统在挥手进程资源时，会发送FIN报文，而主机宕机则是无法感知的，所以需要依赖TCP保活机制来探测对方是不是发生了主机宕机），或对端由于其他原因导致报文不可达，当TCP保活的报文发送给对端后，连续几次没有回应，达到保活探测次数后，TCP会报告该TCP连接已经死亡。
+## 标准回答
 
-## 面试总结
-### 核心概念
+分两种情况：
 
-传输层负责端到端通信。TCP 面向连接、可靠、有序、字节流，依靠三次握手、序列号、确认、重传、滑动窗口、流量控制和拥塞控制；UDP 无连接、开销小、不保证可靠。
+**有数据传输时**：发送方收不到 ACK，触发超时重传。重传达上限（`tcp_retries2`，默认 15 次）后内核通知应用层连接死亡。期间网线重新插上，连接自动恢复。
 
-### 面试官想考什么
+**无数据传输时**：
+- 未开启 keepalive：双方连接一直保持 `ESTABLISHED`，永远不知道对方掉线。
+- 开启 keepalive：空闲一段时间后发探测包，多次无响应判定死亡。
 
-面试官高频考 TCP 三次握手/四次挥手、TIME_WAIT/CLOSE_WAIT、可靠传输、粘包、拥塞控制、连接异常和性能调优。
+## 详细机制
 
-### 标准回答
+### 情况 1：有数据传输
 
-TCP 建连通过 SYN、SYN+ACK、ACK 确认双方收发能力；断连通常四次挥手，因为双方方向的数据流要分别关闭。可靠性来自序列号、ACK、超时/快速重传、滑动窗口和校验。TIME_WAIT 保护旧报文消失并保证对端收到最后 ACK；CLOSE_WAIT 多通常是应用未主动关闭连接。UDP 适合实时音视频、DNS、QUIC 等可自定义可靠性或容忍丢包的场景。
+```
+Client ↔ Server，Client 拔网线
+Server 发数据给 Client
+  ↓
+Client 收不到（网线断了）
+  ↓
+Server 收不到 ACK，触发超时重传
+  ↓
+重传 1（RTO 后）
+重传 2（2×RTO 后，指数退避）
+...
+重传 15（tcp_retries2 上限）
+  ↓
+内核通知应用层 ETIMEDOUT，连接断开
+```
 
-### 深挖追问
+总耗时约 924 秒到 16 分钟（取决于 RTO 和重传次数）。
 
-- 这个现象发生在内核 TCP 状态机、网络链路还是应用代码中？
-- 如何用 ss/netstat、tcpdump、内核计数器证明丢包、重传、半连接或 TIME_WAIT 问题？
-- 哪些 Linux 参数、连接池参数和超时设置会影响生产表现？
+**如果中间网线插回去**：
+- 重传期间 Client 重新收到包，正常回 ACK
+- Server 收到 ACK，连接恢复，继续传输
+- 应用层无感知
 
-### 实战场景/示例
+### 情况 2：无数据传输
 
-Java 服务大量 CLOSE_WAIT，优先检查代码是否未关闭 socket/HTTP 响应流，或连接池释放逻辑异常；大量 TIME_WAIT 则看短连接、主动关闭方和连接复用。
+TCP 是逻辑连接，物理层断了状态机不感知。如果双方都没数据发，连接会一直 `ESTABLISHED`。
 
-### 易错点/总结
+**未开 keepalive**：
+```
+Client 拔网线，Client 进程没发数据
+Server 进程也没发数据
+  ↓
+双方 TCP 状态都是 ESTABLISHED
+  ↓
+永远不知道对方掉线（直到一方发数据触发超时）
+```
 
-TCP 是字节流没有消息边界，所以会有粘包/拆包；应用层必须用长度字段、分隔符或固定长度等协议解决。
+**开启 keepalive**：
+```
+连接空闲 7200 秒（tcp_keepalive_time，默认）
+  ↓
+Server 发 keepalive 探测包
+  ↓
+Client 收不到（网线断）
+  ↓
+Server 等 75 秒再发，连续 9 次无响应
+  ↓
+判定连接死亡，通知应用层
+```
+
+最坏耗时：7200 + 75×9 = 7875 秒（约 2 小时 11 分）。生产中通常调短，或用应用层心跳。
+
+### 情况 3：Client 进程崩溃 vs 主机宕机
+
+| 情况 | 行为 | TCP 反应 |
+|------|------|---------|
+| 进程崩溃 | OS 回收资源时发 FIN | Server 正常关闭连接 |
+| 主机宕机/拔电源 | 无法发 FIN | 连接卡住，需 keepalive 或超时重传发现 |
+| 拔网线 | 物理层断 | 同上，看有无数据/keepalive |
+| 主机宕机后重启 | 重启后丢失所有连接状态 | 收到原连接的包会回 RST |
+
+进程崩溃时操作系统会发 FIN，对端正常进入四次挥手流程，**不需要 keepalive**。keepalive 主要针对主机宕机/网线断这种 FIN 发不出来的场景。
+
+## 代码示例
+
+模拟拔网线场景（应用层心跳方案）：
+
+```java
+import java.net.*;
+import java.io.*;
+
+public class HeartbeatClient {
+    public static void main(String[] args) throws Exception {
+        Socket socket = new Socket("server.example.com", 8080);
+        socket.setKeepAlive(true);  // 启用 TCP keepalive
+
+        // 同时用应用层心跳，更快感知断连
+        Thread heartbeat = new Thread(() -> {
+            try {
+                OutputStream out = socket.getOutputStream();
+                while (true) {
+                    out.write("PING\n".getBytes());
+                    out.flush();
+                    Thread.sleep(30000);  // 每 30 秒发一次
+                }
+            } catch (Exception e) {
+                System.out.println("Heartbeat failed: " + e.getMessage());
+            }
+        });
+        heartbeat.setDaemon(true);
+        heartbeat.start();
+
+        // 业务读写
+        BufferedReader in = new BufferedReader(
+            new InputStreamReader(socket.getInputStream()));
+        String line;
+        while ((line = in.readLine()) != null) {
+            System.out.println("Recv: " + line);
+        }
+    }
+}
+```
+
+调整内核 keepalive 参数：
+
+```bash
+# 调短到 60 秒空闲开始探测，10 秒间隔，3 次失败判定死亡
+$ sysctl net.ipv4.tcp_keepalive_time=60
+$ sysctl net.ipv4.tcp_keepalive_intvl=10
+$ sysctl net.ipv4.tcp_keepalive_probes=3
+# 最坏 60 + 10×3 = 90 秒发现死亡连接
+```
+
+## 实战场景
+
+| 场景 | 现象 | 处理 |
+|------|------|------|
+| 移动端网络切换 | 连接卡死 | 用 QUIC（支持连接迁移）或应用层心跳 + 重连 |
+| 服务端 keepalive 关闭 | 死亡连接堆积 | 调短 keepalive 或加应用层心跳 |
+| 客户端进程崩溃 | 服务端收到 FIN 正常关闭 | 不需要 keepalive |
+| 客户端主机宕机 | 服务端连接卡住 | 必须 keepalive 或应用层心跳 |
+| 长连接服务 | 连接泄漏 | 应用层心跳 + 空闲超时主动断开 |
+
+## 深挖追问
+
+**Q1：拔网线和断电有什么区别？**
+拔网线：物理层断，TCP 状态不变。重新插上数据能恢复。
+断电：主机直接死，无法发 FIN，TCP 状态在另一端卡住。重启后收到原连接包会回 RST。
+
+**Q2：为什么不直接断开 TCP？**
+TCP 设计上不知道物理层状态，物理层断了 TCP 看不到。这是设计取舍——TCP 只关心逻辑连接的可靠性，物理层状态由下层处理。
+
+**Q3：keepalive 默认参数够用吗？**
+不够。默认 2 小时才开始探测，生产中通常调短到 60 秒以内，或用应用层心跳（30-60 秒间隔）。
+
+**Q4：应用层心跳和 TCP keepalive 选哪个？**
+推荐应用层心跳。原因：
+- TCP keepalive 默认参数太长，调短影响所有连接
+- 应用层心跳能检测应用健康（如死锁）
+- 应用层心跳可携带业务信息
+
+**Q5：网线插回去后数据会丢吗？**
+重传期间未确认的数据不会丢，TCP 会重传补上。但重传上限达到后连接断开，未确认的数据就丢了。
+
+## 易错点
+
+- **"拔网线 TCP 立即断开"** — 不，TCP 不知道物理层状态，要靠重传或 keepalive 发现。
+- **"进程崩溃需要 keepalive"** — 不需要，进程崩溃时 OS 发 FIN。
+- **"keepalive 默认参数够用"** — 2 小时太久，生产必须调短。
+- **"网线插回去连接就断"** — 不，重传期间插回，连接自动恢复。
+- **"主机宕机和拔网线一样"** — 不一样，主机宕机后重启会回 RST，拔网线不会。
+
+## 总结
+
+拔网线后 TCP 的命运取决于有无数据传输和 keepalive 设置。有数据靠重传发现（约 16 分钟），无数据靠 keepalive（默认 2 小时）或一直保持。生产中长连接服务必须配置应用层心跳或调短 keepalive，否则死亡连接会占用资源。移动端网络频繁切换的场景，QUIC 的连接迁移是更好的方案。
+
+## 参考资料
+
+- [RFC 1122 — TCP Keep-Alives](https://datatracker.ietf.org/doc/html/rfc1122#section-4.2.3.6)
+- [RFC 7838 — QUIC Loss Detection and Congestion Control](https://datatracker.ietf.org/doc/html/rfc9002)

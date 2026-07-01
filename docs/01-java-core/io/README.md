@@ -1,39 +1,32 @@
-# IO
+# Java IO
 
-这一部分围绕 IO 的核心知识展开，目标是把概念、原理、场景和面试表达组织成可复习、可追问、可落地的知识体系。
+本目录覆盖 Java I/O 体系的核心知识：从 Unix I/O 模型到 Java BIO/NIO/AIO 三种实现，再到零拷贝、I/O 多路复用、Netty 框架的工程实践。
 
-## 面试复习重点
+## 目录
 
-- 核心概念是什么，解决了什么问题，和相邻知识点如何区分。
-- 面试官常从实现原理、适用场景、异常边界和性能影响继续追问。
-- 生产落地时要结合监控、日志、压测和故障预案验证方案。
+### 基础与分类
 
-## 建议掌握程度
+- [Unix IO 模型有哪几种](Unix-IO模型有哪几种？.md) — 五种 Unix I/O 模型，同步/异步的本质区别
+- [BIO、NIO、AIO 有什么区别](BIO、NIO、AIO有什么区别？.md) — Java 三种 I/O 模型对比与选型
+- [Java IO 体系如何分类](Java-IO体系如何分类？.md) — 字节流/字符流、节点流/处理流的分类维度
+- [Java IO 常见类有哪些](Java-IO常见类有哪些？.md) — 文件、字节流、字符流、序列化、网络的常用类
+- [Java IO 的装饰者模式如何体现](Java-IO的装饰者模式如何体现？.md) — FilterInputStream 系列的装饰者设计
 
-- **能讲清概念**：先用自己的话解释定义、背景和解决的问题。
-- **能画出链路**：把核心流程、关键组件和状态变化串起来。
-- **能回答追问**：准备优缺点、适用场景、常见坑和替代方案。
-- **能落地排查**：结合日志、指标、工具和案例说明如何定位问题。
+### 三种 I/O 模型详解
 
-## 文章导航
+- [Java BIO 是如何工作的](Java-BIO是如何工作的？.md) — 同步阻塞 I/O 的机制、线程池优化与适用边界
+- [Java NIO 是如何工作的](Java-NIO是如何工作的？.md) — Channel/Buffer/Selector 三大组件与事件循环
+- [Java AIO 是如何工作的](Java-AIO是如何工作的？.md) — CompletionHandler 异步回调模型与平台差异
 
-- [BIO-NIO-AIO是什么？](/01-java-core/io/BIO-NIO-AIO是什么？.md)
-- [Java-IO常见类有哪些？](/01-java-core/io/Java-IO常见类有哪些？.md)
-- [Java-IO的装饰者模式理解](/01-java-core/io/Java-IO的装饰者模式理解.md)
-- [Java-IO分类理解](/01-java-core/io/Java-IO分类理解.md)
-- [Java-IO如何实现零拷贝？](/01-java-core/io/Java-IO如何实现零拷贝？.md)
-- [Java-IO之AIO详解](/01-java-core/io/Java-IO之AIO详解.md)
-- [Java-IO之BIO详解](/01-java-core/io/Java-IO之BIO详解.md)
-- [Java-IO之I-O多路复用详解](/01-java-core/io/Java-IO之I-O多路复用详解.md)
-- [Java-IO之Netty框架概要](/01-java-core/io/Java-IO之Netty框架概要.md)
-- [Java-IO之NIO详解](/01-java-core/io/Java-IO之NIO详解.md)
-- [Unix-IO模型](/01-java-core/io/Unix-IO模型.md)
+### 进阶主题
 
-## 面试表达模板
+- [I/O 多路复用 select、poll、epoll 有什么区别](I-O多路复用select、poll、epoll有什么区别？.md) — 三种多路复用实现演进与 LT/ET 模式
+- [Java 如何实现零拷贝](Java如何实现零拷贝？.md) — mmap、sendfile、FileChannel.transferTo 与 Netty 零拷贝
+- [Netty 框架的核心设计是什么](Netty框架的核心设计是什么？.md) — Reactor 模型、Pipeline 责任链、ByteBuf 内存管理
 
-回答这类问题时，建议按下面顺序组织：
+## 复习路径
 
-1. 先给结论：一句话说明它是什么、解决什么问题。
-2. 再讲原理：说明核心组件、关键流程和数据结构。
-3. 补充场景：结合项目或线上问题说明什么时候用、怎么用。
-4. 说明边界：讲清楚缺点、风险、替代方案和排查手段。
+1. **先打地基**：从 Unix I/O 模型入手，理解"阻塞/非阻塞"与"同步/异步"的正交关系。
+2. **看 Java 实现**：对照 BIO/NIO/AIO 三种 Java 封装，看清各自的适用场景。
+3. **抓工程关键**：零拷贝和 I/O 多路复用是高并发服务的两大支柱。
+4. **落到框架**：Netty 是 Java 网络服务的工程化封装，掌握后即可理解 Dubbo、gRPC、Spring WebFlux 的底层。

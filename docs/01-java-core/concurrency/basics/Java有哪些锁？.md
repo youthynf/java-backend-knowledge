@@ -1,163 +1,239 @@
-# Java有哪些锁？
+# Java 有哪些锁
 
-Java有哪些锁？
-乐观锁与悲观锁
-乐观锁：认为自己在使用数据时不会有别的线程修改数据，所以不会添加锁，只是在更新数据的时候去判断之前有没有别的线程修改了这个数据，如果这个数据没有被更新，当前线程将自己修改的数据成功写入，如果数据已经被其他线程更新，则根据不同的实现方式执行不同的操作，如报错或重试。JUC原子类采用的是乐观锁。
-悲观锁：认为自己在使用数据的时候一定有别的线程来修改数据，因此在获取数据的时候会先加锁，确保数据不会被别的线程修改。Java中synchronized关键字和Lock的实现类都是悲观锁。
+## 核心概念
 
-// ------------------------- 悲观锁的调用方式 -------------------------
-// synchronized
-public synchronized void testMethod() {
-        // 操作同步资源
+Java 锁的世界看上去纷繁，其实只有三种分类视角：**对竞争的态度**（悲观 vs 乐观）、**对获取顺序的约定**（公平 vs 非公平）、**对持锁者的约束**（独占 vs 共享、可重入 vs 不可重入、是否阻塞）。加上 `synchronized` 在 JDK 6 后引入的锁升级机制（无锁→偏向锁→轻量级锁→重量级锁），就构成了 Java 锁的全景图。
+
+理解每种锁的关键不是死记定义，而是知道"它解决什么问题、代价是什么、什么时候选它"。比如悲观锁适合写多读少，乐观锁适合读多写少；公平锁吞吐低但避免饥饿，非公平锁吞吐高但可能饿死。`synchronized` 是 JVM 内置的悲观独占可重入锁，JUC 的 `ReentrantLock` 是它的高级版。
+
+## 标准回答
+
+Java 锁按维度分类：
+
+1. **悲观锁 vs 乐观锁**：悲观锁认为一定会被别人改，先加锁再操作（`synchronized` / `ReentrantLock`）；乐观锁认为不会冲突，提交时用 CAS 校验（`AtomicInteger` / `LongAdder`）。
+2. **公平锁 vs 非公平锁**：公平锁按申请顺序排队，避免饥饿但吞吐低；非公平锁允许插队，吞吐高但可能饿死队列线程。
+3. **可重入锁 vs 不可重入锁**：可重入锁允许同线程多次获取同一把锁（`synchronized` / `ReentrantLock`），不可重入锁重入会死锁。
+4. **独占锁 vs 共享锁**：独占锁只能一个线程持有（`synchronized` / `ReentrantLock`），共享锁允许多个线程同时持有（`ReentrantReadWriteLock.ReadLock` / `Semaphore`）。
+5. **自旋锁**：竞争时不立即阻塞，循环 CAS 尝试，避免上下文切换开销。
+6. **锁升级**：`synchronized` 专属，按竞争强度从无锁→偏向锁→轻量级锁→重量级锁单向膨胀。
+
+JDK 6 之后 `synchronized` 性能大幅提升，与 `ReentrantLock` 接近，选型更多看功能需求而非性能。
+
+## 实现原理
+
+### 悲观锁 vs 乐观锁
+
+| 维度 | 悲观锁 | 乐观锁 |
+|------|--------|--------|
+| 思路 | 先加锁再操作 | 不加锁，提交时 CAS 校验 |
+| 实现 | synchronized / ReentrantLock | AtomicInteger / LongAdder / 版本号 |
+| 适用 | 写多读少、竞争激烈 | 读多写少、冲突少 |
+| 代价 | 上下文切换、线程阻塞 | CAS 自旋、ABA 问题 |
+| 数据库对应 | `select ... for update` | version 字段 + update where version=? |
+
+### 公平锁 vs 非公平锁
+
+`ReentrantLock` 内部基于 AQS。公平锁的 `tryAcquire` 会先调用 `hasQueuedPredecessors()` 检查队列里有没有排在前面的线程，有就老老实实去排队；非公平锁直接 CAS 尝试抢，抢不到再入队。非公平锁吞吐高的原因是"刚释放锁的线程大概率还能立刻抢回来"，避免了唤醒阻塞线程的开销。
+
+```java
+// ReentrantLock.NonfairSync
+final boolean nonfairTryAcquire(int acquires) {
+    final Thread current = Thread.currentThread();
+    int c = getState();
+    if (c == 0) {
+        if (compareAndSetState(0, acquires)) { // 直接抢，不管队列
+            setExclusiveOwnerThread(current);
+            return true;
+        }
+    }
+    // ...
 }
-// ReentrantLock
-private ReentrantLock lock = new ReentrantLock(); // 需要保证多个线程使用的是同一个锁
-public void modifyPublicResources() {
-        lock.lock();
-        // 操作同步资源
-        lock.unlock();
+
+// ReentrantLock.FairSync
+final boolean tryAcquire(int acquires) {
+    final Thread current = Thread.currentThread();
+    int c = getState();
+    if (c == 0) {
+        if (!hasQueuedPredecessors() &&          // 先看队列里有没有先来的
+            compareAndSetState(0, acquires)) {
+            setExclusiveOwnerThread(current);
+            return true;
+        }
+    }
+    // ...
 }
+```
 
-// ------------------------- 乐观锁的调用方式 -------------------------
-private AtomicInteger atomicInteger = new AtomicInteger();  // 需要保证多个线程使用的是同一个AtomicInteger
-atomicInteger.incrementAndGet(); //执行自增1
+### 可重入锁的实现
 
-自旋锁和适应性自旋锁
-自旋锁：自旋锁是一种非阻塞锁，当线程需要获取锁时，如果锁已经被占用，不会立即阻塞当前线程，而是循环（自旋）检查锁的状态，直到锁被释放。优点是可以减少上下文切换开销，缺点是如果锁占用时间很长，会白白浪费处理器资源；
-适应性自旋锁：自旋锁的优化版本，动态调整自旋的时间。主要调整依据是历史获得锁的自旋时间、当前等待锁的线程数量、JVM运行时统计的锁竞争状态。synchronized和ReentrantLock已内置集成智能自旋策略。
+可重入锁在 AQS 的 `state` 上记录重入次数：第一次获取 state=1，重入 state+1，每次 unlock state-1，减到 0 才真正释放锁。`synchronized` 也类似——monitor 的 `_count` 字段记录重入次数。
 
-无锁、偏向锁、轻量级锁、重量级锁
-这四种锁是指锁的状态，专门针对synchronized的。其中偏向锁通过针对Mark Word解决锁的问题，避免执行CAS操作。而轻量级锁是通过用CAS操作和自旋来解决加锁问题，避免线程阻塞和唤醒而影响性能。重量级锁是将除了拥有锁的线程之外的线程都阻塞住。
-公平锁和非公平锁
-公平锁：指多个线程按照申请锁的顺序来获取锁，线程直接进入队列中排队，队列中的第一个线程才能获得锁。优点是等待锁的线程不会饿死，缺点是整体吞吐率相对非公平锁要低，等待队列中除了第一个线程之外的线程都会阻塞，CPU唤醒阻塞线程的开销比非公平锁大。
-非公平锁：多个线程加锁时直接尝试获得锁，获取不到才会进入等待队列的尾部等待，但如果此时锁刚好可用，那么这个线程可以无需阻塞直接获得锁。优点是可以减少CPU唤醒线程的开销，整体吞吐效率高，因为线程有几率不阻塞直接获得锁，CPU不需要唤醒所有线程。缺点是处于等待队列中的线程可能饿死或等待很久才获得锁。
+### synchronized 的锁升级
 
-可重入锁和非可重入锁
-可重入锁：指在同一个线程在外层方法获取锁的时候，再次进入该线程的内层方法会自动获取锁（前提是锁对象前后是同一个对象或class）。底层实现原理是通过记录当前持有锁的线程和重入次数（计数器）实现的。优点是可以一定程度上避免死锁。Java中的ReentrantLock和synchronized都是可重入锁。
+`ynchronized` 在 JDK 6 之后引入"锁升级"机制，根据竞争强度自动选择不同实现：
 
+| 锁状态 | 触发条件 | Mark Word 标志 | 实现方式 | 适用场景 |
+|--------|----------|----------------|----------|----------|
+| 无锁 | 新建对象 | 01 (biased=0) | 无 | 没有同步 |
+| 偏向锁 | 首次被某线程访问 | 01 (biased=1) | CAS 写线程 ID 到 Mark Word | 单线程重复进入 |
+| 轻量级锁 | 出现竞争 | 00 | CAS 自旋（实际不自旋，直接膨胀） | 短暂、交替执行 |
+| 重量级锁 | 长时间持有或激烈竞争 | 10 | OS mutex + monitor | 长临界区 |
+
+升级是单向的——一旦升级到重量级锁就不会降级（GC 安全点可能批量撤销偏向锁除外）。注意 JDK 15 已废弃偏向锁（JEP 374），JDK 18 默认禁用。
+
+> 详细升级流程见 [synchronized基本原理是什么？](/01-java-core/concurrency/keywords/synchronized基本原理是什么？.md)。
+
+### 共享锁的实现
+
+`ReentrantReadWriteLock` 用 AQS 的 `state` 高 16 位记录读锁持有数、低 16 位记录写锁重入数。读锁是共享锁，多个线程可同时持有；写锁是独占锁，与所有读锁互斥。`Semaphore` 也是共享锁，state 记录剩余许可数。
+
+## 代码示例
+
+### 悲观锁（synchronized）
+
+```java
+public class PessimisticCounter {
+    private int count;
+
+    public synchronized void inc() {
+        count++; // 同一时刻只有一个线程能进入
+    }
+}
+```
+
+### 乐观锁（CAS）
+
+```java
+import java.util.concurrent.atomic.AtomicInteger;
+
+public class OptimisticCounter {
+    private final AtomicInteger count = new AtomicInteger();
+
+    public void inc() {
+        count.incrementAndGet(); // CAS 自旋，无锁
+    }
+}
+```
+
+### 公平锁 vs 非公平锁
+
+```java
 import java.util.concurrent.locks.ReentrantLock;
 
-public class ReentrantLockDemo {
+public class FairLockDemo {
+    private static void test(boolean fair) {
+        ReentrantLock lock = new ReentrantLock(fair);
+        for (int i = 0; i < 5; i++) {
+            new Thread(() -> {
+                for (int j = 0; j < 3; j++) {
+                    lock.lock();
+                    try {
+                        System.out.println(Thread.currentThread().getName() + " got lock");
+                    } finally { lock.unlock(); }
+                }
+            }, "t-" + i).start();
+        }
+    }
+    // fair=true：按 t-0, t-1, t-2 顺序循环
+    // fair=false：可能出现某个线程连续抢到多次
+}
+```
+
+### 可重入锁
+
+```java
+import java.util.concurrent.locks.ReentrantLock;
+
+public class ReentrantDemo {
     private final ReentrantLock lock = new ReentrantLock();
 
     public void outer() {
         lock.lock();
         try {
-            System.out.println("Outer lock");
-            inner(); // 可重入
-        } finally {
-            lock.unlock();
-        }
+            System.out.println("outer, hold count = " + lock.getHoldCount()); // 1
+            inner();
+        } finally { lock.unlock(); }
     }
 
     public void inner() {
         lock.lock();
         try {
-            System.out.println("Inner lock");
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    public static void main(String[] args) {
-        new ReentrantLockDemo().outer();
+            System.out.println("inner, hold count = " + lock.getHoldCount()); // 2
+        } finally { lock.unlock(); }
     }
 }
-非可重入锁：同一个线程无法重复获得同一把锁，试图重入会导致死锁。底层实现是仅检查当前锁是否被占用，不区分持有线程。
+```
 
-public class NonReentrantLock {
-    private boolean isLocked = false;
-    private Thread lockedBy = null;
+### 读写锁
 
-    public synchronized void lock() throws InterruptedException {
-        while (isLocked && lockedBy != Thread.currentThread()) {
-            wait(); // 非当前线程持有锁时阻塞
-        }
-        isLocked = true;
-        lockedBy = Thread.currentThread();
+```java
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+public class Cache<K, V> {
+    private final ReentrantReadWriteLock rwl = new ReentrantReadWriteLock();
+    private final java.util.Map<K, V> map = new java.util.HashMap<>();
+
+    public V get(K key) {
+        rwl.readLock().lock();
+        try { return map.get(key); } finally { rwl.readLock().unlock(); }
     }
 
-    public synchronized void unlock() {
-        if (Thread.currentThread() == lockedBy) {
-            isLocked = false;
-            lockedBy = null;
-            notify();
-        }
-    }
-}
-
-// 测试（会死锁！）
-public class NonReentrantDemo {
-    private final NonReentrantLock lock = new NonReentrantLock();
-
-    public void outer() throws InterruptedException {
-        lock.lock();
-        try {
-            System.out.println("Outer lock");
-            inner(); // 尝试重入，导致死锁
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    public void inner() throws InterruptedException {
-        lock.lock();
-        try {
-            System.out.println("Inner lock");
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    public static void main(String[] args) throws InterruptedException {
-        new NonReentrantDemo().outer(); // 调用outer()会阻塞在inner()
+    public void put(K key, V value) {
+        rwl.writeLock().lock();
+        try { map.put(key, value); } finally { rwl.writeLock().unlock(); }
     }
 }
+```
 
-ReentrantLock和NonReentrantLock都继承父类AQS，其父类AQS中维护了一个同步状态status来计算重入次数，status为0。当线程尝试获取锁时，可重入锁现场时获取并更新status值，如果status≠0，则判断当前线程是否获取到这个锁，如果时的话直接status+1，且当前线程可以再次获得锁；而非重入锁是直接去获取并尝试更新当前status指，如果status≠0的话会导致其获取锁失败，当前线程阻塞。释放锁时，可重入锁同样先获取当前status的值，在当前线程时持有锁的线程的前提下，如果status==0，则表示所有重复获取锁的操作都执行完成，才会真正释放锁；而非重入锁则是在确定当前线程时持有锁的线程后，直接将status置0，将锁释放。
+## 实战场景
 
-独享锁和共享锁
-独享锁：也叫排它锁，指该锁只能被一个线程持有，如果线程A对某数据加上排他锁后，则其他线程不能对该数据加任何类型的锁。获得排它锁的线程既能读取数据，又能修改数据。JDK中的synchronized和JUC中的Lock实现类就是独享锁。
-共享锁：指锁可以被多个线程持有，如果线程A对某数据加上共享锁后，其他线程只能对该数据加共享锁，不能加排它锁。获得共享锁的线程只能读取数据，不能修改数据。
+| 场景 | 推荐锁 | 理由 |
+|------|--------|------|
+| 简单同步块 | `synchronized` | 语法简单、JVM 自动释放、JDK 6+ 性能接近 ReentrantLock |
+| 需要可中断 / 超时 / 公平 / 多条件 | `ReentrantLock` | synchronized 不支持这些高级特性 |
+| 读多写少（缓存） | `ReentrantReadWriteLock` / `StampedLock` | 读读并发，写独占 |
+| 高并发计数 | `LongAdder` | 比 `AtomicLong` 在写激烈时性能好（分段累加） |
+| 状态标记 | `volatile` | 不需要锁，只保证可见性 |
+| 数据库乐观锁 | version 字段 | `update t set val=?, version=version+1 where id=? and version=?`，看影响行数 |
 
-注：独享锁和共享锁也是通过AQS来实现的，通过实现不同的方法，来实现独享或共享。
+## 深挖追问
 
-## 面试总结
+### synchronized 和 ReentrantLock 怎么选？
 
-围绕「Java有哪些锁？」，面试官通常不只考概念定义，更关注你能否把机制、使用场景和线上问题串起来。
+简单同步优先 `synchronized`（自动释放、JVM 优化充分）；需要可中断、超时、公平、多条件队列时用 `ReentrantLock`。详见 [synchronized与ReentrantLock区别是什么？](/01-java-core/concurrency/keywords/synchronized与ReentrantLock区别是什么？.md)。
 
-### 核心回答
+### 公平锁和非公平锁到底怎么选？
 
-1. Java 并发问题的核心是共享状态在多线程下的可见性、原子性和有序性。
-2. 设计并发方案时要明确线程之间如何协作、如何退出、如何处理异常和超时。
-3. 工程上还要考虑线程池复用、上下文清理、监控告警和压测验证。
+绝大多数场景用非公平锁（默认）。只有"必须避免饥饿"——比如交易系统中希望请求按到达顺序处理——才考虑公平锁，并接受吞吐下降 5-10 倍。详见 [公平锁与非公平锁实现原理与区别是什么？](/01-java-core/concurrency/JUC/公平锁与非公平锁实现原理与区别是什么？.md)。
 
-### 高频追问
+### 悲观锁和乐观锁冲突大时怎么办？
 
-- 这个机制解决的是互斥、通信、调度还是资源隔离？
-- 高并发下可能出现死锁、饥饿、活锁还是性能退化？
-- 如何用线程 Dump 或指标证明你的判断？
+冲突激烈时乐观锁的 CAS 自旋会消耗大量 CPU，反而比悲观锁差。这种场景要么换悲观锁，要么用分段锁（`LongAdder` / `ConcurrentHashMap` 的分段）降低单点冲突。详见 [悲观锁和乐观锁的区别是什么？](/01-java-core/concurrency/JUC/悲观锁和乐观锁的区别是什么？.md)。
 
-### 实战落地
+### 锁升级为什么不能降级？
 
-- **选型前**：先判断是互斥访问、线程协作、任务编排，还是限流隔离。
-- **编码时**：控制共享变量范围，明确锁对象、超时策略、异常处理和资源释放。
-- **上线后**：观察线程数、队列长度、阻塞时间、拒绝次数和 RT 抖动，必要时用线程 Dump 验证。
+降级需要全局安全点（safepoint）扫描所有线程，开销大；而且大多数场景下"已经激烈竞争过"的对象往往会继续被激烈竞争，降级收益小。JDK 只在 GC safepoint 时批量撤销或重偏向。
 
-### 易错点
+### StampedLock 是什么？和 ReentrantReadWriteLock 有什么区别？
 
-- 不要用 sleep 代替同步协作。
-- 不要忽略中断、超时和资源释放。
-## 核心概念
-Java有哪些锁？ 可以放在“并发能力”这条主线里理解。复习时不要只背结论，要先说明它解决的核心问题，再解释关键机制、适用边界和代价。围绕这个知识点，重点关注：线程安全、可见性、原子性、锁竞争、线程池参数、队列选择、拒绝策略和故障隔离。如果面试官继续追问，通常会从“为什么这样设计、在什么场景会失效、线上如何排查”三个方向展开。
+`StampedLock` 是 JDK 8 引入的乐观读写锁。它支持"乐观读"——先读一个 stamp，读完数据后再 validate stamp，如果 validate 失败说明期间有写操作，再升级为悲观读锁重读。乐观读不阻塞写线程，读多写少场景吞吐比 `ReentrantReadWriteLock` 高。代价是不支持重入，使用复杂，容易出 bug。
 
-## 面试回答与追问
-- **标准回答**：先给出 Java有哪些锁？ 的定位，再说明它依赖的核心原理，最后结合业务场景说明如何使用。回答时要把“能解决什么问题”和“会带来什么成本”一起讲清楚。
-- **常见追问**：如果数据量、并发量或调用链路继续放大，Java有哪些锁？ 的瓶颈会出现在哪里？如何观测、如何优化、如何回滚？
-- **易错点**：不要把概念和具体实现混在一起，也不要只说 API 名称。面试中更重要的是说清楚边界条件、失败场景和取舍依据。
+## 易错点
 
-## 实战场景与排查
-典型落地场景包括：高并发接口、异步任务、定时任务、批量处理、缓存刷新、消息消费等需要控制吞吐与稳定性的场景。实际处理线上问题时，可以按“现象确认 → 指标采集 → 假设验证 → 小步修复 → 复盘沉淀”的路径推进。先看日志、监控、链路追踪和核心指标，再判断是容量问题、配置问题、代码路径问题，还是外部依赖抖动。
+- 用 `synchronized (字符串常量)` 或 `synchronized (Integer.valueOf(1))`——常量被共享，可能锁住无关业务。
+- `ReentrantLock` 忘了 `unlock` 或没放 finally——异常时锁泄漏，所有线程卡死。
+- `ReentrantReadWriteLock` 在持有读锁时尝试获取写锁——死锁（写锁要等所有读锁释放，自己持有的读锁永远不释放）。
+- `LongAdder` 用在需要精确值的场景——`sum()` 不是原子快照，并发下可能不准。
+- 以为 `volatile` 是锁——它只保证可见性，不保证复合操作原子性。
 
 ## 总结
-复习 Java有哪些锁？ 时，建议把它和相邻知识点放在一起比较：相同点是什么、区别在哪里、为什么当前场景选择它而不是替代方案。能讲清楚这些内容，才算真正掌握。
+
+Java 锁按"悲观/乐观、公平/非公平、可重入、独占/共享"四个维度分类。`synchronized` 是悲观、非公平、可重入、独占的内置锁，配合 JDK 6 后的锁升级机制性能接近 `ReentrantLock`。`ReentrantLock` 提供可中断、超时、公平、多条件队列等高级特性。读多写少用 `ReentrantReadWriteLock` 或 `StampedLock`，计数用 `LongAdder`。选型的核心是"看场景功能需求，而非性能差异"。
+
+## 参考资料
+
+- [Java 锁详解——美团技术团队](https://tech.meituan.com/2018/11/15/java-lock.html)
+- [ReentrantLock 官方文档](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/util/concurrent/locks/ReentrantLock.html)
+- [JEP 374: Disable and Deprecate Biased Locking](https://openjdk.org/jeps/374)
+
+---

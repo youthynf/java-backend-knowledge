@@ -77,20 +77,21 @@
 
 ### network-layer
 
-- [ARP协议作用是什么？](/08-network/network-layer/ARP协议作用是什么？.md)：网络层面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [CIDR无分类地址是什么？](/08-network/network-layer/CIDR无分类地址是什么？.md)：网络层面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [DHCP协议作用是什么？](/08-network/network-layer/DHCP协议作用是什么？.md)：网络层面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [ICMP是什么？](/08-network/network-layer/ICMP是什么？.md)：网络层面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [IGMP是什么？](/08-network/network-layer/IGMP是什么？.md)：网络层面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [IPV4和IPV6有什么区别？](/08-network/network-layer/IPV4和IPV6有什么区别？.md)：网络层面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [IP分片与重组机制是什么？](/08-network/network-layer/IP分片与重组机制是什么？.md)：网络层面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [IP地址是如何分类的？](/08-network/network-layer/IP地址是如何分类的？.md)：网络层面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [NAT网络地址转换是什么？](/08-network/network-layer/NAT网络地址转换是什么？.md)：网络层面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [打开网页发生的网络过程是怎么样的？](/08-network/network-layer/打开网页发生的网络过程是怎么样的？.md)：网络层面试复习，重点关注核心机制、典型追问、实战场景和易错点。
+- [ARP协议作用是什么？](/08-network/network-layer/ARP协议作用是什么？.md)：ARP 地址解析、缓存机制与 ARP 欺骗防御。
+- [CIDR无分类地址是什么？](/08-network/network-layer/CIDR无分类地址是什么？.md)：CIDR 任意前缀、子网划分与路由聚合、私有 IP 范围。
+- [DHCP协议作用是什么？](/08-network/network-layer/DHCP协议作用是什么？.md)：DORA 四步获取 IP 配置、租期续约与 DHCP Relay。
+- [ICMP是什么？](/08-network/network-layer/ICMP是什么？.md)：IP 控制与诊断协议，ping/traceroute 原理与 ICMPv6。
+- [IGMP是什么？](/08-network/network-layer/IGMP是什么？.md)：IPv4 组播成员管理、Snooping 与 PIM 协作。
+- [IPv4和IPv6有什么区别？](/08-network/network-layer/IPv4和IPv6有什么区别？.md)：地址格式、首部简化、分片策略与 SLAAC/NDP 差异。
+- [IP分片与重组机制是什么？](/08-network/network-layer/IP分片与重组机制是什么？.md)：MTU/MSS/PMTUD 关系与生产中避免分片的实践。
+- [IP地址是如何分类的？](/08-network/network-layer/IP地址是如何分类的？.md)：A/B/C/D/E 五类划分、私有 IP 范围与特殊地址。
+- [NAT网络地址转换是什么？](/08-network/network-layer/NAT网络地址转换是什么？.md)：NAPT 端口复用、NAT 类型与 STUN/TURN 穿透。
+- [路由协议有哪些？OSPF与BGP有什么区别？](/08-network/network-layer/路由协议有哪些？OSPF与BGP有什么区别？.md)：IGP/EGP、链路状态 vs 路径矢量、最长前缀匹配。
+- [打开网页发生的网络过程是怎么样的？](/08-network/network-layer/打开网页发生的网络过程是怎么样的？.md)：DNS/ARP/TCP/TLS/HTTP 全流程串讲与排障工具。
 
 ### network-model
 
-- [网络OSI模型和TCP/IP模型是什么？](/08-network/network-model/网络OSI模型和TCP-IP模型是什么？.md)：网络模型面试复习，重点关注核心机制、典型追问、实战场景和易错点。
+- [OSI模型与TCPIP模型有什么区别？](/08-network/network-model/OSI模型与TCPIP模型有什么区别？.md)：七层 vs 四层、每层职责、封装解封装与分层意义。
 
 ### network-security
 

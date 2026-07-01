@@ -1,90 +1,296 @@
-# Redis如何实现分布式锁？
+# Redis 如何实现分布式锁
 
 ## 核心概念
 
-Redis如何实现分布式锁？
-Redis分布式锁是什么
-分布式锁是用于分布式环境下并发控制的一种机制，用于控制某个资源在同一时刻只能被一个应用所使用。Redis 本身可以被多个客户端共享访问，正好就是一个共享存储系统，可以用来保存分布式锁，而且 Redis 的读写性能高，可以应对高并发的锁操作场景。
+分布式锁用于在分布式系统中协调多个进程对共享资源的互斥访问。Redis 是共享存储，且具备 `SET NX PX` 原子加锁能力，是分布式锁最常见的实现载体。
 
-Redis分布式锁原理机制
-Redis 的 SET 命令有个 NX 参数可以实现「key不存在才插入」，所以可以用它来实现分布式锁：
-如果 key 不存在，则显示插入成功，可以用来表示加锁成功；
-如果 key 存在，则会显示插入失败，可以用来表示加锁失败。
-
-Redis分布式锁具体实现
-基于 Redis 节点实现分布式锁时，对于加锁操作，我们需要满足三个条件：
-加锁包括了读取锁变量、检查锁变量值和设置锁变量值三个操作，但需要以原子操作的方式完成，所以，我们使用 SET 命令带上 NX 选项来实现加锁；
-锁变量需要设置过期时间，以免客户端拿到锁后发生异常，导致锁一直无法释放，所以，我们在 SET 命令执行时加上 EX/PX 选项，设置其过期时间；
-锁变量的值需要能区分来自不同客户端的加锁操作，以免在释放锁时，出现误释放操作，所以，我们使用 SET 命令设置锁变量值时，每个客户端设置的值是一个唯一值，用于标识客户端；
-满足这三个条件的分布式命令如下：
-
-SET lock_key unique_value NX PX 10000
-lock_key 就是 key 键；
-unique_value 是客户端生成的唯一的标识，区分来自不同客户端的锁操作；
-NX 代表只在 lock_key 不存在时，才对 lock_key 进行设置操作；
-PX 10000 表示设置 lock_key 的过期时间为 10s，这是为了避免客户端发生异常而无法释放锁。
-而解锁的过程就是将 lock_key 键删除（del lock_key），但不能乱删，要保证执行操作的客户端就是加锁的客户端。所以，解锁的时候，我们要先判断锁的 unique_value 是否为加锁客户端，是的话，才将 lock_key 键删除。
-
-可以看到，解锁是有两个操作，这时就需要 Lua 脚本来保证解锁的原子性，因为 Redis 在执行 Lua 脚本时，可以以原子性的方式执行，保证了锁释放操作的原子性。
-
-// 释放锁时，先比较 unique_value 是否相等，避免锁的误释放
-if redis.call("get",KEYS[1]) == ARGV[1] then
-    return redis.call("del",KEYS[1])
-else
-    return 0
-end
-这样一来，就通过使用 SET 命令和 Lua 脚本在 Redis 单节点上完成了分布式锁的加锁和解锁。
-
-基于 Redis 实现分布式锁有什么优缺点？
-基于 Redis 实现分布式锁的优点：
-性能高效（这是选择缓存实现分布式锁最核心的出发点）。
-实现方便。很多研发工程师选择使用 Redis 来实现分布式锁，很大成分上是因为 Redis 提供了 setnx 方法，实现分布式锁很方便。
-避免单点故障（因为 Redis 是跨集群部署的，自然就避免了单点故障）。
-基于 Redis 实现分布式锁的缺点：
-超时时间不好设置。如果锁的超时时间设置过长，会影响性能，如果设置的超时时间过短会保护不到共享资源。
-那么如何合理设置超时时间呢？ 我们可以基于续约的方式设置超时时间：先给锁设置一个超时时间，然后启动一个守护线程，让守护线程在一段时间后，重新设置这个锁的超时时间。实现方式就是：写一个守护线程，然后去判断锁的情况，当锁快失效的时候，再次进行续约加锁，当主线程执行完成后，销毁续约锁即可，不过这种方式实现起来相对复杂。
-Redis 主从复制模式中的数据是异步复制的，这样导致分布式锁的不可靠性。
-如果在 Redis 主节点获取到锁后，在没有同步到其他节点时，Redis 主节点宕机了，此时新的 Redis 主节点依然可以获取锁，所以多个应用服务就可以同时获取到锁。
-
-Redis 如何解决集群情况下分布式锁的可靠性？
-为了保证集群环境下分布式锁的可靠性，Redis 官方已经设计了一个分布式锁算法 Redlock（红锁）。它是基于多个 Redis 节点的分布式锁，即使有节点发生了故障，锁变量仍然是存在的，客户端还是可以完成锁操作。官方推荐是至少部署 5 个 Redis 节点，而且都是主节点，它们之间没有任何关系，都是一个个孤立的节点。Redlock 算法的基本思路，是让客户端和多个独立的 Redis 节点依次请求申请加锁，如果客户端能够和半数以上的节点成功地完成加锁操作，那么我们就认为，客户端成功地获得分布式锁，否则加锁失败。这样一来，即使有某个 Redis 节点发生故障，因为锁的数据在其他节点上也有保存，所以客户端仍然可以正常地进行锁操作，锁的数据也不会丢失。
-
-Redlock 算法加锁三个过程：
-第一步是，客户端获取当前时间（t1）。
-第二步是，客户端按顺序依次向 N 个 Redis 节点执行加锁操作：
-加锁操作使用 SET 命令，带上 NX，EX/PX 选项，以及带上客户端的唯一标识。
-如果某个 Redis 节点发生故障了，为了保证在这种情况下，Redlock 算法能够继续运行，我们需要给「加锁操作」设置一个超时时间（不是对「锁」设置超时时间，而是对「加锁操作」设置超时时间），加锁操作的超时时间需要远远地小于锁的过期时间，一般也就是设置为几十毫秒。
-第三步是，一旦客户端从超过半数（大于等于 N/2+1）的 Redis 节点上成功获取到了锁，就再次获取当前时间（t2），然后计算计算整个加锁过程的总耗时（t2-t1）。如果 t2-t1 < 锁的过期时间，此时，认为客户端加锁成功，否则认为加锁失败。
-可以看到，加锁成功要同时满足两个条件：如果有超过半数的 Redis 节点成功的获取到了锁，并且总耗时没有超过锁的有效时间，那么就是加锁成功）。
-
-加锁成功后，客户端需要重新计算这把锁的有效时间，计算的结果是「锁最初设置的过期时间」减去「客户端从大多数节点获取锁的总耗时（t2-t1）」。如果计算的结果已经来不及完成共享数据的操作了，我们可以释放锁，以免出现还没完成数据操作，锁就过期了的情况。加锁失败后，客户端向所有 Redis 节点发起释放锁的操作，释放锁的操作和在单节点上释放锁的操作一样，只要执行释放锁的 Lua 脚本就可以了。
-
-## 面试官想考什么
-
-- 能否区分全局锁、表锁、行锁、记录锁、间隙锁、临键锁、意向锁。
-- 能否根据 SQL 条件、索引命中情况推断加锁范围。
-- 是否掌握死锁定位、规避和失败重试。
+一句话结论：**单机 Redis 用 `SET key value NX PX timeout` 加锁 + Lua 脚本安全释放；多机场景用 Redlock 算法；生产推荐 Redisson（封装了重入、看门狗、Redlock）。务必避开 SETNX + EXPIRE 非原子、误删他人锁、锁超时等经典坑。**
 
 ## 标准回答
 
-Redis 基础题不要只说“快”，要说明内存模型、数据结构、网络模型、持久化、高可用以及使用边界。它适合做缓存、计数、排行榜、分布式锁、队列等，但不是无限容量的主数据库。
+| 维度 | 单机 Redis 锁 | Redlock | Redisson |
+|------|---------------|---------|----------|
+| 加锁 | `SET NX PX` | N 个节点各 `SET NX PX` | 封装 SET NX + 看门狗 |
+| 释放 | Lua 脚本比对 value 后 DEL | 各节点 Lua 释放 | Lua + 自动续期 |
+| 可重入 | 不支持 | 不支持 | 支持（Hash + 计数） |
+| 故障容错 | 主从切换可能丢锁 | 多数节点存活即可 | 同 Redlock |
+| 生产推荐 | 简单场景 | 强一致场景 | 通用 |
+
+## 详细机制
+
+### 1. 单机 Redis 分布式锁
+
+#### 加锁三要素
+
+1. **原子性加锁**：`SET key value NX PX timeout`，一条命令完成"不存在则设置 + 设过期时间"；
+2. **唯一标识**：value 必须是客户端唯一 ID（如 UUID），用于安全释放；
+3. **过期时间**：避免持锁客户端异常导致死锁。
+
+```bash
+SET lock:order:1001 "uuid-abc-123" NX PX 30000
+```
+
+- `NX`：key 不存在才设置；
+- `PX 30000`：过期时间 30 秒（毫秒）；
+- value 用 UUID 标识持锁者。
+
+#### 释放锁：Lua 脚本保证安全
+
+释放时要先判断 value 是否匹配自己，避免误删他人锁。这两步必须原子，用 Lua：
+
+```lua
+-- unlock.lua
+-- KEYS[1] = lock key
+-- ARGV[1] = unique value (UUID)
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+    return redis.call('DEL', KEYS[1])
+else
+    return 0
+end
+```
+
+```bash
+EVAL "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end" 1 lock:order:1001 "uuid-abc-123"
+```
+
+### 2. 经典坑：SETNX + EXPIRE 非原子
+
+错误写法：
+
+```bash
+SETNX lock:order 1       # 加锁成功
+EXPIRE lock:order 30     # 设过期时间
+```
+
+如果 SETNX 成功后客户端崩溃，EXPIRE 没执行，锁永远不释放，导致死锁。**正确做法是用 `SET key value NX PX timeout` 一条命令完成**（Redis 2.6.12+ 支持）。
+
+### 3. 经典坑：误删他人锁
+
+错误写法：
+
+```bash
+DEL lock:order   # 直接删除
+```
+
+如果客户端 A 持锁超时（业务执行慢），锁过期后客户端 B 加锁成功，A 这时执行 `DEL` 会把 B 的锁删掉。**正确做法是 value 设唯一 ID，释放前用 Lua 比对**。
+
+### 4. 锁超时问题：看门狗续期
+
+业务执行时间可能超过锁过期时间，导致锁提前释放，多个客户端同时进入临界区。解决方案：
+
+**方案 A：看门狗自动续期**
+
+启动后台线程，定期检查锁是否仍属于自己，是则延长 TTL。Redisson 内置此机制（默认每 10 秒续期一次，将 TTL 重置为 30 秒）。
+
+**方案 B：合理设置超时时间**
+
+业务最长耗时 + 余量。但仍可能因网络抖动失败。
+
+**方案 C：逻辑过期**
+
+参考"缓存击穿"的逻辑过期方案，锁不设物理 TTL，由业务方判断逻辑有效性。
+
+### 5. Redlock 算法
+
+针对主从异步复制可能导致锁丢失的问题，Redis 作者提出 Redlock：基于多个独立 Redis 节点（至少 5 个），客户端向多数节点申请锁。
+
+**加锁流程**：
+
+1. 记录当前时间 t1；
+2. 依次向 N 个节点执行 `SET NX PX`，每个节点设较短超时（如 50ms）；
+3. 若成功获取 `>= N/2 + 1` 个节点的锁，且总耗时 `< TTL`，则加锁成功；
+4. 锁的实际有效时间 = TTL - (t2 - t1)；
+5. 失败则向所有节点发释放请求。
+
+```text
+客户端 → Node1 ✓
+       → Node2 ✓
+       → Node3 ✗ (超时)
+       → Node4 ✓
+       → Node5 ✗
+成功数 = 4 >= 3 (5/2+1) → 加锁成功
+```
+
+**Redlock 争议**：Martin Kleppmann 在文章中质疑 Redlock 在时钟漂移、GC pause 等场景下仍不安全。antirez 写文反驳。生产实践通常用 Redlock + 额外业务约束（如数据库唯一约束、版本号）兜底。
+
+### 6. Redisson 实现
+
+Redisson 是 Java 生态最成熟的 Redis 客户端，分布式锁是它的招牌特性。
+
+```java
+RLock lock = redisson.getLock("lock:order:1001");
+try {
+    // 加锁，默认 30 秒 TTL，看门狗自动续期
+    lock.lock();
+    // 业务逻辑
+} finally {
+    if (lock.isHeldByCurrentThread()) {
+        lock.unlock();
+    }
+}
+```
+
+特性：
+
+- **可重入**：基于 Hash 结构，key 是锁名，field 是客户端 ID，value 是重入次数；
+- **看门狗续期**：默认每 10 秒续期到 30 秒；
+- **公平锁/非公平锁**：`getFairLock()` / `getLock()`；
+- **读写锁**：`getReadWriteLock()`；
+- **信号量/闭锁**：`getSemaphore()` / `getCountDownLatch()`；
+- **Redlock**：`getRedissonRedLock(nodes)`。
+
+## 代码示例
+
+### 原生 Jedis 实现（理解原理）
+
+```java
+public class RedisLock {
+    private final Jedis jedis;
+    private static final String UNLOCK_SCRIPT =
+        "if redis.call('GET', KEYS[1]) == ARGV[1] then " +
+        "  return redis.call('DEL', KEYS[1]) " +
+        "else return 0 end";
+
+    public boolean tryLock(String key, String value, long ttlMs) {
+        String result = jedis.set(key, value, SetParams.setParams().nx().px(ttlMs));
+        return "OK".equals(result);
+    }
+
+    public boolean unlock(String key, String value) {
+        Object res = jedis.eval(
+            UNLOCK_SCRIPT,
+            Collections.singletonList(key),
+            Collections.singletonList(value)
+        );
+        return Long.valueOf(1).equals(res);
+    }
+}
+```
+
+### Redisson 生产用法
+
+```java
+@Service
+public class OrderService {
+    @Autowired private RedissonClient redisson;
+
+    public void createOrder(Long orderId) {
+        RLock lock = redisson.getLock("lock:order:" + orderId);
+        try {
+            // 尝试加锁，最多等 5 秒，持锁 30 秒（看门狗续期）
+            if (lock.tryLock(5, 30, TimeUnit.SECONDS)) {
+                // 业务逻辑
+                doBusiness(orderId);
+            } else {
+                throw new RuntimeException("获取锁失败");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            if (lock.isHeldByCurrentThread()) {
+                lock.unlock();
+            }
+        }
+    }
+}
+```
+
+### Redisson 可重入锁原理
+
+```text
+锁结构：Hash
+key: lock:order:1001
+field: client-uuid:thread-1
+value: 2  (重入次数)
+
+加锁：HINCRBY lock:order:1001 client-uuid:thread-1 1
+释放：HINCRBY lock:order:1001 client-uuid:thread-1 -1
+     若 value = 0 则 DEL lock:order:1001
+```
+
+整个流程用 Lua 脚本保证原子性。
+
+## 实战场景
+
+| 场景 | 方案 | 注意点 |
+|------|------|--------|
+| 订单防重复提交 | SETNX + 短 TTL | value 用 UUID |
+| 库存扣减 | Redisson 可重入锁 | 配合数据库乐观锁兜底 |
+| 定时任务防并发 | SETNX + 长业务 TTL | 看门狗续期 |
+| 跨服务资源协调 | Redisson + Redlock | 强一致场景才用 |
+| 限流 | 不用分布式锁 | 用 Lua + 计数器 |
+| 防止账户并发操作 | Redisson + DB 乐观锁 | 双保险 |
+| 分布式任务调度 | Redisson + 数据库状态 | 防止重复执行 |
 
 ## 深挖追问
 
-1. Redis 为什么快？内存、高效结构、事件循环和少锁竞争。
-2. Redis 能替代数据库吗？多数场景不能，持久化和一致性边界不同。
-3. 使用 Redis 最怕什么？大 Key、热 Key、无 TTL、容量失控和阻塞命令。
+### SETNX + EXPIRE 为什么不安全？
 
-## 实战场景 / SQL 示例
+非原子，中间崩溃会导致锁永远不释放。必须用 `SET key value NX PX timeout`（Redis 2.6.12+）。
 
-```text
-SETEX token:uid:100 3600 <token>
-INCR article:pv:1
-ZINCRBY hot:rank 1 article:1
-```
+### 释放锁为什么要用 Lua？
 
-## 易错点 / 总结
+GET + DEL 两步非原子，中间可能锁过期被他人拿走，DEL 就误删。Lua 脚本保证"判断 + 删除"原子。
 
-- 不要只看 SQL 文本，要看实际执行计划和索引。
-- 死锁不能完全避免，业务要能幂等重试。
-- 大批量更新建议拆批，降低锁持有时间。
+### 主从切换时锁会丢吗？
+
+会。主节点加锁后异步复制到从节点，主节点宕机切换时，从节点还没收到锁信息，新主允许其他客户端加锁。Redlock 算法是为解决此问题提出，但有争议。
+
+### Redlock 真的安全吗？
+
+存在争议。Martin Kleppmann 指出：时钟漂移、GC pause 可能导致客户端以为还持锁，实际已过期。antirez 反驳：合理配置时钟同步 + 业务侧兜底（如 DB 唯一约束）足够。生产推荐 Redlock + 业务兜底。
+
+### Redisson 看门狗的默认行为？
+
+- `lock.lock()`：默认 30 秒 TTL，看门狗每 10 秒续期一次；
+- `lock.lock(30, TimeUnit.SECONDS)`：显式指定 TTL 时**不启动**看门狗；
+- `lock.tryLock(waitTime, leaseTime, unit)`：leaseTime > 0 时不启动看门狗；
+- `lock.tryLock(waitTime, -1, unit)`：leaseTime = -1 启动看门狗。
+
+### 分布式锁和数据库乐观锁怎么选？
+
+| 维度 | Redis 分布式锁 | DB 乐观锁 |
+|------|----------------|-----------|
+| 性能 | 高 | 中 |
+| 强一致 | 弱（异步复制） | 强 |
+| 复杂度 | 中 | 低（version 字段） |
+| 适用 | 高并发、可容忍极端不一致 | 强一致业务 |
+
+关键金融场景建议 DB 乐观锁为主，Redis 锁为辅。
+
+### Redisson 公平锁和非公平锁区别？
+
+- **非公平锁**（默认）：新请求直接尝试加锁，成功就抢，不管等待队列。吞吐高；
+- **公平锁**：按请求顺序加锁，避免饥饿。吞吐略低。
+
+`redisson.getFairLock("lock")` 获取公平锁。
+
+### 锁的粒度怎么定？
+
+- 太粗（如全局锁）：吞吐骤降；
+- 太细（如每行一个锁）：管理复杂，Redis 内存压力；
+- 经验：按业务实体粒度（如 `lock:order:{orderId}`）。
+
+## 易错点
+
+- 用 SETNX + EXPIRE 两步加锁，崩溃导致死锁；
+- 释放锁不比对 value，误删他人锁；
+- 业务超时未做续期，锁提前释放；
+- 用 `DEL` 释放未持有的锁；
+- 主从切换场景仍用单机锁，导致锁失效；
+- 把 Redis 分布式锁当强一致用，金融场景出问题；
+- 锁粒度过大（如全局锁），吞吐骤降；
+- Redisson 锁不释放（看门狗续期导致锁被长期持有）；
+- 不设置最大等待时间，请求堆积。
+
+## 总结
+
+Redis 分布式锁的核心是 **`SET NX PX` + Lua 释放**，单机场景已经够用。**生产推荐 Redisson**，它封装了看门狗续期、可重入、Redlock 等能力。极端强一致场景需结合 DB 乐观锁或唯一约束兜底。**关键坑**：SETNX + EXPIRE 非原子、误删他人锁、锁超时未续期、主从切换锁丢失。
+
+## 参考资料
+
+- [Redis 官方文档：Distributed locks with Redis](https://redis.io/docs/manual/patterns/distributed-locks/)
+- [Martin Kleppmann: How to do distributed locking](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html)
+- [Redisson 文档：Distributed locks and synchronizers](https://github.com/redisson/redisson/wiki/8.-distributed-locks-and-synchronizers)
+
+---

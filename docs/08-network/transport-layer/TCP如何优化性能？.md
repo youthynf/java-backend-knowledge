@@ -1,112 +1,224 @@
-# TCP如何优化性能？
+# TCP 如何优化性能
+
 ## 核心概念
 
-TCP协议是由操作系统实现，所以操作系统提供了不少调节TCP的参数。可以从三个角度阐述提升TCP的策略：
-TCP三次握手的性能提升
-TCP四次握手的性能提升
-TCP数据传输的性能提升
+TCP 性能优化从三个角度入手：**握手阶段**（减少建连开销）、**挥手阶段**（处理 TIME_WAIT 和 CLOSE_WAIT）、**数据传输阶段**（提升吞吐和降低延迟）。每个角度都有对应的内核参数和应用层策略。
 
-TCP三次握手的性能提升
-TCP是面向连接的、可靠的、基于字节流的双向传输的传输层通信协议，所以在传输数据之前需要经过三次握手才能建立连接。握手建立连接的过程在一个HTTP请求的平均时间占比10%以上，在网络不佳、高并发或者遭遇SYN攻击等场景中，提升TCP握手性能很有必要。客户端与服务端的优化方式不同。
+## 标准回答
 
-客户端优化策略：
-SYNC_SENT状态优化：如果客户端长时间没有收到SYN+ACK报文，则会重发SYN包。
-重发次数由tcp_sync_retries参数控制，默认5次，每次重发的等待时间是上次2倍。可以根据网络的稳定性和目标服务器的繁忙程度，修改SYN的重传次数，调整客户端握手的时间上限，从而适当减少超时重传的次数，尽快把错误暴露给应用程序。
+| 优化方向 | 关键参数/策略 |
+|---------|-------------|
+| 三次握手 | `tcp_syn_retries`、`tcp_synack_retries`、`tcp_max_syn_backlog`、`somaxconn`、`tcp_fastopen` |
+| 四次挥手 | `tcp_tw_reuse`、`tcp_max_tw_buckets`、`tcp_fin_timeout`、`tcp_orphan_retries` |
+| 数据传输 | `tcp_wmem`、`tcp_rmem`、`tcp_window_scaling`、`tcp_congestion_control`、`tcp_sack` |
+| 应用层 | 长连接、连接池、批量发送、压缩 |
 
-服务端优化策略：
-调整半连接队列大小：当服务端的SYN半连接队列溢出后，会导致后续的链接被丢弃，可以通过netstat -s观察半连接队列的溢出情况。
-如果SYN半连接队列溢出情况比较严重，可以通过tcp_max_syn_backlog、somaxconn、backlog参数调整SYN半连接队列的大小。
+核心思路：减少握手延迟、避免连接状态堆积、扩大窗口和缓冲区、用现代拥塞算法（BBR）。
 
-SYN_RECV状态优化：
-通过调整tcp_synack_retries参数控制回复SYN+ACK的重传次数；
-如果受到SYN攻击，应该把tcp_syncookies参数设置为1，表示仅在SYN队列满后开启syncookie功能，保证正常链接的成功建立；
+## 详细机制
 
-调整全连接队列大小：服务端收到客户端返回的ACK，会把连接移入accept队列，等待应用程序调用accept函数取出连接。可以通过ss -lnt查看服务端进程的accept队列长度，如果accept队列溢出，系统默认丢弃ACK。
-如果可以把tcp_abort_on_overflow设置为1，表示用RST通知客户端连接建立失败；
-如果accept队列溢出严重，可以通过listen函数的backlog参数和somaxconn系统参数提高队列大小，accept队列长度取决于两者的最小值；
+### 三次握手优化
 
-绕过三次握手：
-通过TCP Fast Open功能可以绕过三次握手，使得HTTP请求减少了1个RTT的时间，Linux下可以通过tcp_fastopen参数开启这个功能，同时必须保证服务端和客户端同时支持。 
+**客户端优化**：
+```bash
+# 减少 SYN 重传次数，加速失败（默认 6）
+$ sysctl net.ipv4.tcp_syn_retries=3
+```
 
-TCP四次挥手优化
-四次挥手过程只涉及了两种报文，分别是「FIN报文」和「ACK报文」。其中FIN报文就是结束连接的意思，谁发出FIN报文，就表示它将不会再发送任何数据，关闭这一方向上的传输通道；ACK报文就是确认的意思，用来通知对方已收到对方发送通道关闭报文。只有主动关闭方才有TIME_WAIT状态。
+**服务端优化**：
+```bash
+# 增大半连接队列（默认 1024）
+$ sysctl net.ipv4.tcp_max_syn_backlog=8192
 
-主动方优化策略：
-关闭连接的方式通常有两种，分别是「RST报文关闭」和「FIN报文关闭」。如果进程收到RST报文，就直接关闭连接，不需要走四次挥手流程，是一个暴力关闭连接的方式。安全关闭连接的方式必须通过四次挥手，它由进程调用close和shutdown函数发起FIN报文（shutdown函数需要传入SHUT_WR或者SHUT_RDWR才会发送FIN）。
-调用close函数和shutdown函数有什么区别？
-close函数：调用后意味着完全断开连接，完全断开不仅指无法传输数据，而且也不能发送数据。此时调用了close函数的一方连接叫做「孤儿连接」，如果使用netstat -p命令查看，会发现连接对应的进程名为空。使用此方法关闭连接是不优雅的。
-shutdown函数：他可以控制只关闭一个方向的连接，支持两个入参，第一个参数是in sock，第二个参数是int howto。其中第二个参数决定断开的方式：
-SHUT_RD（0）：关闭连接的读方向，如果接收缓冲区有已接收的数据，则会被丢弃，并且后续再收到新的数据，会对数据进行ACK，然后瞧瞧丢弃，而发送方并不知道数据已经被丢弃；
-SHUT_WR（1）：关闭连接的写方向，这就是常被称为半关闭的连接，如果发送缓冲区中还有未发送的数据，将被立即发送出去，并发送一个FIN报文给对端；
-SHUT_RDW（2）：相当于SHUT_RD和SHUT_WR操作各执行一次，关闭这个套接字的读和写两个方向。
+# 增大全连接队列上限（默认 128 或 4096）
+$ sysctl net.core.somaxconn=8192
 
-FIN_WAIT状态优化：如果发送FIN报文后，迟迟收不到对方的ACK导致出现大量FIN_WAIT1状态的连接。
-考虑降低tcp_orphan_retries的值，当重传次数超过tcp_orphan_reties时，连接就会直接关闭掉，默认值为8。
-通过调整tcp_max_orphans参数，它定义了孤儿连接（应用程序通过调用close函数关闭的连接）的最大数量，因为它无法再发送和接收数据，可以考虑减少此类连接的资源占用。
-正常情况下，调低tcp_orphan_retires就已经可以了，如果遇到恶意攻击，FIN报文根本没有发送出去，这由于TCP两个特性导致的：
-首先，TCP必须保证报文是有序的，FIN报文也是，当发送缓冲区还有数据没有发送，FIN报文也不能提前发送；
-其次，TCP有流量控制功能，当接收方接收窗口为0时，发送方就不能发送数据。所以当攻击者下载大文件是，就可以通过接收窗口设置为0，这导致FIN报文都无法发送出去，那么连接一致处于FIN_WAIT1状态。
+# 减少 SYN+ACK 重传次数（默认 5）
+$ sysctl net.ipv4.tcp_synack_retries=2
 
-FIN_WAIT2状态优化：如果连接是用shutdown函数关闭的，连接可以一直处于FIN_WAIT2，因为它可能还可以发送或接收数据（取决于第二个入参，决定关闭读，还是关闭写，还是两个同时关闭）。但是对于close函数关闭的孤儿连接，由于无法再发送和接收数据，所以这个状态不会持续太久。
-通过tcp_fin_timeout参数控制了这个状态下连接的持续时长，默认是60秒，如果60秒后还没有收到FIN报文，孤儿连接就会直接关闭。
+# 开启 SYN Cookies 防 SYN Flood
+$ sysctl net.ipv4.tcp_syncookies=1
+```
 
-TIME_WAIT状态优化：
-Linux提供了tcp_max_tw_buckets参数，当TIME_WAIT的连接数量超过该参数时，新关闭的连接就不再经历TIME_WAIT而直接关闭；当服务器的并发连接增多时，相应地，同时处于TIME_WAIT的连接数量也会变多，此时应该调大tcp_max_tw_buckets参数，减少不同连接件数据错乱的概率。
-Linux提供了tcp_tw_reuse参数，支持建立新连接时复用处于TIME_WAIT状态的连接。但是需要注意，该参数是只用于建立连接的发起方，因为是在调用connect函数式起作用的，而对于服务端是没有用的。
-tcp_tw_reuse从协议角度理解是安全可控的，可以服用处于TIME_WAIT的端口为新的连接所用。之所以安全可控是因为：
-只适用于连接的发起方，也就是C/S模型的客户端；
-对应的TIME_WAIT状态的连接创建时间超过1秒才可以被复用
-使用这个选项还有另一个前提，需要打开对TCP时间戳的支持，双方都需要打开。使用TCP时间戳后，带来一些好处：
-前面提到的等待2MSL（TIME_WAIT状态的持续时间）问题就不复存在了，因为重复的数据会因为包含过期的时间戳被自然丢弃；
-还可以防止序列号饶回问题，也是因为重复数据包会由于时间戳过期被自然丢弃；
-通过设置socket选项（l_onoff≠0，l_linger=0），那么调用close后，会立即发送一个RST报文给对端，该TCP连接将会跳过四次挥手，也就跳过TIME_WAIT状态，直接关闭。但这种方式只推荐在客户端使用，服务端千万不要使用，因为服务端已调用close就发送RST报文的话，客户端就总是看到TCP连接错误“connection reset by peer”。
+应用层也要调大 listen backlog：
 
-被动方优化策略：
-当被动方收到FIN报文时，内核会自动回复ACK，之后连接处于CLOSE_WAIT状态，表示等待应用程序调用close函数关闭连接，内核没有权利替代应用进程去关闭连接。当使用netstat命令发现大量CLOSE_WAIT状态，则需要排查代码是否遗漏close调用。
-调整FIN报文重发次数：调用close函数后，内核就会发出FIN报文关闭发送通道，同时进入LAST_ACK状态，等待对方返回ACK确认连接关闭，如果迟迟等不到ACK则进行重传FIN报文，重发次数仍然使用tcp_orphan_retries参数控制，与主动方重试FIN报文策略一致；
-如果被动方迅速调用close函数，那么被动房的ACK和FIN有可能在一个报文中发送，这样看来四次挥手变成三次挥手；
+```java
+// Java 调整 listen backlog
+new ServerSocket(8080, 8192);
+```
 
-如果双方同时调用close函数，也就是同时发送FIN报文，若双方在等待ACK报文的过程中，都等来了FIN报文，这是一种新的情况，所以连接会进入一种叫做CLOSING的新状态，它替代了FIN_WAIT2状态，接着双方内核回复ACK确认对方发送通道的关闭后，进入TIME_WAIT状态，等待2MSL的时间后，连接自动关闭。
+**TCP Fast Open**（绕过握手）：
 
-TCP数据传输性能优化
-TCP会保证每一个报文都能够抵达对方，实现机制是：报文发出去后，必须接收到对方返回的ACK确认报文，如果迟迟没有收到，就会超时重传该报文，直到收到对方的ACK或超出最大重试次数为止。所以，TCP报文发出去之后，并不会立马从内存中删除，因为重传时还需要用到它。由于TCP是内核维护的，所以报文存放在内核缓冲区，如果连接非常多，内核的缓冲区内存占用也会很大。
+```bash
+# 开启 TCP Fast Open（默认 0）
+# 1=客户端，2=服务端，3=双向
+$ sysctl net.ipv4.tcp_fastopen=3
+```
 
-TCP为了解决发送一个数据，都要进行一次确认应答后才发送下一个导致的通信效率低下问题，支持了批量发送报文，在批量确认报文，并且支持如果一个ACK报文丢失，还可以在下一个ACK确认报文中确认。但是这个批量并不能随心所欲的发送，还需要考虑接收方的处理能力，因此TCP提供了一种机制可以让发送方根据接收方的实际接收能力控制发送的数据量，这就是滑动窗口的由来。
+TFO 让后续连接在 SYN 阶段就携带数据，省 1 RTT。首次连接仍需握手获取 Cookie。
 
-传输性能优化策略：
-启用窗口扩大因子：在Linux下通过设置tcp_window_scaling=1（默认打开），启用窗口扩大因子功能，提升滑动窗口的上限，以提升发送速度，满足当今高速网络要求；
-TCP头部格式中的窗口大小只有2个字节，因此它最多能表达65535字节大小的窗口，也就是64KB大小，当在当今告诉网络下，很显然不够用的，所以后续有了扩充窗口的方法：在TCP选项字段定义了窗口扩大银子，用于扩大TCP通告窗口，其大小为2^14，这样使得TCP窗口大小从16位扩大为30位，所以此时窗口的最大值可以是1GB。
-调节缓冲区大小：发送端缓冲区时自行调节的，通过tcp_wmem参数指定初始值、动态范围最小值和动态范围最大值；接收端缓冲区则可以根据系统空闲内存的大小来调节接收窗口，通过tcp_rmem参数指定初始值、动态范围最小值和动态范围最大值。不同的是，发送缓冲区的自动调节功能是自动开启的，而服务端的缓冲区则需要配置tcp_moderate_rcvbuf=1来开启自动调节功能。
-TCP的传输速度，受限于发送窗口和接收窗口，以及网络设备的传输能力。其中窗口大小由内核缓冲区大小决定，如果缓冲区与网络传输能力匹配，那么缓冲区的利用率就达到了最大化。
-带宽时延积决定网络中飞行报文的大小，比如最大宽带是100MB/s，网络时延RTT是10ms，则意味着客户端到服务端的网络一共可以存放100MB/2*0.01s=1MB的字节。一旦飞行的报文超过当前网络的带宽时延积时，就会导致网络过载，容易丢包。
-由于发送缓冲区大小决定了发送窗口的上限，而发送窗口又决定了已发送未确认的飞行报文的上限，因此发送缓冲区不能超过带宽时延积。
-调节TCP内存范围：通过tcp_mem进行配置，配置支持设置三个值，这三个数字的单位不是字节，而是页面大小，1页表示4KB。当TCP内存小于第1个值时，不需要进行自动调节；在最1个值与第2个值之间时，内核开始调节接收缓冲区的大小；大于第3个值时，内核不在为TCP分配新内存，此时新连接是无法建立的。
+### 四次挥手优化
 
-在高并发服务器中，为了兼顾网速与大量的并发连接，我们应当保证缓冲区的动态调整的最大值达到带宽时延积，而最小值保持默认的4K不变即可，而对于内存紧张的服务而言，调低默认值是提高并发的有效手段。同时，如果这是网络IO型的服务器，那么，调大tcp_mem的上线可以让TCP连接使用更多的系统内存，这有利于提升并发能力。需要注意的时，tcp_wmem和tcp_rmem的单位是字节，而tcp_mem的单位是页面大小，而且千万不要在socket上直接设置SO_SNBUF或者SO_RCVBUF，这样会关闭缓冲区的动态调节功能。
+**TIME_WAIT 优化**：
 
-## 面试总结
-### 核心概念
+```bash
+# 复用 TIME_WAIT 端口（仅客户端 connect 生效）
+$ sysctl net.ipv4.tcp_tw_reuse=1
 
-传输层负责端到端通信。TCP 面向连接、可靠、有序、字节流，依靠三次握手、序列号、确认、重传、滑动窗口、流量控制和拥塞控制；UDP 无连接、开销小、不保证可靠。
+# TIME_WAIT 上限（默认 18000，超限直接清除）
+$ sysctl net.ipv4.tcp_max_tw_buckets=5000
 
-### 面试官想考什么
+# 注意：tcp_tw_recycle 已废弃，4.12 起移除
+```
 
-面试官高频考 TCP 三次握手/四次挥手、TIME_WAIT/CLOSE_WAIT、可靠传输、粘包、拥塞控制、连接异常和性能调优。
+**FIN_WAIT 优化**：
 
-### 标准回答
+```bash
+# FIN_WAIT_2 等待被动方 FIN 的最长时间（默认 60 秒）
+$ sysctl net.ipv4.tcp_fin_timeout=15
 
-TCP 建连通过 SYN、SYN+ACK、ACK 确认双方收发能力；断连通常四次挥手，因为双方方向的数据流要分别关闭。可靠性来自序列号、ACK、超时/快速重传、滑动窗口和校验。TIME_WAIT 保护旧报文消失并保证对端收到最后 ACK；CLOSE_WAIT 多通常是应用未主动关闭连接。UDP 适合实时音视频、DNS、QUIC 等可自定义可靠性或容忍丢包的场景。
+# 孤儿连接（已 close 但未完全关闭）的 FIN 重传次数（默认 0，表示用 tcp_retries2）
+$ sysctl net.ipv4.tcp_orphan_retries=3
+```
 
-### 深挖追问
+**CLOSE_WAIT 优化**：
+不能靠内核参数解决，必须改代码：用 try-with-resources 保证 socket/InputStream 关闭，连接池借出后必须归还。
 
-- 这个现象发生在内核 TCP 状态机、网络链路还是应用代码中？
-- 如何用 ss/netstat、tcpdump、内核计数器证明丢包、重传、半连接或 TIME_WAIT 问题？
-- 哪些 Linux 参数、连接池参数和超时设置会影响生产表现？
+### 数据传输优化
 
-### 实战场景/示例
+**窗口与缓冲区**：
 
-Java 服务大量 CLOSE_WAIT，优先检查代码是否未关闭 socket/HTTP 响应流，或连接池释放逻辑异常；大量 TIME_WAIT 则看短连接、主动关闭方和连接复用。
+```bash
+# 启用窗口缩放（默认开启）
+$ sysctl net.ipv4.tcp_window_scaling=1
 
-### 易错点/总结
+# 发送缓冲区自动调节范围（min default max，字节）
+$ sysctl net.ipv4.tcp_wmem="4096 65536 16777216"
 
-TCP 是字节流没有消息边界，所以会有粘包/拆包；应用层必须用长度字段、分隔符或固定长度等协议解决。
+# 接收缓冲区自动调节范围
+$ sysctl net.ipv4.tcp_rmem="4096 87380 16777216"
+
+# 开启接收缓冲区自动调节
+$ sysctl net.ipv4.tcp_moderate_rcvbuf=1
+```
+
+缓冲区大小要匹配 BDP（带宽时延积）：
+
+```
+BDP = 带宽 × RTT
+例：1 Gbps × 100ms = 12.5 MB
+缓冲区至少 12.5 MB 才能打满带宽
+```
+
+**拥塞控制算法**：
+
+```bash
+# 查看当前算法
+$ sysctl net.ipv4.tcp_congestion_control
+net.ipv4.tcp_congestion_control = cubic
+
+# 切换到 BBR
+$ sysctl net.ipv4.tcp_congestion_control=bbr
+$ sysctl net.core.default_qdisc=fq
+```
+
+BBR 适合高丢包率或跨地域链路，CUBIC 适合低延迟内网。
+
+**SACK 和 Timestamps**：
+
+```bash
+# 选择确认（默认开启）
+$ sysctl net.ipv4.tcp_sack=1
+
+# 时间戳（默认开启，PAWS 和 RTT 测量必需）
+$ sysctl net.ipv4.tcp_timestamps=1
+```
+
+### 应用层优化
+
+```java
+// 1. 长连接 + 连接池
+try (CloseableHttpClient client = HttpClients.custom()
+        .setMaxConnTotal(100)
+        .setMaxConnPerRoute(20)
+        .setDefaultRequestConfig(RequestConfig.custom()
+            .setConnectTimeout(5000)
+            .setSocketTimeout(10000)
+            .build())
+        .build()) {
+    // 复用连接，避免频繁握手
+}
+
+// 2. 批量发送
+try (Socket socket = new Socket("...", 80);
+     BufferedOutputStream out = new BufferedOutputStream(socket.getOutputStream())) {
+    // 缓冲输出，减少小包
+    out.write(data);
+}
+
+// 3. 关闭 Nagle 算法（仅低延迟场景）
+socket.setTcpNoDelay(true);
+```
+
+### 抓包与监控
+
+```bash
+# 查看连接状态分布
+$ ss -tan | awk 'NR>1 {print $1}' | sort | uniq -c
+
+# 查看队列积压
+$ ss -tln
+# Recv-Q > 0 表示全连接队列积压
+
+# 重传统计
+$ nstat -az TcpRetransSegs TcpExtTCPLostRetransmit
+
+# 各连接详细信息（含 cwnd、rto、rtt）
+$ ss -ti
+```
+
+## 实战场景
+
+| 场景 | 优化策略 |
+|------|---------|
+| 短连接压测 | 长连接 + tcp_tw_reuse + 调大 port_range |
+| 跨地域大文件 | BBR + 调大缓冲区 + Window Scale |
+| 高并发服务端 | 调大 somaxconn + backlog + 全连接队列 |
+| 实时音视频 | UDP + 应用层 FEC/重传 |
+| 内网低延迟 | CUBIC + 关闭 Nagle |
+| 弱网移动端 | BBR + 应用层心跳 + 重连 |
+
+## 深挖追问
+
+**Q1：调大缓冲区一定提升吞吐吗？**
+不一定。缓冲区超过 BDP 不会进一步提升吞吐，反而浪费内存和增加延迟。要匹配 BDP。
+
+**Q2：BBR 一定比 CUBIC 好吗？**
+不一定。BBR 在高丢包率链路优势明显，但在低延迟内网可能不如 CUBIC。BBR 对缓冲区膨胀也敏感。
+
+**Q3：开 `tcp_tw_reuse` 有风险吗？**
+风险很小，依赖 timestamps 防止旧报文复活。只在客户端 connect 时生效，服务端 accept 不受影响。
+
+**Q4：TFO 在生产中常用吗？**
+不常用。需要客户端和服务端都支持，且首包数据有重放风险。HTTP/3 + QUIC 是更好的替代。
+
+**Q5：内核参数调整后立即生效吗？**
+`sysctl -w` 立即生效但重启丢失；写入 `/etc/sysctl.conf` 后 `sysctl -p` 持久化。已建立的连接不受新参数影响。
+
+## 易错点
+
+- **"调大所有参数就好"** — 要根据场景，盲目调大可能浪费内存或引入不稳定。
+- **"BBR 总是优于 CUBIC"** — 不一定，看场景。
+- **"`tcp_tw_recycle` 还能用"** — 4.12 起移除，不要再开。
+- **"调内核参数能解决 CLOSE_WAIT"** — 不能，必须改代码。
+- **"缓冲区越大越好"** — 要匹配 BDP，过大浪费内存且增延迟。
+
+## 总结
+
+TCP 性能优化分三个角度：握手阶段调队列和重传次数，挥手阶段处理 TIME_WAIT，数据传输阶段调缓冲区和拥塞算法。生产推荐：长连接 + 连接池 + BBR + 合理缓冲区 + 开启 SACK/timestamps。`tcp_tw_recycle` 已废弃，CLOSE_WAIT 必须改代码。监控看 `ss -tan`、`ss -ti`、`nstat`。
+
+## 参考资料
+
+- [Linux TCP 参数文档](https://www.kernel.org/doc/Documentation/networking/ip-sysctl.txt)
+- [BBR 论文](https://research.google/pubs/pub45646/)
+- [RFC 7323 — Window Scale](https://datatracker.ietf.org/doc/html/rfc7323)

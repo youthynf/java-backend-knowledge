@@ -1,34 +1,26 @@
-# 中间件与消息队列
+# 消息队列与中间件
 
-这一部分关注消息中间件、搜索/网关/应用服务器等常用基础设施。复习时要围绕可靠性、顺序性、幂等、性能瓶颈和故障恢复来组织答案。
+本目录覆盖消息中间件（Kafka、RocketMQ、RabbitMQ）和后端常用基础设施（Zookeeper、Nginx、ElasticSearch、ClickHouse、Tomcat）。复习主线是：可靠性、顺序性、幂等、性能瓶颈和故障恢复。
 
-## 面试复习重点
+## 目录
 
-- 核心概念是什么，解决了什么问题，和相邻知识点如何区分。
-- 面试官常从实现原理、适用场景、异常边界和性能影响继续追问。
-- 生产落地时要结合监控、日志、压测和故障预案验证方案。
+- [MQ 基础](/04-mq/basics/) — 消息模型、投递语义、重复消费、顺序、积压等共性问题
+- [Kafka](/04-mq/Kafka/) — 高吞吐日志流平台，分区/副本/ISR、生产者 ack、Exactly-Once
+- [RocketMQ](/04-mq/rocketmq/) — 阿里出品业务消息中间件，事务消息、延迟消息、死信队列
+- [RabbitMQ](/04-mq/rabbitmq/) — 基于 AMQP 的灵活路由消息中间件，Exchange/Queue/Binding
+- [Zookeeper](/04-mq/Zookeeper/) — 分布式协调服务，ZAB、Watcher、临时节点、选主
+- [Nginx](/04-mq/Nginx/) — 反向代理与七层负载均衡，events/http 模块、限流
+- [ElasticSearch](/04-mq/ElasticSearch/) — 分布式搜索分析引擎，倒排索引、分片副本、refresh
+- [ClickHouse](/04-mq/ClickHouse/) — 列式 OLAP 数据库，MergeTree、分区/分片、物化视图
+- [Tomcat](/04-mq/Tomcat/) — Servlet 容器，Connector/Container、线程模型、类加载
 
-## 建议掌握程度
+## 选型速查
 
-- **能讲清概念**：先用自己的话解释定义、背景和解决的问题。
-- **能画出链路**：把核心流程、关键组件和状态变化串起来。
-- **能回答追问**：准备优缺点、适用场景、常见坑和替代方案。
-- **能落地排查**：结合日志、指标、工具和案例说明如何定位问题。
-
-## 文章导航
-
-- [消息队列基础](/04-mq/basics/README.md)
-- [Kafka 总览](/04-mq/Kafka/README.md)
-- [RocketMQ 总览](/04-mq/rocketmq/README.md)
-- [RabbitMQ 总览](/04-mq/rabbitmq/README.md)
-- [ElasticSearch](/04-mq/ElasticSearch/README.md)
-- [Zookeeper](/04-mq/Zookeeper/README.md)
-
-## 面试表达模板
-
-回答这类问题时，建议按下面顺序组织：
-
-1. 先给结论：一句话说明它是什么、解决什么问题。
-2. 再讲原理：说明核心组件、关键流程和数据结构。
-3. 补充场景：结合项目或线上问题说明什么时候用、怎么用。
-4. 说明边界：讲清楚缺点、风险、替代方案和排查手段。
+| 中间件 | 核心定位 | 典型场景 |
+|--------|----------|----------|
+| Kafka | 高吞吐日志流 | 日志采集、埋点、流计算、数据管道 |
+| RocketMQ | 业务消息 | 订单交易、事务消息、延迟取消、顺序消费 |
+| RabbitMQ | 灵活路由 | 复杂业务路由、企业内部异步通信 |
+| ElasticSearch | 近实时搜索 | 全文检索、日志分析、聚合统计 |
+| ClickHouse | 列式 OLAP | 报表分析、用户行为、海量明细聚合 |
+| Tomcat | Servlet 容器 | Spring Boot 内嵌、传统 WAR 部署 |

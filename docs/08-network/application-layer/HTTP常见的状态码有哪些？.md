@@ -1,71 +1,214 @@
-# HTTP常见的状态码有哪些？
+# HTTP 常见的状态码有哪些
 
-HTTP常见的状态码有哪些？
-常见的状态码：
-100：Continue服务器已经收到请求的初始部分，客户端应继续发送剩余部分；
-101：Switching Protocols服务器同意切换协议，如从Http1.1切换到WebSocket；
-102：Processing请求已被接受，但服务器尚未完成处理（WebDAV扩展）；
-200：OK请求成功，服务器返回请求的数据；
-201：Created请求成功并创建了新的资源，通常在POST或PUT请求后返回；
-202：Accepted请求已接收但尚未处理，最终状态未知；
-204：No Content请求成功，单服务器没有返回任何内容，通常用于DELET请求；
-300：Multiple Choices用户请求了多个选项的资源，返回选项列表；
-301：Moved Permanently请求的资源已永久移动到新位置，需要用新的URL访问；
-302：Found请求的资源暂时移动到新的位置，客户端应继续使用原始URL；
-303：See Other客户端使用GET方法访问另一个URL（通常用于POST请求后的重定向）；
-304：Not Modified资源未修改，客户端可使用缓存内容；
-307：Tmeporary Redirect请求暂时重定向到另一个 URL，且方法不变，严格模式；
-308：Permanent Redirect请求永久重定向到新 URL，方法不变，严格模式；
-400：Bad Request请求格式错误；
-401：Unauthorized没有授权；
-402：Payment Required请先付费；
-403：Forbidden禁止访问；
-404：Not Found没有找到；
-405：Method Not Allowed方法不被允许；
-406：Not Acceptable服务端可以提供的内容和客户端期待的不一致；
-500：Internal Server Error内部服务器错误；
-501：Not Implemented没有实现；
-502：Bad Gateway网关错误；
-503：Service Unavailable服务不可用；
-504：Gateway Timeout网关超时；
-505：Http Version Not Supported版本不支持。
-
-## 面试总结
-### 核心概念
-
-HTTP 状态码表示服务端对请求的处理结果，分为 1xx 信息、2xx 成功、3xx 重定向、4xx 客户端错误、5xx 服务端错误。
-
-### 面试官想考什么
-
-面试官想看你是否能根据状态码定位问题，而不只是背数字。
-
-### 标准回答
-
-常见状态码：200 成功，201 创建，204 无内容；301/302 重定向，304 缓存命中；400 参数错误，401 未认证，403 无权限，404 不存在，409 冲突，429 限流；500 服务端异常，502 网关上游错误，503 不可用，504 网关超时。
-
-### 深挖追问
-
-- 这个行为发生在浏览器、客户端库、代理网关还是后端服务？
-- 如果接口偶发超时/失败，如何用 curl、DevTools、网关日志和 tcpdump 分层验证？
-- 连接池、缓存、CDN、TLS 或反向代理配置会怎样改变现象？
-
-### 实战场景/示例
-
-接口经 Nginx 返回 504，通常表示网关等上游响应超时，需要同时查网关超时配置和后端接口耗时。
-
-### 易错点/总结
-
-4xx 不一定都是前端错，可能是后端鉴权或参数契约设计问题；5xx 也可能由网关或下游服务引起。
 ## 核心概念
-HTTP常见的状态码有哪些？ 可以放在“网络协议能力”这条主线里理解。复习时不要只背结论，要先说明它解决的核心问题，再解释关键机制、适用边界和代价。围绕这个知识点，重点关注：连接建立、报文结构、状态码、长连接、拥塞控制、TLS、代理和超时重试。如果面试官继续追问，通常会从“为什么这样设计、在什么场景会失效、线上如何排查”三个方向展开。
 
-## 面试回答与追问
-- **标准回答**：先给出 HTTP常见的状态码有哪些？ 的定位，再说明它依赖的核心原理，最后结合业务场景说明如何使用。回答时要把“能解决什么问题”和“会带来什么成本”一起讲清楚。
-- **常见追问**：如果数据量、并发量或调用链路继续放大，HTTP常见的状态码有哪些？ 的瓶颈会出现在哪里？如何观测、如何优化、如何回滚？
-- **易错点**：不要把概念和具体实现混在一起，也不要只说 API 名称。面试中更重要的是说清楚边界条件、失败场景和取舍依据。
+HTTP 状态码是服务端对请求处理结果的三位数字编码，告知客户端"发生了什么"。状态码分五大类（1xx 信息、2xx 成功、3xx 重定向、4xx 客户端错误、5xx 服务端错误），每类有具体码值。掌握状态码不仅是背数字，更要理解语义和实际场景中的对应关系——同样 401 和 403 经常被混用，502 和 504 的差异决定排查方向。
 
-## 实战场景与排查
-典型落地场景包括：接口超时、连接耗尽、网关转发、上传下载、移动端弱网和跨域访问。实际处理线上问题时，可以按“现象确认 → 指标采集 → 假设验证 → 小步修复 → 复盘沉淀”的路径推进。先看日志、监控、链路追踪和核心指标，再判断是容量问题、配置问题、代码路径问题，还是外部依赖抖动。
+## 标准回答
+
+五类状态码：
+
+| 类别 | 含义 | 典型 |
+|------|------|------|
+| 1xx | 信息性，请求已接收继续处理 | 100 Continue、101 Switching Protocols |
+| 2xx | 成功 | 200 OK、201 Created、204 No Content、206 Partial Content |
+| 3xx | 重定向 | 301 Moved Permanently、302 Found、304 Not Modified、307/308 |
+| 4xx | 客户端错误 | 400 Bad Request、401 Unauthorized、403 Forbidden、404 Not Found、429 Too Many Requests |
+| 5xx | 服务端错误 | 500 Internal Server Error、502 Bad Gateway、503 Service Unavailable、504 Gateway Timeout |
+
+## 详细机制
+
+### 2xx 成功
+
+| 码 | 短语 | 语义 | 场景 |
+|----|------|------|------|
+| 200 | OK | 请求成功，响应体是资源 | GET/POST 普通成功响应 |
+| 201 | Created | 资源已创建 | POST 创建资源成功，响应体可含新资源 |
+| 202 | Accepted | 请求已接收，未处理完 | 异步任务接收，如发邮件、转码 |
+| 204 | No Content | 成功但无内容返回 | DELETE 删除成功、PUT 更新成功无返回 |
+| 206 | Partial Content | 部分内容 | Range 请求（断点续传、视频流） |
+
+### 3xx 重定向
+
+| 码 | 短语 | 是否改方法 | 缓存 | 场景 |
+|----|------|----------|------|------|
+| 301 | Moved Permanently | 可能改 POST→GET | 永久缓存 | 域名迁移、HTTP→HTTPS |
+| 302 | Found | 可能改 POST→GET | 不缓存 | 临时跳转（登录后跳首页） |
+| 303 | See Other | 改 GET | 不缓存 | POST 后用 GET 看结果（PRG 模式） |
+| 307 | Temporary Redirect | 不改方法 | 不缓存 | 临时跳转，保留方法和 body |
+| 308 | Permanent Redirect | 不改方法 | 永久缓存 | 永久跳转，保留方法和 body |
+| 304 | Not Modified | - | - | 协商缓存命中，无正文 |
+
+301 和 302 的坑：早期浏览器把 301/302 的 POST 改成 GET，HTTP/1.1 规范虽然规定不改方法，但浏览器为兼容仍改。307/308 是规范版本，严格保留方法。
+
+### 4xx 客户端错误
+
+| 码 | 短语 | 语义 | 场景 |
+|----|------|------|------|
+| 400 | Bad Request | 请求格式错误 | 参数缺失、JSON 解析失败 |
+| 401 | Unauthorized | 未认证 | 缺少或无效的 Authorization、Cookie |
+| 403 | Forbidden | 已认证但无权限 | 用户角色不够、IP 被封 |
+| 404 | Not Found | 资源不存在 | URL 错误、资源已删除 |
+| 405 | Method Not Allowed | 方法不允许 | GET 接口收到 POST |
+| 406 | Not Acceptable | 内容协商失败 | Accept 头不匹配 |
+| 409 | Conflict | 冲突 | 并发更新冲突、唯一约束冲突 |
+| 413 | Payload Too Large | 请求体过大 | 上传文件超限 |
+| 415 | Unsupported Media Type | Content-Type 不支持 | 服务端只收 JSON，客户端发 XML |
+| 429 | Too Many Requests | 限流 | QPS 超限 |
+
+401 vs 403：
+
+- **401**：你是谁？未登录或 token 失效
+- **403**：我知道你是谁，但你没权限。已登录但角色不够
+
+### 5xx 服务端错误
+
+| 码 | 短语 | 语义 | 排查方向 |
+|----|------|------|---------|
+| 500 | Internal Server Error | 服务端内部错误 | 看应用日志，未捕获异常 |
+| 501 | Not Implemented | 不支持该方法 | 服务端没实现 OPTIONS/TRACE |
+| 502 | Bad Gateway | 网关上游错误 | 上游服务挂了或返回非法响应 |
+| 503 | Service Unavailable | 暂时不可用 | 服务过载、维护中、依赖中间件故障 |
+| 504 | Gateway Timeout | 网关超时 | 上游响应超时 |
+| 505 | HTTP Version Not Supported | 不支持协议版本 | 客户端发 HTTP/2 但服务端不支持 |
+
+502 vs 504：
+
+- **502**：网关连上了上游，但上游返回了错误响应（进程崩、非法响应）
+- **504**：网关连上了上游，但上游在超时时间内没响应
+
+### 抓包示例
+
+```bash
+$ curl -i http://example.com/
+HTTP/1.1 200 OK
+Content-Type: text/html
+Content-Length: 1256
+...
+
+$ curl -i http://example.com/nonexistent
+HTTP/1.1 404 Not Found
+Content-Type: text/html; charset=UTF-8
+...
+
+$ curl -i -X DELETE http://example.com/api/users/1
+HTTP/1.1 204 No Content
+Date: Wed, 01 Jan 2025 10:00:00 GMT
+# 204 无正文，没有 Content-Length
+
+$ curl -i http://example.com/redirect
+HTTP/1.1 301 Moved Permanently
+Location: https://example.com/new
+Cache-Control: max-age=3600
+```
+
+### 自定义状态码
+
+某些场景会扩展，如：
+
+- **420/421**：Twitter 早期的限流、Cloudflare 的 Misdirected Request
+- **418 I'm a teapot**：愚人节 RFC 2324 彩蛋，部分框架用于"我拒绝煮咖啡"
+- **522/523/524**：Cloudflare 网络层错误
+
+业务系统不应自定义状态码，应使用标准码 + 业务错误码在响应体中。
+
+## 代码示例
+
+Java Spring 返回不同状态码：
+
+```java
+import org.springframework.web.bind.annotation.*;
+import org.springframework.http.*;
+
+@RestController
+@RequestMapping("/api/users")
+public class UserController {
+
+    @GetMapping("/{id}")
+    public ResponseEntity<User> getUser(@PathVariable Long id) {
+        User user = userService.findById(id);
+        if (user == null) {
+            return ResponseEntity.notFound().build();  // 404
+        }
+        return ResponseEntity.ok(user);   // 200
+    }
+
+    @PostMapping
+    public ResponseEntity<User> createUser(@RequestBody User user) {
+        User created = userService.create(user);
+        URI location = URI.create("/api/users/" + created.getId());
+        return ResponseEntity.created(location).body(created);   // 201
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteUser(@PathVariable Long id) {
+        userService.delete(id);
+        return ResponseEntity.noContent().build();   // 204
+    }
+
+    @GetMapping("/forbidden")
+    public ResponseEntity<String> forbidden() {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body("No permission");   // 403
+    }
+}
+```
+
+限流场景返回 429：
+
+```java
+@GetMapping("/api/expensive")
+public ResponseEntity<String> expensive(@RequestHeader("X-User-Id") String userId) {
+    if (rateLimiter.isLimited(userId)) {
+        return ResponseEntity.status(429)
+            .header("Retry-After", "60")   // 告诉客户端 60 秒后重试
+            .body("Too many requests");
+    }
+    return ResponseEntity.ok("done");
+}
+```
+
+## 实战场景
+
+| 码 | 场景 | 排查 |
+|----|------|------|
+| 401 | 用户 token 过期 | 前端自动刷新 token |
+| 403 | 越权访问 | 检查权限校验逻辑 |
+| 404 | 静态资源 404 | 检查 Nginx 静态文件路径 |
+| 499 | Nginx 特有，客户端主动断开 | 检查客户端超时配置 |
+| 502 | 上游服务崩溃 | 看上游进程、看 Nginx error.log |
+| 504 | 上游响应慢 | 看上游接口耗时、网络 |
+| 0 | 浏览器看到 status=0 | 跨域被拦、证书错误、网络断 |
+
+## 深挖追问
+
+**Q1：4xx 一定是客户端错吗？**
+不一定。比如 404 可能是服务端路由配置错，413 可能是服务端限值设太低。状态码只是"按规范应归咎的一方"，实际根因要具体分析。
+
+**Q2：500 一定是服务端 bug 吗？**
+通常是，但也可能是依赖故障（数据库连不上）导致的内部错误。本质是"服务端无法处理"，未必是代码 bug。
+
+**Q3：304 算成功吗？**
+算。304 表示"资源未修改，用你缓存的版本"，没有正文，节省带宽。配合 ETag/Last-Modified 使用。
+
+**Q4：503 和 502 的区别？**
+503 是"我知道我不可用，请稍后再试"，服务端主动告知；502 是"网关上游错"，网关连不上游或上游返回错误。
+
+**Q5：Nginx 的 499 是标准状态码吗？**
+不是，是 Nginx 自定义的，表示客户端在服务端响应前主动断开（如客户端超时）。仅在 Nginx access.log 看到。
+
+## 易错点
+
+- **混淆 401 和 403** — 401 是未认证（没登录），403 是无权限（登录了但角色不够）。
+- **混淆 502 和 504** — 502 上游返回错误，504 上游没响应。
+- **301 和 302 都改方法** — HTTP/1.1 规范是不改，但浏览器实现改。307/308 才严格不改。
+- **204 不该有 Content-Length** — 204 表示无内容，理论上没有 Content-Length 头。
+- **自定义业务状态码** — 不要用 4xx/5xx 表达业务错误，应使用标准码 + 响应体业务码。
 
 ## 总结
-复习 HTTP常见的状态码有哪些？ 时，建议把它和相邻知识点放在一起比较：相同点是什么、区别在哪里、为什么当前场景选择它而不是替代方案。能讲清楚这些内容，才算真正掌握。
+
+HTTP 状态码五大类：1xx 信息、2xx 成功、3xx 重定向、4xx 客户端错误、5xx 服务端错误。生产中重点掌握 200/201/204、301/302/304、400/401/403/404/429、500/502/503/504。401 vs 403、502 vs 504 是面试和排查的高频考点。业务错误应使用标准码 + 响应体业务码，不要自定义状态码。
+
+## 参考资料
+
+- [RFC 7231 — HTTP/1.1 Semantics and Content, Status Codes](https://datatracker.ietf.org/doc/html/rfc7231#section-6)
+- [MDN — HTTP Status Codes](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status)

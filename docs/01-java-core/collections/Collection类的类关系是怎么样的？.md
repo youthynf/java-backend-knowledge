@@ -1,92 +1,170 @@
-# Collection 类的类关系是怎么样的？
+# Collection 类的类关系是怎么样的
 
 ## 核心概念
 
-Java 集合框架可以分成两条主线：
+Java 集合框架分两条主线：**Collection 体系**（单元素集合，含 List、Set、Queue）和 **Map 体系**（键值对映射）。两者**没有继承关系**，并列存在，这是面试中最容易答错的点——很多人会说"Map 是 Collection 的子接口"，这是错的。
 
-- **Collection**：单个元素的集合，下面主要有 `List`、`Set`、`Queue` 三类。
-- **Map**：键值对映射，存储的是 `key -> value`，它**不继承 Collection**。
-
-面试时要先把这两条线分清楚。很多人会说“Map 是 Collection 的子接口”，这是错误的。
-
-## Collection 体系
-
-### List：有序、可重复、按下标访问
-
-`List` 关注元素顺序和下标访问，允许重复元素。
-
-- **ArrayList**：底层动态数组，随机访问快，尾部追加快；中间插入/删除可能需要搬移元素。
-- **LinkedList**：底层双向链表，适合已定位节点后的插入/删除；随机访问需要从头或尾遍历，时间复杂度是 `O(n)`。
-- **Vector**：早期线程安全列表，方法大多用 `synchronized` 修饰，性能和扩展性较差，实际开发中很少再选。
-- **Stack**：早期栈结构，继承自 Vector；现在更推荐用 `ArrayDeque` 实现栈。
-
-### Set：不重复，不按下标访问
-
-`Set` 关注元素唯一性，不提供下标访问。
-
-- **HashSet**：基于 `HashMap` 实现，元素作为 HashMap 的 key，适合快速去重。
-- **LinkedHashSet**：在 HashSet 基础上维护插入顺序。
-- **TreeSet**：基于 `TreeMap`，按照自然顺序或比较器排序。
-
-### Queue / Deque：队列和双端队列
-
-`Queue` 关注先进先出或优先级调度，`Deque` 支持两端插入和删除。
-
-- **PriorityQueue**：优先队列，按照自然顺序或 Comparator 排序，不保证整体有序，只保证队首是当前优先级最高/最低的元素。
-- **ArrayDeque**：数组实现的双端队列，常用于替代 Stack，也可做普通队列。
-- **ConcurrentLinkedQueue**：基于 CAS 的无界非阻塞线程安全队列。
-- **ArrayBlockingQueue**：有界阻塞队列，常用于生产者-消费者模型。
-- **LinkedBlockingQueue**：链表实现的阻塞队列，可以有界；不指定容量时默认接近无界，要警惕内存风险。
-
-## Map 体系
-
-`Map` 存储键值对，key 唯一，value 可以重复。常见实现有：
-
-- **HashMap**：最常用的哈希表。JDK 8 之后底层是数组 + 链表 + 红黑树，平均 `O(1)` 查询。
-- **LinkedHashMap**：在 HashMap 基础上维护双向链表，可以保持插入顺序或访问顺序，常用于 LRU 缓存。
-- **TreeMap**：红黑树实现，key 有序，查询/插入/删除复杂度是 `O(log n)`。
-- **Hashtable**：早期线程安全 Map，方法级 `synchronized`，基本被 `ConcurrentHashMap` 替代。
-- **ConcurrentHashMap**：并发场景常用 Map。JDK 8 主要通过 CAS + `synchronized` + volatile 等机制降低锁粒度。
-
-## 面试官想考什么
-
-1. **体系边界**：Collection 和 Map 是否有继承关系。
-2. **数据结构选型**：数组、链表、哈希表、红黑树分别适合什么场景。
-3. **线程安全意识**：哪些集合不是线程安全的，并发场景该怎么替代。
-4. **复杂度判断**：随机访问、插入删除、排序、去重分别应该选哪个集合。
+它们都来自 `java.util` 包，但只有 Collection 继承自 `Iterable`，所以 Collection 体系能用 for-each 遍历，Map 不能直接用 for-each，必须通过 `entrySet()` / `keySet()` / `values()` 拿到 Collection 视图才能遍历。
 
 ## 标准回答
 
-可以这样答：
+```text
+                Iterable
+                   |
+               Collection
+              /     |     \
+            List   Set      Queue
+            /|\    /|\         \
+ArrayList  ...  HashSet ...   Deque
+LinkedList     TreeSet ...    PriorityQueue
+Vector                        ArrayDeque
+```
 
-> Java 集合框架分为 Collection 和 Map 两大体系。Collection 表示单元素集合，主要包括 List、Set、Queue；Map 表示键值对映射，不继承 Collection。List 有序可重复，典型实现是 ArrayList 和 LinkedList；Set 不允许重复，典型实现是 HashSet、LinkedHashSet、TreeSet；Queue 面向队列场景，常见 ArrayDeque、PriorityQueue 和阻塞队列。Map 中最常用的是 HashMap，此外还有保持顺序的 LinkedHashMap、有序的 TreeMap、并发场景使用的 ConcurrentHashMap。
+要点：
+
+1. **顶层是 `Iterable`**：提供 `iterator()`，使集合能被 for-each 遍历。
+2. **Collection 继承 Iterable**：下分 List、Set、Queue 三大子接口。
+3. **Map 独立成系**：不继承 Collection，但可以通过 `entrySet()` 等方法返回 Collection 视图。
+4. **List 有序可重复**：ArrayList、LinkedList、Vector、Stack。
+5. **Set 不可重复**：HashSet（无序）、LinkedHashSet（插入序）、TreeSet（排序）。
+6. **Queue 队列**：ArrayDeque、PriorityQueue，并发包下还有 BlockingQueue 系列。
+
+## 实现原理
+
+### List：有序、可重复、按下标访问
+
+| 实现 | 底层结构 | 随机访问 | 中间插入删除 | 线程安全 |
+|------|---------|---------|------------|---------|
+| `ArrayList` | 动态数组 | `O(1)` | `O(n)` | 否 |
+| `LinkedList` | 双向链表 | `O(n)` | 已定位节点后 `O(1)` | 否 |
+| `Vector` | 动态数组 | `O(1)` | `O(n)` | 是，方法级 synchronized |
+| `Stack` | 继承 Vector | `O(1)` | `O(n)` | 是，但已被 `ArrayDeque` 替代 |
+
+### Set：不重复
+
+| 实现 | 底层 | 顺序 | 复杂度 |
+|------|------|------|--------|
+| `HashSet` | 基于 `HashMap` | 无序 | 平均 `O(1)` |
+| `LinkedHashSet` | 基于 `LinkedHashMap` | 插入顺序 | 平均 `O(1)` |
+| `TreeSet` | 基于 `TreeMap`（红黑树） | 自然序/Comparator | `O(log n)` |
+
+### Queue / Deque
+
+| 实现 | 底层 | 特点 |
+|------|------|------|
+| `ArrayDeque` | 循环数组 | 双端队列，可做栈或队列，性能优于 Stack |
+| `PriorityQueue` | 最小堆 | 出队按优先级，不保证整体有序 |
+| `ConcurrentLinkedQueue` | CAS 链表 | 无界非阻塞线程安全 |
+| `ArrayBlockingQueue` | 数组 + 锁 | 有界阻塞，生产者消费者 |
+| `LinkedBlockingQueue` | 链表 + 锁 | 默认近无界，警惕 OOM |
+
+### Map：键值对（独立体系）
+
+| 实现 | 底层 | 顺序 | 线程安全 |
+|------|------|------|---------|
+| `HashMap` | 数组 + 链表 + 红黑树 | 无序 | 否 |
+| `LinkedHashMap` | HashMap + 双向链表 | 插入序/访问序 | 否 |
+| `TreeMap` | 红黑树 | 按 key 排序 | 否 |
+| `Hashtable` | 数组 + 链表 | 无序 | 是，方法级 synchronized |
+| `ConcurrentHashMap` | 分段锁/CAS + synchronized | 无序 | 是，高并发优化 |
+
+## 代码示例
+
+### 根据场景选集合
+
+```java
+import java.util.*;
+import java.util.concurrent.*;
+
+public class CollectionChoiceDemo {
+    public static void main(String[] args) {
+        // 1. 顺序访问、随机读 → ArrayList
+        List<String> list = new ArrayList<>();
+
+        // 2. 去重 → HashSet
+        Set<String> set = new HashSet<>();
+
+        // 3. 去重并保留插入顺序 → LinkedHashSet
+        Set<String> orderedSet = new LinkedHashSet<>();
+
+        // 4. 排序 → TreeSet
+        Set<Integer> sortedSet = new TreeSet<>();
+
+        // 5. 栈 → ArrayDeque（不要用 Stack）
+        Deque<String> stack = new ArrayDeque<>();
+        stack.push("a");
+
+        // 6. 高并发 Map → ConcurrentHashMap（不要用 HashMap + synchronized）
+        Map<String, String> cache = new ConcurrentHashMap<>();
+
+        // 7. 生产者消费者 → LinkedBlockingQueue
+        BlockingQueue<Runnable> queue = new LinkedBlockingQueue<>(100);
+    }
+}
+```
+
+### Map 转 Collection 视图
+
+```java
+Map<String, Integer> map = new HashMap<>();
+map.put("a", 1);
+
+// Map 本身不能 for-each，要拿视图
+for (Map.Entry<String, Integer> e : map.entrySet()) {
+    System.out.println(e.getKey() + "=" + e.getValue());
+}
+```
+
+## 实战场景
+
+| 场景 | 选型 | 注意点 |
+|------|------|--------|
+| 用户列表分页查询 | `ArrayList` | 随机访问多，几乎不中间插入 |
+| 任务调度按优先级出队 | `PriorityQueue` | 不保证遍历有序，只保证队首最优 |
+| LRU 缓存 | `LinkedHashMap`（accessOrder=true） | 重写 `removeEldestEntry` 控制容量 |
+| 黑白名单去重 | `HashSet` / `CopyOnWriteArraySet` | 读多写少用并发版 |
+| 高并发计数表 | `ConcurrentHashMap` | 用 `computeIfAbsent` / `merge` 做原子复合操作 |
+| 多线程任务队列 | `LinkedBlockingQueue` | 必须设容量，默认 `Integer.MAX_VALUE` 易 OOM |
+| 范围查询 | `TreeMap` | `subMap` / `headMap` / `tailMap` |
 
 ## 深挖追问
 
 ### ArrayList 和 LinkedList 怎么选？
 
-大多数业务场景优先选 `ArrayList`，因为它内存连续、缓存友好、随机访问快。`LinkedList` 只有在频繁操作链表节点且已经定位到节点时才有优势；如果每次都要按下标查找，它反而更慢。
+绝大多数业务场景选 `ArrayList`：内存连续、缓存友好、随机访问 `O(1)`。`LinkedList` 只在"已定位到节点后频繁插入删除"的场景才占优，按下标操作反而是 `O(n)`。即使要做大量中间插入，`ArrayList` 的搬移成本通常也被 CPU 缓存命中抵消。
 
 ### HashSet 为什么能去重？
 
-HashSet 底层使用 HashMap，元素作为 key。判断重复时先比较 hash，再通过 `equals` 判断是否相等。因此自定义对象放入 HashSet 时，必须正确重写 `hashCode` 和 `equals`。
+底层是 `HashMap`，元素作为 key 存储，value 是一个静态 `PRESENT` 对象。判断重复时先比较 hash，再 `equals`。所以自定义对象放入 HashSet，必须同时重写 `hashCode` 和 `equals`，且遵守"equals 相等则 hashCode 必相等"的约定。
 
-### TreeMap 和 HashMap 的区别？
+### TreeMap 和 HashMap 怎么选？
 
-HashMap 追求平均 `O(1)` 的读写效率，但不保证顺序；TreeMap 基于红黑树，key 有序，适合范围查询、排序遍历等场景，但单次操作是 `O(log n)`。
+- `HashMap`：平均 `O(1)` 读写，不保证顺序，适合绝大多数缓存/查找场景。
+- `TreeMap`：`O(log n)` 读写，key 有序，适合范围查询（`subMap`）、按 key 排序遍历。
 
-## 实战场景
+性能敏感且不需要排序时选 HashMap；需要排序或范围扫描时选 TreeMap。
 
-- **去重**：普通去重用 `HashSet`，需要保留插入顺序用 `LinkedHashSet`。
-- **按访问顺序淘汰缓存**：用 `LinkedHashMap` 的 accessOrder 模式实现简易 LRU。
-- **排行榜或范围查询**：用 `TreeMap` / `TreeSet`，或者结合 Redis ZSet。
-- **高并发读写 Map**：不要用 `HashMap`，优先考虑 `ConcurrentHashMap`。
-- **生产者消费者**：优先使用 `ArrayBlockingQueue`、`LinkedBlockingQueue` 等阻塞队列。
+### Stack 为什么不推荐？
+
+`Stack` 继承 `Vector`，所有方法 `synchronized`，性能差；且"继承 Vector"的设计违背了栈的语义（栈不应该有按中间下标访问的能力）。官方推荐用 `ArrayDeque` 做栈，性能更好，API 也更清晰。
+
+### Collection 和 Collections 的关系？
+
+`Collection` 是接口（集合框架根接口），`Collections` 是工具类（提供 `sort`、`synchronizedList` 等静态方法），两者只是名字像，没有继承关系。
 
 ## 易错点
 
-- Map 不继承 Collection。
-- LinkedList 不是所有插入删除都快，按下标定位仍然是 `O(n)`。
-- HashSet 的“无序”不是随机，只是不要依赖它的遍历顺序。
-- `Collections.synchronizedMap` 是粗粒度加锁，复杂复合操作仍要自己保证同步。
-- `LinkedBlockingQueue` 不指定容量时可能堆积大量任务，引发内存问题。
+- Map 不继承 Collection，"Map 是 Collection 子接口"是错的。
+- `LinkedList` 不是所有插入删除都快，按下标定位仍是 `O(n)`。
+- `HashSet` 的"无序"不是"随机"，每次遍历顺序可能相同，只是不要依赖。
+- `LinkedBlockingQueue` 不指定容量时默认 `Integer.MAX_VALUE`，生产环境必设容量。
+- `PriorityQueue` 出队有序，遍历无序，不要用 for-each 假定顺序。
+
+## 总结
+
+记住两条主线：Collection（List/Set/Queue）和 Map 平级；选择实现时先看是否需要有序、是否需要去重、是否需要并发、是否需要排序，再据此选具体类。绝大多数业务场景 ArrayList + HashMap + ConcurrentHashMap 三个就够用。
+
+## 参考资料
+
+- [Java Collections Framework Overview](https://docs.oracle.com/javase/8/docs/technotes/guides/collections/overview.html)
+- [OpenJDK java.util 包源码](https://github.com/openjdk/jdk/tree/jdk8u/jdk/src/share/classes/java/util)

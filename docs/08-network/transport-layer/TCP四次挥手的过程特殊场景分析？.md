@@ -1,64 +1,228 @@
-# TCP四次挥手的过程特殊场景分析？
+# TCP 四次挥手的过程特殊场景分析
+
 ## 核心概念
 
-为什么挥手需要四次？
-常规的连接关闭流程：
-关闭连接时，客户端向服务端发送FIN报文，仅仅表示客户端不再发送数据了，但是还能接收数据；
-服务端收到客户端FIN报文时，内核会马上先回一个ACK应答报文，但服务端应用程序可能还有数据需要处理和发送，所以不能马上发送FIN报文，而是将发送FIN报文的控制权交给服务端应用程序，等服务端不再发送数据时，才发送FIN报文给客户端来表示同意现在关闭连接。
-从上面的过程可知，是否要发送第三次挥手FIN报文的控制权不在内核，而是在被动关闭方的应用程序，服务端通常需要等待完成数据的处理和发送，所以服务端的ACK和FIN一般都是分开的，因此需要四次挥手。
+四次挥手的标准流程是 FIN → ACK → FIN → ACK，但实际网络中各种异常分支让挥手过程复杂：包丢失、应用层迟迟不 close、第二三次挥手合并、close 与 shutdown 行为差异等。理解这些特殊场景是排查连接异常关闭的基础。
 
-第二次和第三次挥手能合并吗？
-当被动关闭方在 TCP 挥手过程中，「没有数据要发送」井且「开启了 TCP 延迟确认机制」，那么第二和第三次挥手就会合井传输，这样就出现了三次挥手。
+## 标准回答
 
-第一次挥手丢失了，客户端和服务端会发生什么?
-当客户端(主动关闭方)调用close函数后，就会向服务端发送FIN报文，试图与服务端断开连接，此时客户端的连接进入到【FIN_WAIT_1】状态。
-正常情况下，如果能及时收到服务端(被动关闭方)的ACK，则会很快变为【FIN_WAIT_2】状态。如果第一次挥手丢失了，那么客户端迟迟收不到被动方的ACK的话，也就会触发超时重传机制，重传 FIN 报文，重发次数由 tcp_orphan_retries参数控制。当客户端重传 FIN 报文的次数超过tcp_orphan_retries后，就不再发送 FIN 报文，则会在等待一段时间(时间为上一次超时时间的2倍)，如果还是没能收到第二次挥手，那么客户端直接进入到close状态，而服务端还是【ESTABLISHED】状态。
+四次挥手的关键边界场景：
 
-第二次挥手丢失了，会发生什么？
-当服务端收到客户端的第一次挥手后，内核会马上恢复一个ACK确认报文，此时服务端的连接进入【CLOSE_WAIT】状态。由于ACK报文不会重传，所以如果服务端的第二次挥手丢失了，客户端就会触发超时重传机制，重传FIN报文，知道收到服务端的第二次挥手，或者达到最大的重传次数。
-第三次挥手一直没发，会发生什么?
-当主动方收到第二次挥手ACK报文后，会处于【FIN_WAIT_2】状态，就表示主动方的发送通道已经关闭，接下来将等待对方发送第三次挥手FIN报文，关闭对方的发送通道。
-如果连接是用shutdown函数关闭的，指定了只关闭发送方向，而接收方向并没有关闭，那么意味着主动关闭方还可以接收数据，连接可以一直处于【FIN_WAIT_2】状态；
-如果连接是用close函数关闭的孤儿连接，由于无法再发送和接收数据，所以这个状态不可以持续太久，而tcp_fin_timeout控制了这个状态下连接的持续时长，默认值是 60 秒，超时还没有收到FIN报文，客户端的连接就会直接关闭；
+1. **第二三次挥手合并**：被动方无待发数据且开启延迟确认时，ACK 和 FIN 合成一个包，变三次挥手。
+2. **第一次挥手丢失**：主动方重传 FIN，达到 `tcp_orphan_retries` 后放弃。
+3. **第二次挥手丢失**：被动方 ACK 不重传，主动方重传 FIN。
+4. **第三次挥手延迟**：被动方应用没 close()，主动方在 `FIN_WAIT_2` 等，受 `tcp_fin_timeout` 限制。
+5. **第四次挥手丢失**：主动方在 TIME_WAIT 等，被动方重传 FIN。
 
-第二次和第三次挥手之间，主动断开的那端能干什么？
-如果主动断开的一方，是调用了 shutdown 函数来关闭连接，并且只选择了关闭发送能力且没有关闭接收能力的话，那么主动断开的一方处于【FIN_WAIT_2】状态，在第二次和第三次挥手之间还可以接收数据。
+## 详细机制
 
-第三次挥手丢失了，会发生什么？
-当服务端（被动关闭方）收到客户端（主动关闭方）的FIN报文后，内核会自动回复ACK，同时连接处于【CLOSE_WAIT】状态，即等待应用程序调用close函数关闭连接。此时内核没有权利替代进程关闭连接，必须由进程主动调用close函数来触发服务端发送FIN报文，同时连接进入【LAST_ACK】状态，等待客户端发挥ACK来确认连接关闭。
+### 场景 1：第二三次挥手合并（变三次挥手）
 
-如果第三次挥手丢失了，迟迟收不到客户端的ACK确认报文，服务端就会重发FIN报文，重发次数仍然有tcp_orphan_reties参数控制，这与客户端重发FIN报文的重传次数控制方式是一样的。
-达到最大重传次数后，再等待上一次超时时间的2倍，如果还没收到客户端的第四次挥手（ACK报文），那么服务端就会断开连接。
-客户端因为是通过close函数关闭连接的，处于【FIN_WAIT_2】状态有时长限制，如果tcp_fin_timeout时间内还是没有收到服务端的第三次挥手，那么客户端会断开连接。
+```
+正常四次挥手：
+Active → FIN → ACK ← Passive → FIN → ACK → Active (TIME_WAIT)
 
-第四次挥手丢失了，会发生什么？
-当客户端收到服务端的第三次挥手的FIN报文后，就会回ACK报文，也就是第四次挥手，此时客户端连接进入【TIME_WAIT】状态。在Linux系统中，该状态会持续2MSL后才会进入关闭状态。然后服务端（被动关闭方）没有收到ACK报文前，一直处于【LAST_ACK】状态。
+合并场景：
+Active → FIN → FIN+ACK ← Passive → ACK → Active (TIME_WAIT)
+```
 
-如果第四次挥手丢失了，服务端会重发FIN报文，重发次数仍然由前面介绍的tcp_orphan_retries参数控制。当服务端重传第三次挥手报文达到最大次数时，会再等待上次超时时间的2倍，如果还是没能收到客户端的第四次挥手（ACK报文），那么服务端就会断开连接。而客户端收到第三次挥手后，就会进入【TIME_WAIT】状态，开启时长为2MSL的定时器，如果途中再次收到第三次挥手（FIN报文）后，就会重置定时器。当等待2MSL时长后，客户端就会断开连接。
+合并条件：
 
-## 面试总结
-### 核心概念
+1. 被动方收到 FIN 时**没有待发数据**
+2. 被动方开启**TCP 延迟确认**（默认开启）
 
-传输层负责端到端通信。TCP 面向连接、可靠、有序、字节流，依靠三次握手、序列号、确认、重传、滑动窗口、流量控制和拥塞控制；UDP 无连接、开销小、不保证可靠。
+此时被动方的 ACK 和自己的 FIN 可以合并成一个包发出。这是 TCP 的优化，不是 bug。
 
-### 面试官想考什么
+抓包特征：
 
-面试官高频考 TCP 三次握手/四次挥手、TIME_WAIT/CLOSE_WAIT、可靠传输、粘包、拥塞控制、连接异常和性能调优。
+```bash
+$ tcpdump -i any -n 'tcp port 80'
+10:00:00 IP A.5000 > B.80: Flags [F.], seq 1000, ack 2000
+10:00:00 IP B.80 > A.5000: Flags [F.], seq 2000, ack 1001  # FIN+ACK 合并
+10:00:00 IP A.5000 > B.80: Flags [.], ack 2001              # 主动方回 ACK
+```
 
-### 标准回答
+### 场景 2：第一次挥手丢失
 
-TCP 建连通过 SYN、SYN+ACK、ACK 确认双方收发能力；断连通常四次挥手，因为双方方向的数据流要分别关闭。可靠性来自序列号、ACK、超时/快速重传、滑动窗口和校验。TIME_WAIT 保护旧报文消失并保证对端收到最后 ACK；CLOSE_WAIT 多通常是应用未主动关闭连接。UDP 适合实时音视频、DNS、QUIC 等可自定义可靠性或容忍丢包的场景。
+主动方发 FIN 后进入 `FIN_WAIT_1`，等被动方 ACK。丢失后触发超时重传：
 
-### 深挖追问
+```bash
+# 重传次数控制
+$ sysctl net.ipv4.tcp_orphan_retries
+net.ipv4.tcp_orphan_retries = 0   # 0 表示用 tcp_retries2（默认 15）
+```
 
-- 这个现象发生在内核 TCP 状态机、网络链路还是应用代码中？
-- 如何用 ss/netstat、tcpdump、内核计数器证明丢包、重传、半连接或 TIME_WAIT 问题？
-- 哪些 Linux 参数、连接池参数和超时设置会影响生产表现？
+重传间隔指数退避，达到上限后主动方进入 `CLOSED`，连接被清理。被动方仍在 `ESTABLISHED`，下次发数据时收到 RST。
 
-### 实战场景/示例
+### 场景 3：第二次挥手丢失
 
-Java 服务大量 CLOSE_WAIT，优先检查代码是否未关闭 socket/HTTP 响应流，或连接池释放逻辑异常；大量 TIME_WAIT 则看短连接、主动关闭方和连接复用。
+被动方收到 FIN 后内核立即回 ACK（这步不依赖应用层），进入 `CLOSE_WAIT`。ACK 不会重传，所以丢失后：
 
-### 易错点/总结
+- 被动方已进入 `CLOSE_WAIT`
+- 主动方仍在 `FIN_WAIT_1`，等不到 ACK 触发重传 FIN
+- 被动方收到重传 FIN 后再次回 ACK
 
-TCP 是字节流没有消息边界，所以会有粘包/拆包；应用层必须用长度字段、分隔符或固定长度等协议解决。
+### 场景 4：第三次挥手延迟（应用层没 close）
+
+被动方收到 FIN 后内核回 ACK 进入 `CLOSE_WAIT`，但发自己的 FIN 需要**应用层调用 close()**。如果应用层迟迟不 close：
+
+- 连接一直卡在 `CLOSE_WAIT`
+- 主动方在 `FIN_WAIT_2` 等待，受 `tcp_fin_timeout` 限制（默认 60 秒）
+
+```bash
+$ sysctl net.ipv4.tcp_fin_timeout
+net.ipv4.tcp_fin_timeout = 60
+```
+
+超时后主动方强制关闭，被动方仍卡在 `CLOSE_WAIT` 直到应用层 close 或进程退出。
+
+### 场景 5：close() vs shutdown()
+
+```java
+// close()：完全关闭，进入四次挥手
+socket.close();
+// shutdown()：只关闭一个方向，可继续收或发
+socket.shutdownOutput();  // 关闭发送方向，进入 FIN_WAIT_2 但仍能收
+```
+
+`shutdown(SHUT_WR)` 触发 FIN 但不关闭 socket，主动方进入 `FIN_WAIT_2` 后仍能收数据（半关闭）。这是 HTTP 1.0 关闭前的常见模式：客户端发完请求 shutdownOutput，服务端发完响应再 close。
+
+### 场景 6：第四次挥手丢失
+
+主动方收到被动方 FIN 后回 ACK 进入 `TIME_WAIT`。ACK 丢失时：
+
+- 主动方在 TIME_WAIT 等 2 MSL
+- 被动方收不到 ACK，重传 FIN
+- 主动方收到重传 FIN 后重新回 ACK，重置 TIME_WAIT 定时器
+
+```bash
+# 被动方 FIN 重传次数（默认 0，表示用 tcp_retries2）
+$ sysctl net.ipv4.tcp_orphan_retries
+```
+
+### 场景 7：SO_LINGER 控制 close 行为
+
+```java
+// 默认：close 后内核继续发缓冲区数据，然后 FIN
+socket.close();
+
+// SO_LINGER 超时 > 0：close 阻塞等待数据发完，超时发 RST
+socket.setSoLinger(true, 10);  // 等 10 秒
+
+// SO_LINGER 超时 = 0：close 立即发 RST，缓冲区数据丢弃
+socket.setSoLinger(true, 0);   // 跳过 TIME_WAIT，但非优雅关闭
+```
+
+### 抓包示例
+
+```bash
+# 三次挥手场景
+$ tcpdump -i any -n 'tcp port 80 and (tcp[tcpflags] & tcp-fin != 0 or tcp[tcpflags] & tcp-ack != 0)'
+10:00:00 IP A.5000 > B.80: Flags [F.], seq 1000, ack 2000     # 第一次
+10:00:00 IP B.80 > A.5000: Flags [F.], seq 2000, ack 1001     # 第二三次合并
+10:00:00 IP A.5000 > B.80: Flags [.], ack 2001                 # 第四次
+
+# FIN 重传场景
+10:00:00 IP A.5000 > B.80: Flags [F.], seq 1000   # 第一次 FIN
+10:00:01 IP A.5000 > B.80: Flags [F.], seq 1000   # 重传（间隔 1s）
+10:00:03 IP A.5000 > B.80: Flags [F.], seq 1000   # 重传（间隔 2s）
+```
+
+## 代码示例
+
+观察 close 和 shutdown 的区别：
+
+```java
+import java.net.*;
+import java.io.*;
+
+public class CloseVsShutdown {
+    public static void main(String[] args) throws Exception {
+        Socket socket = new Socket("example.com", 80);
+        OutputStream out = socket.getOutputStream();
+
+        out.write("GET / HTTP/1.1\r\nHost: example.com\r\n\r\n".getBytes());
+        out.flush();
+
+        // 半关闭：通知对端我发完了，但还能收
+        socket.shutdownOutput();
+
+        // 继续读响应
+        InputStream in = socket.getInputStream();
+        byte[] buf = new byte[4096];
+        int n;
+        while ((n = in.read(buf)) > 0) {
+            System.out.write(buf, 0, n);
+        }
+        // 对端 close 后 read 返回 -1
+
+        socket.close();  // 真正关闭
+    }
+}
+```
+
+强制 RST 关闭（跳过 TIME_WAIT）：
+
+```java
+Socket socket = new Socket("example.com", 80);
+socket.setSoLinger(true, 0);   // close 时发 RST
+socket.close();
+// 对端会收到 "Connection reset by peer"
+```
+
+调整内核参数：
+
+```bash
+# FIN_WAIT_2 等待时间
+$ sysctl net.ipv4.tcp_fin_timeout=15
+
+# 孤儿连接（已 close 但未完全关闭）的 FIN 重传次数
+$ sysctl net.ipv4.tcp_orphan_retries=3
+```
+
+## 实战场景
+
+| 场景 | 现象 | 处理 |
+|------|------|------|
+| 三次挥手 | 抓包只看到三个包 | 正常优化，不是 bug |
+| 服务端 CLOSE_WAIT 堆积 | 应用层没 close() | 检查代码，用 try-with-resources |
+| 客户端 FIN_WAIT_2 长时间不消失 | 等被动方 FIN | 检查 `tcp_fin_timeout` |
+| close 后立刻 RST | SO_LINGER=0 | 排查是否误设 |
+| 重启后 bind 失败 | TIME_WAIT 占用 | 启用 `SO_REUSEADDR` |
+
+## 深挖追问
+
+**Q1：四次挥手一定是四次发包吗？**
+不一定。第二三次合并变三次，特殊场景甚至两次（同时关闭）。"四次"是流程上的四次状态变化，不是包的数量。
+
+**Q2：被动方收到 FIN 后能立即 close 吗？**
+内核立即回 ACK，但发自己的 FIN 必须等应用层 close()。如果应用层还有数据要发，先发数据再 close。
+
+**Q3：FIN_WAIT_2 会一直等被动方 FIN 吗？**
+看关闭方式：
+
+- `close()` 关闭的孤儿连接：受 `tcp_fin_timeout` 限制，超时强制关闭
+- `shutdown(SHUT_WR)` 半关闭：可一直等，应用层显式 close 才结束
+
+**Q4：同时关闭（Simultaneous Close）是什么？**
+双方几乎同时发 FIN，都从 ESTABLISHED 进入 FIN_WAIT_1，收到对方 FIN 后回 ACK 进入 CLOSING，再进入 TIME_WAIT。罕见但协议支持。
+
+**Q5：`tcp_fin_timeout` 调小有副作用吗？**
+有。如果被动方处理慢，主动方过早关闭会导致被动方 FIN 时收到 RST，被动方 read 返回 ECONNRESET。
+
+## 易错点
+
+- **"四次挥手一定是四个包"** — 不，合并后变三个。
+- **"FIN_WAIT_2 会一直等"** — close 的孤儿连接受 `tcp_fin_timeout` 限制。
+- **"close() 立即关连接"** — 默认是优雅关闭，内核继续发缓冲区数据。
+- **"SO_LINGER=0 是优化"** — 不是，是跳过 TIME_WAIT 的非常手段，对端会收到 RST。
+- **"被动方 ACK 后立即发 FIN"** — 不，要等应用层 close()。
+
+## 总结
+
+四次挥手的特殊场景围绕几个核心：第二三次合并（无待发数据时）、ACK 不重传（丢失靠对方重传）、应用层 close 控制 FIN 时机、close 与 shutdown 行为差异。生产中排查连接异常状态（CLOSE_WAIT 堆积、FIN_WAIT_2 卡住、TIME_WAIT 过多）的关键是理解这些边界场景和对应内核参数。
+
+## 参考资料
+
+- [RFC 793 — TCP, Section 3.5 Closing a Connection](https://datatracker.ietf.org/doc/html/rfc793#section-3.5)
+- [Linux TCP 参数文档](https://www.kernel.org/doc/Documentation/networking/ip-sysctl.txt)

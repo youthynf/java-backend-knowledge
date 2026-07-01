@@ -1,73 +1,259 @@
-# Java有哪些引用类型？
+# Java 有哪些引用类型
 
-Java有哪些引用类型？
-引用类型氛围强软弱虚四种：
-强引用：
-代码中普遍存在的赋值方式，比如A a = new A()这种。强引用关联的对象，永远不会被GC回收；
-
-Object obj = new Object();
-
-软引用：
-可以使用SoftReference来描述，指那些有用但是不是必须要的对象，系统发生内存溢出前会对这类引用的对象进行回收；
-
-Object obj = new Object();
-SoftReference<Object> sf = new SoftReference<Object>(obj);
-obj = null;  // 使对象只被软引用关联
-
-弱引用：
-可以使用WeakReference来描述，它的强度比软引用更低一些，弱引用的对象下一次GC的时候一定会被回收，而不管内存是否足够；
-
-Object obj = new Object();
-WeakReference<Object> wf = new WeakReference<Object>(obj);
-obj = null;
-常见使用场景：
-•  缓存系统：弱引用常用来实现缓存，特别是当缓存想能够在内存压力大的情况下自动释放；
-•  对象池：避免一些对象不再被强引用时，能够被垃圾回收，释放内存；
-•  避免内存泄露：当一个对象不应该被长期应用时，防止该对象被长期地意外保留，避免内存泄露；
-
-虚引用：
-又称为幽灵引用，一个对象是否有虚引用，完全不会对其生存时间构成影响，无法通过虚引用来取得一个对象。为一个对象设置虚引用关联的唯一目的是能在这个对象被回收时收到一个系统通知。可以使用PhantomReference来描述，发生GC时也会被回收，主要用在对象回收前的一些操作；
-
-Object obj = new Object();
-PhantomReference<Object> pf = new PhantomReference<Object>(obj);
-obj = null;
-
-## 面试总结
-
-围绕「Java有哪些引用类型？」，面试官通常不只考概念定义，更关注你能否把机制、使用场景和线上问题串起来。
-
-### 核心回答
-
-1. GC 的核心目标是在停顿时间、吞吐量和内存占用之间做权衡。
-2. 判断对象是否可回收要理解可达性分析、引用类型、分代假设和具体收集器机制。
-3. G1/ZGC 等现代收集器更强调可预测停顿，但仍需要根据对象分配速率和堆布局调优。
-
-### 高频追问
-
-- 可达性分析和引用计数的差异是什么？
-- Young GC、Mixed GC、Full GC 分别在什么条件下触发？
-- 如何通过 GC 日志判断是内存泄漏、分配过快还是参数不合理？
-
-### 实战落地
-
-- **排查类问题**：先收集监控、日志和 JVM 现场信息，再用工具验证假设，避免凭经验改参数。
-- **调优类问题**：先明确目标是降低停顿、提升吞吐还是减少内存，再选择收集器、堆大小和业务代码优化。
-- **面试表达**：用“现象 → 原理 → 工具验证 → 解决方案 → 风险边界”的链路回答。
-
-### 易错点
-
-- 不要只看平均停顿，要看 P99 和业务尖峰时段。
-- 调优前先定位问题，别上来就改 Xmx、G1 参数。
 ## 核心概念
-Java有哪些引用类型？ 可以放在“JVM 运行时能力”这条主线里理解。复习时不要只背结论，要先说明它解决的核心问题，再解释关键机制、适用边界和代价。围绕这个知识点，重点关注：内存区域、对象生命周期、GC Roots、垃圾回收器、类加载、JIT、参数调优和故障定位。如果面试官继续追问，通常会从“为什么这样设计、在什么场景会失效、线上如何排查”三个方向展开。
 
-## 面试回答与追问
-- **标准回答**：先给出 Java有哪些引用类型？ 的定位，再说明它依赖的核心原理，最后结合业务场景说明如何使用。回答时要把“能解决什么问题”和“会带来什么成本”一起讲清楚。
-- **常见追问**：如果数据量、并发量或调用链路继续放大，Java有哪些引用类型？ 的瓶颈会出现在哪里？如何观测、如何优化、如何回滚？
-- **易错点**：不要把概念和具体实现混在一起，也不要只说 API 名称。面试中更重要的是说清楚边界条件、失败场景和取舍依据。
+Java 提供四种引用类型：强引用（Strong）、软引用（Soft）、弱引用（Weak）、虚引用（Phantom）。它们由强到弱排列，区别在于 GC 回收时机和用途。引用类型让开发者能精细控制对象生命周期，实现缓存、ThreadLocal、堆外内存释放等场景。
 
-## 实战场景与排查
-典型落地场景包括：服务出现 OOM、Full GC 频繁、启动慢、类冲突或延迟抖动时的定位与优化。实际处理线上问题时，可以按“现象确认 → 指标采集 → 假设验证 → 小步修复 → 复盘沉淀”的路径推进。先看日志、监控、链路追踪和核心指标，再判断是容量问题、配置问题、代码路径问题，还是外部依赖抖动。
+```text
+强引用 Strong ──── 永不回收（只要 GC Roots 可达）
+软引用 Soft   ──── 内存不足时回收（适合缓存）
+弱引用 Weak   ──── 下次 GC 时回收（适合 ThreadLocal、WeakHashMap）
+虚引用 Phantom ─── 随时可回收，仅用于跟踪回收（管理堆外内存）
+```
+
+## 标准回答
+
+Java 有四种引用类型，区别在 GC 回收时机和用途。强引用永不回收，软引用内存不足时回收（缓存），弱引用下次 GC 回收（ThreadLocal、WeakHashMap），虚引用随时可回收且无法通过它访问对象（跟踪回收、管理堆外内存）。
+
+要点：
+
+1. **强引用 StrongReference**：默认引用，只要可达就不回收。
+2. **软引用 SoftReference**：内存不足时回收，适合内存敏感缓存。
+3. **弱引用 WeakReference**：下次 GC 必回收，适合 ThreadLocal、WeakHashMap。
+4. **虚引用 PhantomReference**：随时可回收，必须配合 ReferenceQueue，用于跟踪回收事件。
+5. **引用队列 ReferenceQueue**：GC 回收引用时把 Reference 对象入队，供应用感知。
+
+## 强引用 StrongReference
+
+代码中默认的引用方式，只要强引用存在且对象可达，GC 永不回收。
+
+```java
+Object obj = new Object();  // 强引用
+obj = null;                 // 取消强引用，对象可被 GC 回收
+```
+
+强引用是 OOM 的最常见原因：静态集合持有对象引用，对象永远不被回收，堆满后 OOM。
+
+## 软引用 SoftReference
+
+内存不足时（即将 OOM）才回收。适合实现内存敏感的缓存。
+
+```java
+Object obj = new Object();
+SoftReference<Object> soft = new SoftReference<>(obj);
+obj = null;  // 让对象只被软引用关联
+
+Object o = soft.get();  // 可能返回 null（已回收）或对象
+```
+
+JVM 保证在抛 OOM 前回收所有软引用对象。但软引用回收有时机不确定性，不适合做关键资源管理。
+
+适用场景：
+
+- 图片缓存（Android 早期用 SoftReference）。
+- 配置缓存。
+- 临时大对象。
+
+JDK 参数：`-XX:SoftRefLRUPolicyMSPerMB=1000` 控制软引用存活时间（每 MB 堆 1 秒）。
+
+## 弱引用 WeakReference
+
+下次 GC 时无论内存是否充足都回收。适合短生命周期的辅助引用。
+
+```java
+Object obj = new Object();
+WeakReference<Object> weak = new WeakReference<>(obj);
+obj = null;
+
+System.gc();
+weak.get();  // 大概率返回 null
+```
+
+典型应用：
+
+- **ThreadLocal**：`ThreadLocalMap` 的 Entry 继承 WeakReference，key 是弱引用。ThreadLocal 对象本身被回收后，Entry 的 key 变 null，value 仍可能被持有导致泄漏，需要主动 `remove()`。
+- **WeakHashMap**：key 是弱引用，key 被回收后 entry 自动清除。适合"附加属性"映射。
+- **WeakReference 缓存**：不会阻止对象被回收，但缓存命中率不可控。
+
+```java
+// WeakHashMap 示例
+WeakHashMap<Object, String> map = new WeakHashMap<>();
+Object key = new Object();
+map.put(key, "value");
+key = null;
+System.gc();
+// entry 可能被清除
+```
+
+## 虚引用 PhantomReference
+
+最弱的引用，无法通过虚引用访问对象（`get()` 永远返回 null）。唯一作用是：对象被回收时收到系统通知。
+
+必须配合 `ReferenceQueue` 使用。GC 回收对象前，把 PhantomReference 加入队列，应用线程从队列取出后做清理工作（如释放堆外内存）。
+
+```java
+ReferenceQueue<Object> queue = new ReferenceQueue<>();
+PhantomReference<Object> phantom = new PhantomReference<>(new Object(), queue);
+
+phantom.get();  // 永远返回 null
+
+// 检查队列
+Reference<?> ref;
+while ((ref = queue.poll()) != null) {
+    // 对象被回收，执行清理
+}
+```
+
+典型应用：
+
+- **DirectByteBuffer**：通过 `Cleaner`（PhantomReference 子类）触发堆外内存释放。
+- **资源清理**：替代 finalize()，跟踪对象回收后释放关联资源。
+
+```java
+// Cleaner 用法（JDK 9+）
+public class Resource implements AutoCloseable {
+    private static final Cleaner cleaner = Cleaner.create();
+    private final Cleaner.Cleanable cleanable;
+
+    public Resource() {
+        this.cleanable = cleaner.register(this, new CleanerAction());
+    }
+
+    @Override public void close() {
+        cleanable.clean();  // 主动触发清理
+    }
+
+    private static class CleanerAction implements Runnable {
+        @Override public void run() {
+            // 资源清理逻辑
+        }
+    }
+}
+```
+
+## 引用队列 ReferenceQueue
+
+GC 回收 SoftReference、WeakReference、PhantomReference 引用的对象时，把 Reference 对象本身加入关联的 ReferenceQueue。应用线程可以从队列取出 Reference，做后续处理。
+
+```java
+ReferenceQueue<Object> queue = new ReferenceQueue<>();
+WeakReference<Object> weak = new WeakReference<>(new Object(), queue);
+
+System.gc();
+Thread.sleep(100);
+
+Reference<?> ref;
+while ((ref = queue.poll()) != null) {
+    // weak 引用的对象已被回收
+    // 这里可以清理关联资源
+}
+```
+
+## 四种引用对比
+
+| 引用类型 | 回收时机 | get() 返回 | 用途 | 典型应用 |
+|---------|---------|-----------|------|---------|
+| 强引用 | 永不（只要可达） | 对象 | 普通引用 | 默认 |
+| 软引用 | 内存不足时 | 对象或 null | 内存敏感缓存 | 图片缓存 |
+| 弱引用 | 下次 GC | 对象或 null | 短期辅助引用 | ThreadLocal、WeakHashMap |
+| 虚引用 | 随时（不可达后） | 永远 null | 跟踪回收事件 | Cleaner、堆外内存 |
+
+## 代码示例
+
+完整引用类型示例：
+
+```java
+import java.lang.ref.*;
+
+public class ReferenceDemo {
+    public static void main(String[] args) throws InterruptedException {
+        // 强引用
+        Object strong = new Object();
+
+        // 软引用
+        SoftReference<Object> soft = new SoftReference<>(strong);
+
+        // 弱引用
+        WeakReference<Object> weak = new WeakReference<>(strong);
+
+        // 虚引用（必须配合 ReferenceQueue）
+        ReferenceQueue<Object> queue = new ReferenceQueue<>();
+        PhantomReference<Object> phantom = new PhantomReference<>(strong, queue);
+
+        // 取消强引用
+        strong = null;
+
+        // 触发 GC
+        System.gc();
+        Thread.sleep(100);
+
+        System.out.println("Soft: " + soft.get());      // 可能仍非 null（内存足）
+        System.out.println("Weak: " + weak.get());       // null（已被回收）
+        System.out.println("Phantom: " + phantom.get()); // 永远 null
+
+        Reference<?> ref;
+        while ((ref = queue.poll()) != null) {
+            System.out.println("Phantom referenced object was collected: " + ref);
+        }
+    }
+}
+```
+
+## 实战场景
+
+| 场景 | 引用类型 | 用法 |
+|------|---------|------|
+| 图片缓存 | SoftReference | 内存不足时自动回收 |
+| ThreadLocal | WeakReference（key） | ThreadLocal 回收后 entry 自动失效 |
+| WeakHashMap | WeakReference（key） | key 回收后 entry 清除 |
+| 堆外内存释放 | PhantomReference | DirectByteBuffer 的 Cleaner |
+| 监听器管理 | WeakReference | 避免监听器持有大对象阻止 GC |
+
+## 深挖追问
+
+### ThreadLocal 的 key 为什么用弱引用？
+
+ThreadLocal 的 `ThreadLocalMap` 中 Entry 继承 WeakReference，key 是 ThreadLocal 对象的弱引用。这样当 ThreadLocal 实例本身没有强引用时，可以被 GC 回收，避免 ThreadLocal 对象泄漏。但 value 仍是强引用，需要主动 `remove()` 避免泄漏。
+
+### 软引用和弱引用的区别？
+
+软引用：内存不足时才回收，存活时间相对长。
+弱引用：下次 GC 必回收，无论内存是否充足。
+
+软引用适合缓存（宁可保留），弱引用适合辅助引用（不阻止回收）。
+
+### 虚引用的 get() 为什么永远返回 null？
+
+虚引用的设计目的是"对象被回收时通知"，不是"访问对象"。如果 `get()` 能返回对象，就阻止了回收，违背设计意图。虚引用必须配合 ReferenceQueue 使用，通过队列感知回收事件。
+
+### Cleaner 和 finalize() 的区别？
+
+| 维度 | Cleaner | finalize() |
+|------|---------|-----------|
+| JDK 版本 | JDK 9+ | JDK 1.0+，JDK 9 Deprecated |
+| 实现 | PhantomReference + ReferenceQueue | JVM 调用 finalize() 方法 |
+| 自救 | 不支持 | 支持（重新建立引用） |
+| 性能 | 好 | 差 |
+| 推荐 | 推荐 | 不推荐，将移除 |
+
+## 易错点
+
+- 把"软引用"和"弱引用"混淆，软引用内存不足才回收，弱引用下次 GC 必回收。
+- 以为虚引用能访问对象，`get()` 永远返回 null。
+- 忘记给 PhantomReference 配 ReferenceQueue，无法感知回收事件。
+- 用 SoftReference 做关键资源管理，回收时机不确定，容易泄漏。
+- ThreadLocal 用完不 `remove()`，导致 value 泄漏。
 
 ## 总结
-复习 Java有哪些引用类型？ 时，建议把它和相邻知识点放在一起比较：相同点是什么、区别在哪里、为什么当前场景选择它而不是替代方案。能讲清楚这些内容，才算真正掌握。
+
+Java 四种引用类型让开发者精细控制对象生命周期。强引用永不回收，软引用内存不足回收（缓存），弱引用下次 GC 必回收（ThreadLocal、WeakHashMap），虚引用随时可回收且不可访问对象（Cleaner、堆外内存）。ReferenceQueue 配合引用类型感知回收事件。理解引用类型是阅读 ThreadLocal、WeakHashMap、DirectByteBuffer 源码的基础。
+
+## 参考资料
+
+- [Java Reference Objects](https://www.oracle.com/technical-resources/articles/javase/finalization.html)
+- [PhantomReference vs Cleanable](https://bugs.openjdk.org/browse/JDK-8145701)
+- 《深入理解 Java 虚拟机》周志明 第 3 章
+
+---
+
+[← 返回 GC 目录](/01-java-core/jvm/gc/)

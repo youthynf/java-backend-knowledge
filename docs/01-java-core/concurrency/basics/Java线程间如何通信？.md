@@ -1,205 +1,258 @@
-# Java线程间如何通信？
+# Java 线程间如何通信
 
-Java线程间如何通信？
-Java线程通信方式
-共享变量+同步机制：通过共享内存区域（如对象或变量），结合同步机制（synchronized、volatile）实现通信。
+## 核心概念
 
-public class SharedVariableDemo {
-    private volatile boolean flag = false;
+线程通信的本质是"一个线程改了状态，另一个线程能感知到"。Java 的线程之间没有"直接发消息"的语法，所有通信方式都建立在两个底层机制之上：**共享内存**和**等待-唤醒**。共享内存要解决可见性问题（要 volatile 或 synchronized 保证）；等待-唤醒要解决"什么时候通知"问题（`wait/notify`、`Condition`、`park/unpark`、`BlockingQueue`）。
 
-    public void setFlag() {
-        flag = true;
-    }
+工程上通信方式可以分四类：基于 `Object.wait/notify` 的低层 API、基于 `Condition` 的灵活版、基于 `BlockingQueue` 的生产者-消费者、基于同步工具类（`CountDownLatch` / `CyclicBarrier` / `Semaphore`）的协调。理解每种方式适合什么场景，是写出正确并发代码的前提。
 
-    public void waitForFlag() {
-        while (!flag) {
-            // 等待flag变为true
-        }
-        System.out.println("Flag is true now.");
+## 标准回答
+
+Java 线程通信的常用方式按抽象层级从低到高：
+
+1. **`volatile` 共享变量**：最轻量，保证可见性，适合"一写多读"的状态标记（如 `running = false`）。
+2. **`wait/notify` + synchronized**：经典等待-唤醒，必须在 synchronized 块内调用，依赖对象 monitor。
+3. **`Condition` + `ReentrantLock`**：`wait/notify` 的升级版，支持多个条件队列、可中断、可超时。
+4. **`BlockingQueue`**：生产者-消费者最常用，无需手写同步。
+5. **同步工具类**：`CountDownLatch` 等多线程就位、`CyclicBarrier` 多线程同步起跑、`Semaphore` 限流。
+6. **管道流**：`PipedInputStream` / `PipedOutputStream`，字节流通信，少用。
+
+## 实现原理
+
+### wait/notify 的对象 monitor 模型
+
+每个 Java 对象在 JVM 内部关联一个 monitor（监视器锁）。monitor 维护三个集合：
+
+- **owner**：当前持有锁的线程。
+- **entry list**：等锁的线程（`BLOCKED` 状态）。
+- **wait set**：调用了 `wait()` 的线程（`WAITING` 状态）。
+
+`wait()` 的语义：释放 monitor，当前线程进入 wait set；`notify()` 把 wait set 中一个线程移到 entry list；`notifyAll()` 把所有线程移过去。被移走的线程要重新竞争锁才能继续执行。
+
+### Condition 的多条件队列
+
+`Condition` 是 `ReentrantLock` 的伴生 API。一把锁可以 `newCondition()` 出多个 `Condition` 对象，每个对象有自己的等待队列。这样就能精准唤醒"等待某个条件"的线程，而不是 `notifyAll` 一锅端。
+
+经典例子是 `ArrayBlockingQueue`：用 `notEmpty` 和 `notFull` 两个 condition，put 时唤醒 notEmpty、take 时唤醒 notFull。
+
+### BlockingQueue 的内部实现
+
+`ArrayBlockingQueue` 用一个 `ReentrantLock` + 两个 `Condition` 实现：
+
+```java
+public void put(E e) throws InterruptedException {
+    final ReentrantLock lock = this.lock;
+    lock.lockInterruptibly();
+    try {
+        while (count == items.length)
+            notFull.await();        // 满了等
+        enqueue(e);
+        notEmpty.signal();          // 唤醒一个取的线程
+    } finally {
+        lock.unlock();
     }
 }
 
-wait()和notify()/notifyAll()：基于Object类的内置锁机制，实现线程的等待和唤醒。
+public E take() throws InterruptedException {
+    final ReentrantLock lock = this.lock;
+    lock.lockInterruptibly();
+    try {
+        while (count == 0)
+            notEmpty.await();       // 空了等
+        E x = dequeue();
+        notFull.signal();           // 唤醒一个放的线程
+        return x;
+    } finally {
+        lock.unlock();
+    }
+}
+```
 
+### CountDownLatch vs CyclicBarrier
+
+| 维度 | CountDownLatch | CyclicBarrier |
+|------|----------------|----------------|
+| 计数方向 | 减到 0 | 累加到 parties |
+| 复用 | 不可重用 | 可 reset 重用 |
+| 触发者 | 任意线程 countDown | 等待线程自己 await |
+| 典型场景 | 主线程等多线程就位 | 多线程同步起跑 |
+
+## 代码示例
+
+### wait/notify 实现"等待条件"
+
+```java
 public class WaitNotifyDemo {
     private final Object lock = new Object();
-    private boolean conditionMet = false;
+    private boolean ready = false;
 
-    public void waitForCondition() throws InterruptedException {
+    public void waitForReady() throws InterruptedException {
         synchronized (lock) {
-            while (!conditionMet) {
-                lock.wait(); // 释放锁并等待
+            while (!ready) {       // 必须 while，防虚假唤醒
+                lock.wait();
             }
-            System.out.println("Condition met, proceeding...");
+            System.out.println("go");
         }
     }
 
-    public void signalCondition() {
+    public void markReady() {
         synchronized (lock) {
-            conditionMet = true;
-            lock.notifyAll(); // 唤醒所有等待线程
+            ready = true;
+            lock.notifyAll();
         }
     }
 }
+```
 
-Lock和Condition：通过ReentrantLock和Condition接口提供更灵活的线程通信机制，更精准唤醒。
+### Condition 多条件队列（生产者-消费者）
 
+```java
 import java.util.concurrent.locks.*;
 
-public class LockConditionDemo {
-    private final Lock lock = new ReentrantLock();
-    private final Condition condition = lock.newCondition();
-    private boolean isReady = false;
+public class BoundedBuffer<T> {
+    private final Object[] items;
+    private int putIdx, takeIdx, count;
+    private final ReentrantLock lock = new ReentrantLock();
+    private final Condition notFull = lock.newCondition();
+    private final Condition notEmpty = lock.newCondition();
 
-    public void waitForResource() throws InterruptedException {
-        lock.lock();
+    public BoundedBuffer(int capacity) { this.items = new Object[capacity]; }
+
+    @SuppressWarnings("unchecked")
+    public T take() throws InterruptedException {
+        lock.lockInterruptibly();
         try {
-            while (!isReady) {
-                condition.await(); // 释放锁并等待
-            }
-            System.out.println("Resource is ready.");
-        } finally {
-            lock.unlock();
-        }
+            while (count == 0) notEmpty.await();
+            T x = (T) items[takeIdx];
+            items[takeIdx] = null;
+            if (++takeIdx == items.length) takeIdx = 0;
+            count--;
+            notFull.signal();
+            return x;
+        } finally { lock.unlock(); }
     }
 
-    public void prepareResource() {
-        lock.lock();
+    public void put(T x) throws InterruptedException {
+        lock.lockInterruptibly();
         try {
-            isReady = true;
-            condition.signalAll(); // 唤醒所有等待线程
-        } finally {
-            lock.unlock();
-        }
+            while (count == items.length) notFull.await();
+            items[putIdx] = x;
+            if (++putIdx == items.length) putIdx = 0;
+            count++;
+            notEmpty.signal();
+        } finally { lock.unlock(); }
     }
 }
+```
 
-阻塞队列（BlockingQueue）：使用线程安全的阻塞队列作为通信媒介，实现生产者-消费者模式。
+### BlockingQueue 实现生产者-消费者
 
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
+```java
+import java.util.concurrent.*;
 
-public class BlockingQueueDemo {
-    private static BlockingQueue<String> queue = new ArrayBlockingQueue<>(10);
+public class ProducerConsumer {
+    private static final BlockingQueue<String> queue = new ArrayBlockingQueue<>(10);
 
-    // 生产者线程
-    static class Producer implements Runnable {
-        public void run() {
+    public static void main(String[] args) {
+        new Thread(() -> {
             try {
-                queue.put("Message"); // 阻塞直到队列有空间
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
-    }
+                for (int i = 0; i < 100; i++) queue.put("msg-" + i); // 满了阻塞
+            } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        }, "producer").start();
 
-    // 消费者线程
-    static class Consumer implements Runnable {
-        public void run() {
+        new Thread(() -> {
             try {
-                String msg = queue.take(); // 阻塞直到队列有元素
-                System.out.println("Received: " + msg);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
+                while (true) System.out.println(queue.take()); // 空了阻塞
+            } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        }, "consumer").start();
     }
 }
+```
 
-同步辅助类（CountDownLatch、CyclicBarriers）：通过同步工具协调多个线程的执行阶段。其中CountDownLatch等待多个线程完成初始化，不可重用，而CyclicBarrier实现多线程分阶段并行计算，可重用。
+### CountDownLatch 协调多线程就位
 
-import java.util.concurrent.CountDownLatch;
+```java
+import java.util.concurrent.*;
 
-public class CountDownLatchDemo {
+public class LatchDemo {
     public static void main(String[] args) throws InterruptedException {
-        int threadCount = 3;
-        CountDownLatch latch = new CountDownLatch(threadCount);
+        int n = 3;
+        CountDownLatch ready = new CountDownLatch(n);
+        CountDownLatch start = new CountDownLatch(1);
 
-        for (int i = 0; i < threadCount; i++) {
+        for (int i = 0; i < n; i++) {
             new Thread(() -> {
-                System.out.println("Thread completed task.");
-                latch.countDown();
-            }).start();
+                System.out.println(Thread.currentThread().getName() + " ready");
+                ready.countDown();
+                try { start.await(); } catch (InterruptedException ignored) {}
+                System.out.println(Thread.currentThread().getName() + " run");
+            }, "t-" + i).start();
         }
 
-        latch.await(); // 主线程等待所有子线程完成
-        System.out.println("All threads finished.");
+        ready.await();       // 等所有 worker 准备好
+        start.countDown();   // 统一发令
     }
 }
+```
 
-管道通信（PipedInputStream/PipedOutputStream）：通过管道流进行线程间数据传输，适用于字符或字节流通信。
+## 实战场景
 
-import java.io.*;
+| 场景 | 用法 | 注意点 |
+|------|------|--------|
+| 优雅停机 | `volatile boolean running` 配合轮询 | 用 `volatile` 保证可见性，不要靠普通变量 |
+| 生产者-消费者 | `ArrayBlockingQueue` / `LinkedBlockingQueue` | 队列要有界，无界队列高并发易 OOM |
+| 多线程同步起跑 | `CyclicBarrier` 或 `CountDownLatch` | 注意超时和重置 |
+| 限流 | `Semaphore.tryAcquire(timeout)` | 释放要放 finally |
+| 任务编排 | `CompletableFuture.thenApply` | 比手写 `Condition` 简洁很多 |
+| 精准唤醒 | `Condition.signal()` 配合多个 condition | 别用 `notify()`，随机唤醒容易出问题 |
 
-public class PipedCommunicationDemo {
-    public static void main(String[] args) throws IOException {
-        final PipedOutputStream pos = new PipedOutputStream();
-        final PipedInputStream pis = new PipedInputStream(pos);
+## 深挖追问
 
-        // 写数据线程
-        Thread writer = new Thread(() -> {
-            try {
-                pos.write("Hello from writer!".getBytes());
-                pos.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        });
+### notify 和 notifyAll 怎么选？
 
-        // 读数据线程
-        Thread reader = new Thread(() -> {
-            try {
-                int data;
-                while ((data = pis.read()) != -1) {
-                    System.out.print((char) data);
-                }
-                pis.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        });
+`notify()` 只唤醒一个，但 JVM 不保证唤醒哪一个，所以只有"所有等待线程逻辑等价"时才安全。生产实践几乎都用 `notifyAll()`——代价是会有惊群效应，但不会出错。要精准唤醒用 `Condition.signal()`。
 
-        writer.start();
-        reader.start();
-    }
-}
+### wait/notify 为什么必须在 synchronized 块内？
 
-## 面试总结
+`wait()` 释放 monitor 的前提是当前线程持有 monitor。JVM 在 `wait()` 入口检查 owner，不是当前线程就抛 `IllegalMonitorStateException`。`notify()` 同理——它要操作 wait set，必须持有 monitor。
 
-围绕「Java线程间如何通信？」，面试官通常不只考概念定义，更关注你能否把机制、使用场景和线上问题串起来。
+### Condition 和 wait/notify 的核心区别？
 
-### 核心回答
+1. **多条件队列**：`Condition` 支持一把锁多个等待队列，可以精准唤醒；`wait/notify` 只有一个等待队列。
+2. **不依赖 synchronized**：`Condition` 配合 `ReentrantLock`，支持可中断、超时、不响应中断三种 await。
+3. **`Condition.await()` 是 `WAITING`，不会进入 `BLOCKED`**。
 
-1. Java 并发问题的核心是共享状态在多线程下的可见性、原子性和有序性。
-2. 设计并发方案时要明确线程之间如何协作、如何退出、如何处理异常和超时。
-3. 工程上还要考虑线程池复用、上下文清理、监控告警和压测验证。
+### BlockingQueue 的 put/take 和 offer/poll 有什么区别？
 
-### 高频追问
+| 方法 | 队列满/空时行为 |
+|------|------------------|
+| `put` / `take` | 阻塞 |
+| `offer` / `poll` | 立即返回 false/null |
+| `offer(timeout)` / `poll(timeout)` | 阻塞指定时间 |
+| `add` / `remove` | 抛 `IllegalStateException` / `NoSuchElementException` |
 
-- 这个机制解决的是互斥、通信、调度还是资源隔离？
-- 高并发下可能出现死锁、饥饿、活锁还是性能退化？
-- 如何用线程 Dump 或指标证明你的判断？
+### LockSupport.park() 比 wait() 好在哪？
 
-### 实战落地
+1. **不需要锁**：`park()` 直接阻塞当前线程，不依赖任何 monitor。
+2. **精准唤醒**：`unpark(thread)` 唤醒指定线程，而 `notify()` 是随机唤醒。
+3. **许可机制**：`unpark` 可以先于 `park` 调用，许可会被缓存，`park` 时直接放行不会阻塞。这避免了 `wait/notify` 容易出现的"先 notify 后 wait 导致永久阻塞"问题。
 
-- **选型前**：先判断是互斥访问、线程协作、任务编排，还是限流隔离。
-- **编码时**：控制共享变量范围，明确锁对象、超时策略、异常处理和资源释放。
-- **上线后**：观察线程数、队列长度、阻塞时间、拒绝次数和 RT 抖动，必要时用线程 Dump 验证。
+## 易错点
 
-### 易错点
-
-- 不要用 sleep 代替同步协作。
-- 不要忽略中断、超时和资源释放。
-## 核心概念
-Java线程间如何通信？ 可以放在“并发能力”这条主线里理解。复习时不要只背结论，要先说明它解决的核心问题，再解释关键机制、适用边界和代价。围绕这个知识点，重点关注：线程安全、可见性、原子性、锁竞争、线程池参数、队列选择、拒绝策略和故障隔离。如果面试官继续追问，通常会从“为什么这样设计、在什么场景会失效、线上如何排查”三个方向展开。
-
-## 面试回答与追问
-- **标准回答**：先给出 Java线程间如何通信？ 的定位，再说明它依赖的核心原理，最后结合业务场景说明如何使用。回答时要把“能解决什么问题”和“会带来什么成本”一起讲清楚。
-- **常见追问**：如果数据量、并发量或调用链路继续放大，Java线程间如何通信？ 的瓶颈会出现在哪里？如何观测、如何优化、如何回滚？
-- **易错点**：不要把概念和具体实现混在一起，也不要只说 API 名称。面试中更重要的是说清楚边界条件、失败场景和取舍依据。
-
-## 实战场景与排查
-典型落地场景包括：高并发接口、异步任务、定时任务、批量处理、缓存刷新、消息消费等需要控制吞吐与稳定性的场景。实际处理线上问题时，可以按“现象确认 → 指标采集 → 假设验证 → 小步修复 → 复盘沉淀”的路径推进。先看日志、监控、链路追踪和核心指标，再判断是容量问题、配置问题、代码路径问题，还是外部依赖抖动。
+- `wait()` 用 `if` 不是 `while`——虚假唤醒或 `notifyAll` 后条件未满足，会误执行。
+- `notify()` 唤醒"同类"等待线程——若多类线程在同一个 wait set 上等待，`notify` 可能唤醒错的，应改用 `Condition`。
+- `BlockingQueue` 用无界队列——`LinkedBlockingQueue` 默认 `Integer.MAX_VALUE`，堆积任务 OOM。
+- `CountDownLatch` 期望重用——它不能 reset，要重用得换 `CyclicBarrier`。
+- 在 `Lock` 里调 `Object.wait()`——抛 `IllegalMonitorStateException`，`Condition` 才是 `ReentrantLock` 的伴生。
 
 ## 总结
-复习 Java线程间如何通信？ 时，建议把它和相邻知识点放在一起比较：相同点是什么、区别在哪里、为什么当前场景选择它而不是替代方案。能讲清楚这些内容，才算真正掌握。
+
+Java 线程通信按抽象层级递进：`volatile` 共享变量最轻量适合状态标记，`wait/notify` 是底层等待-唤醒，`Condition` 提供多条件队列和更灵活的中断/超时，`BlockingQueue` 把生产者-消费者封装成开箱即用，`CountDownLatch` / `CyclicBarrier` / `Semaphore` 处理协调问题，`LockSupport.park/unpark` 是底层基石。`wait()` 必须 `while` 循环、`notifyAll` 比 `notify` 安全、有界队列比无界队列稳妥，这三条是实战底线。
+
+## 参考资料
+
+- [Condition 官方文档](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/util/concurrent/locks/Condition.html)
+- [BlockingQueue 官方文档](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/util/concurrent/BlockingQueue.html)
+- [Java Concurrency in Practice 第 14 章](https://jcip.net/)
+
+---

@@ -13,10 +13,5 @@
     "title": "Redis 缓存",
     "file": "redis/README.md",
     "dir": "redis"
-  },
-  {
-    "title": "Redis 数据类型详解",
-    "file": "redis/data-structures.md",
-    "dir": "redis"
   }
 ]

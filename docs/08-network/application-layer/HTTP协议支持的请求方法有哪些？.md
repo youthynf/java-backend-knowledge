@@ -1,53 +1,286 @@
-# HTTP协议支持的请求方法有哪些？
+# HTTP 协议支持的请求方法有哪些
 
-HTTP协议支持的请求方法有哪些？
-HTTP协议支持的请求方法：
-GET：请求URL标志的文档；
-HEAD：请求URL标志的文档的首部；
-POST：向服务器发送数据；
-PUT：指明的URL下存储一个文档；
-DELETE：删除URL标志的文档；
-CONNECT：用于代理服务器；
-OPTIONS：请求一些选项信息；
-TRACE：用来进行环回测试；
-PATCH：对PUT方法的补充，用来对已知资源进行局部更新；
-
-## 面试总结
-### 核心概念
-
-HTTP 方法描述客户端对资源希望执行的语义。常见方法包括 GET、HEAD、POST、PUT、DELETE、PATCH、OPTIONS、TRACE、CONNECT。面试时不仅要背名字，更要说清安全性、幂等性、是否可缓存以及 REST 设计中的使用边界。
-
-### 面试官想考什么
-
-面试官想看你能否把方法语义和接口设计、重试、缓存、代理行为联系起来。例如支付接口为什么不能因为网络超时就盲目重试 POST，资源整体替换为什么更适合 PUT，局部更新为什么用 PATCH。
-
-### 标准回答
-
-GET 获取资源，语义安全且幂等；HEAD 只获取响应头；POST 提交数据或触发处理，通常非幂等；PUT 对目标资源做整体创建或替换，幂等；PATCH 做局部修改，是否幂等取决于补丁语义；DELETE 删除资源，语义幂等但多次返回状态可不同；OPTIONS 查询服务能力，常用于 CORS 预检；CONNECT 建立隧道，常见于 HTTPS 代理；TRACE 用于回显诊断，生产通常禁用。
-
-### 深挖追问
-
-- GET、PUT、DELETE 为什么说是幂等？“响应码相同”是不是幂等的必要条件？
-- 浏览器 CORS 预检为什么会发送 OPTIONS？
-- DELETE 请求第二次返回 404，是否破坏幂等性？
-
-### 实战场景/代码示例
-
-REST 示例：`GET /orders/1` 查询订单，`POST /orders` 创建订单，`PUT /users/7` 整体替换用户资料，`PATCH /users/7/email` 修改邮箱，`DELETE /cart/items/3` 删除购物车项。对于创建订单这类 POST，要使用业务幂等号防止客户端重试造成重复下单。
-
-### 易错点/总结
-
-不要把方法差异简单说成“GET 参数在 URL，POST 参数在 Body”。协议并不绝对禁止 GET Body，POST 也不天然安全；真正重要的是语义、缓存、幂等和中间件对方法的处理。
 ## 核心概念
-HTTP协议支持的请求方法有哪些？ 可以放在“网络协议能力”这条主线里理解。复习时不要只背结论，要先说明它解决的核心问题，再解释关键机制、适用边界和代价。围绕这个知识点，重点关注：连接建立、报文结构、状态码、长连接、拥塞控制、TLS、代理和超时重试。如果面试官继续追问，通常会从“为什么这样设计、在什么场景会失效、线上如何排查”三个方向展开。
 
-## 面试回答与追问
-- **标准回答**：先给出 HTTP协议支持的请求方法有哪些？ 的定位，再说明它依赖的核心原理，最后结合业务场景说明如何使用。回答时要把“能解决什么问题”和“会带来什么成本”一起讲清楚。
-- **常见追问**：如果数据量、并发量或调用链路继续放大，HTTP协议支持的请求方法有哪些？ 的瓶颈会出现在哪里？如何观测、如何优化、如何回滚？
-- **易错点**：不要把概念和具体实现混在一起，也不要只说 API 名称。面试中更重要的是说清楚边界条件、失败场景和取舍依据。
+HTTP 请求方法（也叫"动词"）描述客户端希望对资源执行的语义动作。RFC 7231 定义了 8 个核心方法：GET、HEAD、POST、PUT、DELETE、PATCH、OPTIONS、TRACE，加上 RFC 2817 的 CONNECT 共 9 个。每个方法有"安全性"和"幂等性"两个关键属性，决定了它在 REST 设计、缓存、重试、CORS 预检中的行为。
 
-## 实战场景与排查
-典型落地场景包括：接口超时、连接耗尽、网关转发、上传下载、移动端弱网和跨域访问。实际处理线上问题时，可以按“现象确认 → 指标采集 → 假设验证 → 小步修复 → 复盘沉淀”的路径推进。先看日志、监控、链路追踪和核心指标，再判断是容量问题、配置问题、代码路径问题，还是外部依赖抖动。
+## 标准回答
+
+9 个 HTTP 方法：
+
+| 方法 | 语义 | 安全 | 幂等 | 用途 |
+|------|------|------|------|------|
+| GET | 获取资源 | 是 | 是 | 查询 |
+| HEAD | 获取响应头 | 是 | 是 | 检查资源是否存在、ETag |
+| POST | 提交数据，触发处理 | 否 | 否 | 创建资源、提交表单 |
+| PUT | 整体替换资源 | 否 | 是 | 更新（覆盖整个资源） |
+| PATCH | 局部修改资源 | 否 | 视实现 | 部分字段更新 |
+| DELETE | 删除资源 | 否 | 是 | 删除 |
+| OPTIONS | 查询能力 | 是 | 是 | CORS 预检、查询支持的方法 |
+| HEAD | 同 GET 但只要头 | 是 | 是 | 节省带宽 |
+| TRACE | 回显请求 | 是 | 是 | 调试，生产禁用 |
+| CONNECT | 建立隧道 | 否 | 否 | HTTPS 代理 |
+
+**安全**：不修改服务端状态（GET/HEAD/OPTIONS/TRACE）。
+**幂等**：多次调用效果相同（GET/HEAD/PUT/DELETE/OPTIONS/TRACE）。
+
+## 详细机制
+
+### GET
+
+```
+GET /api/users/1 HTTP/1.1
+Host: api.example.com
+```
+
+- 安全、幂等
+- 参数在 URL query string（`?key=value&...`）
+- 可缓存（响应有 Cache-Control 等）
+- 浏览器对 URL 长度有限制（IE 2KB，Chrome 2MB，规范未限定）
+- 不应有副作用（不要在 GET 里改数据库）
+
+### POST
+
+```
+POST /api/users HTTP/1.1
+Host: api.example.com
+Content-Type: application/json
+Content-Length: 35
+
+{"name":"Alice","age":30}
+```
+
+- 不安全、不幂等
+- 参数在请求体
+- 用于创建资源、提交表单、上传文件、触发操作
+- 默认不缓存
+- 重试需谨慎（可能重复创建）
+
+### PUT vs PATCH
+
+PUT：整体替换
+
+```
+PUT /api/users/1
+{"name":"Alice","age":30,"email":"a@x.com"}
+# 即使原资源有 10 个字段，也只保留这 3 个
+```
+
+PATCH：局部修改
+
+```
+PATCH /api/users/1
+{"age":31}
+# 只改 age，其他字段不变
+```
+
+PATCH 是否幂等取决于实现：
+
+- **JSON Patch（RFC 6902）**：明确指定操作（add/remove/replace），幂等
+- **JSON Merge Patch（RFC 7396）**：合并 JSON，幂等
+- **自定义 PATCH**：不一定幂等（如 `{"age": "+1"}` 每次调用年龄 +1）
+
+### DELETE
+
+```
+DELETE /api/users/1
+```
+
+- 不安全、幂等（删除一次和删除十次效果相同）
+- 第一次返回 204，第二次仍 204 或 404（视实现）
+- 即使返回 404 也不破坏幂等性（资源已不存在是同样的状态）
+
+### OPTIONS
+
+```
+OPTIONS /api/users HTTP/1.1
+Origin: https://app.example.com
+Access-Control-Request-Method: POST
+Access-Control-Request-Headers: Content-Type
+```
+
+响应：
+
+```
+HTTP/1.1 200 OK
+Access-Control-Allow-Origin: https://app.example.com
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE
+Access-Control-Allow-Headers: Content-Type, Authorization
+Access-Control-Max-Age: 86400
+```
+
+- 用于 CORS 预检（浏览器检查跨域权限）
+- 也用于查询服务端支持的方法（响应 `Allow` 头）
+
+### HEAD
+
+```
+HEAD /api/users/1 HTTP/1.1
+```
+
+响应：
+
+```
+HTTP/1.1 200 OK
+Content-Type: application/json
+Content-Length: 28
+# 无响应体
+```
+
+- 同 GET 但服务端不返回 body
+- 用于检查资源是否存在（404 表示不存在）、ETag 是否变化
+- 节省带宽，常用于客户端缓存验证
+
+### TRACE
+
+```
+TRACE /api/users HTTP/1.1
+X-Custom-Header: hello
+```
+
+响应：
+
+```
+HTTP/1.1 200 OK
+Content-Type: message/http
+
+TRACE /api/users HTTP/1.1
+X-Custom-Header: hello
+```
+
+- 服务端回显收到的请求
+- 用于调试代理链路
+- **生产禁用**：可能泄露内部头信息（XST 攻击）
+
+### CONNECT
+
+```
+CONNECT api.example.com:443 HTTP/1.1
+Host: api.example.com:443
+```
+
+- 用于 HTTPS 代理隧道
+- 客户端通过 HTTP 代理访问 HTTPS 时，先发 CONNECT 建立隧道，再在隧道里做 TLS 握手
+- 不常用但代理场景必需
+
+### 安全方法与缓存
+
+安全方法（GET/HEAD）的响应可被缓存。不安全方法（POST/PUT/DELETE）的响应默认不缓存，除非显式设置 `Cache-Control`（如 POST 后缓存查询结果）。
+
+### 抓包示例
+
+```bash
+# GET 请求
+$ curl -v http://example.com/api/users
+> GET /api/users HTTP/1.1
+
+# POST 请求
+$ curl -v -X POST -d '{"name":"Alice"}' -H "Content-Type: application/json" http://example.com/api/users
+> POST /api/users HTTP/1.1
+> Content-Type: application/json
+> Content-Length: 16
+>
+> {"name":"Alice"}
+
+# OPTIONS 预检
+$ curl -v -X OPTIONS -H "Origin: https://app.com" -H "Access-Control-Request-Method: POST" http://example.com/api/users
+> OPTIONS /api/users HTTP/1.1
+> Origin: https://app.com
+> Access-Control-Request-Method: POST
+```
+
+## 代码示例
+
+Java Spring REST 控制器：
+
+```java
+import org.springframework.web.bind.annotation.*;
+import org.springframework.http.*;
+
+@RestController
+@RequestMapping("/api/users")
+public class UserController {
+
+    @GetMapping("/{id}")               // GET 查询
+    public User getUser(@PathVariable Long id) { ... }
+
+    @PostMapping                        // POST 创建
+    public User createUser(@RequestBody User user) { ... }
+
+    @PutMapping("/{id}")                // PUT 整体更新
+    public User replaceUser(@PathVariable Long id, @RequestBody User user) { ... }
+
+    @PatchMapping("/{id}")              // PATCH 局部更新
+    public User patchUser(@PathVariable Long id, @RequestBody Map<String, Object> updates) { ... }
+
+    @DeleteMapping("/{id}")             // DELETE 删除
+    public void deleteUser(@PathVariable Long id) { ... }
+
+    @RequestMapping(method = RequestMethod.OPTIONS)   // OPTIONS CORS 预检
+    public ResponseEntity<Void> options() {
+        return ResponseEntity.ok()
+            .header("Allow", "GET, POST, PUT, PATCH, DELETE")
+            .build();
+    }
+}
+```
+
+幂等性保证（防止 POST 重试重复创建）：
+
+```java
+@PostMapping("/api/orders")
+public ResponseEntity<Order> createOrder(@RequestBody OrderRequest req) {
+    // 用业务幂等号防止重试导致重复下单
+    if (orderRepository.existsByIdempotencyKey(req.getIdempotencyKey())) {
+        return ResponseEntity.ok(orderRepository.findByIdempotencyKey(req.getIdempotencyKey()));
+    }
+    Order order = orderService.create(req);
+    return ResponseEntity.created(URI.create("/api/orders/" + order.getId())).body(order);
+}
+```
+
+## 实战场景
+
+| 方法 | REST 设计 | 注意点 |
+|------|----------|--------|
+| GET | 查询接口 | 不要在 GET 里改数据（违反安全语义） |
+| POST | 创建资源、复杂查询 | 创建需配合幂等号防重 |
+| PUT | 整体替换 | 客户端要发送完整资源 |
+| PATCH | 局部更新 | 明确使用 JSON Patch 还是 Merge Patch |
+| DELETE | 删除资源 | 注意软删除 vs 硬删除 |
+| OPTIONS | CORS 预检 | 中间件自动处理，业务很少直接处理 |
+
+## 深挖追问
+
+**Q1：GET 一定不能带 body 吗？**
+HTTP 规范不禁止 GET 带 body，但很多代理/服务器会丢弃，且部分浏览器不支持。生产中不要依赖 GET body，参数放 URL。
+
+**Q2：POST 一定不幂等吗？**
+规范上 POST 不要求幂等，但业务可以设计成幂等（如带幂等号的创建）。重试时检查幂等号，已存在则返回旧结果。
+
+**Q3：为什么 PATCH 单独拿出来？**
+PUT 是整体替换，要求客户端发送完整资源；PATCH 只发变更部分，节省带宽。早期 HTTP 没有 PATCH，REST 实践中用 PUT 做局部更新不规范，所以 RFC 5789 引入 PATCH。
+
+**Q4：DELETE 第二次返回 404 算不算破坏幂等？**
+不算。幂等性指"多次调用效果相同"，第一次删除资源（不存在状态），第二次发现资源不存在（仍是不存在状态），效果相同。返回码不同不影响幂等性。
+
+**Q5：CORS 预检什么时候触发？**
+非简单请求触发。简单请求 = GET/HEAD/POST + 仅 CORS 安全头 + Content-Type 限于 form/text/plain。其他方法（PUT/DELETE）、自定义头、application/json 都触发预检。
+
+## 易错点
+
+- **"GET 比 POST 安全"** — 安全指"不修改服务端状态"，不是"不被窃听"。GET 参数在 URL 会被日志/浏览器历史记录，敏感数据不该放 URL。
+- **"POST 比 GET 安全"** — 同样指语义不是加密。
+- **"PUT 和 PATCH 一样"** — PUT 整体替换，PATCH 局部修改。
+- **"POST 一定不幂等"** — 业务可设计幂等 POST。
+- **"DELETE 第二次必须 404"** — 实现自由，返回 204 也对。
 
 ## 总结
-复习 HTTP协议支持的请求方法有哪些？ 时，建议把它和相邻知识点放在一起比较：相同点是什么、区别在哪里、为什么当前场景选择它而不是替代方案。能讲清楚这些内容，才算真正掌握。
+
+HTTP 9 个方法描述对资源的语义动作。安全（GET/HEAD/OPTIONS/TRACE）和幂等（GET/HEAD/PUT/DELETE/OPTIONS/TRACE）是两个关键属性，决定缓存、重试、CORS 预检的行为。REST 设计中 GET 查、POST 创建、PUT 整体替换、PATCH 局部更新、DELETE 删除是标准映射。理解每个方法的语义边界是设计规范 RESTful API 的基础。
+
+## 参考资料
+
+- [RFC 7231 — HTTP/1.1 Semantics and Content, Request Methods](https://datatracker.ietf.org/doc/html/rfc7231#section-4)
+- [RFC 5789 — PATCH Method](https://datatracker.ietf.org/doc/html/rfc5789)
+- [MDN — HTTP Request Methods](https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods)

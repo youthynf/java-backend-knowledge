@@ -1,37 +1,26 @@
 # JVM
 
-这一部分重点建立 JVM 运行机制、内存管理、GC 与线上排查的完整链路。复习时不要只背参数，要能解释现象背后的对象生命周期、线程状态、类加载和垃圾回收行为。
+本目录覆盖 JVM 内存结构、内存模型、类加载、垃圾回收、故障排查的完整知识体系，分基础、GC、故障排查三个子目录。复习时不要只背参数，要能解释现象背后的对象生命周期、线程状态、类加载和垃圾回收行为。
 
-## 面试复习重点
+## 目录导航
 
-- 核心概念是什么，解决了什么问题，和相邻知识点如何区分。
-- 面试官常从实现原理、适用场景、异常边界和性能影响继续追问。
-- 生产落地时要结合监控、日志、压测和故障预案验证方案。
+### [基础](/01-java-core/jvm/basics/)
 
-## 建议掌握程度
+JVM 内存结构、内存模型（JMM）、类加载机制、对象生命周期、字节码、逃逸分析等核心知识点。
 
-- **能讲清概念**：先用自己的话解释定义、背景和解决的问题。
-- **能画出链路**：把核心流程、关键组件和状态变化串起来。
-- **能回答追问**：准备优缺点、适用场景、常见坑和替代方案。
-- **能落地排查**：结合日志、指标、工具和案例说明如何定位问题。
+### [GC](/01-java-core/jvm/gc/)
 
-## 文章导航
+垃圾回收算法、收集器（CMS/G1/ZGC）、对象分配与布局、引用类型、三色标记、SATB、内存泄漏排查等。
 
-- [1.2mb-data-10gb-memory](/01-java-core/jvm/1.2mb-data-10gb-memory.md)
-- [class-loading](/01-java-core/jvm/class-loading.md)
-- [gc-algorithms](/01-java-core/jvm/gc-algorithms.md)
-- [gc-collectors](/01-java-core/jvm/gc-collectors.md)
-- [gc-tuning](/01-java-core/jvm/gc-tuning.md)
-- [jvm-parameters](/01-java-core/jvm/jvm-parameters.md)
-- [jvm-troubleshooting](/01-java-core/jvm/jvm-troubleshooting.md)
-- [memory-model](/01-java-core/jvm/memory-model.md)
-- [one-line-code-save-1g-memory](/01-java-core/jvm/one-line-code-save-1g-memory.md)
+### [故障排查](/01-java-core/jvm/troubleshooting/)
 
-## 面试表达模板
+JVM 常用调参、问题排查工具（jps/jstat/jmap/jstack/jcmd/Arthas）、线程 Dump 分析、CPU 90% 排查等。
 
-回答这类问题时，建议按下面顺序组织：
+## 特殊案例
 
-1. 先给结论：一句话说明它是什么、解决什么问题。
-2. 再讲原理：说明核心组件、关键流程和数据结构。
-3. 补充场景：结合项目或线上问题说明什么时候用、怎么用。
-4. 说明边界：讲清楚缺点、风险、替代方案和排查手段。
+- [1.2MB 数据如何撑起 10GB 内存](1-2MB数据如何撑起10GB内存？.md) — Java 对象模型和集合结构如何放大内存占用
+- [一行代码如何节省 1G 内存](一行代码如何节省1G内存？.md) — 集合容量、缓存边界、对象裁剪等低成本优化手段
+
+---
+
+[← 返回 Java 核心目录](/01-java-core/)

@@ -1,82 +1,71 @@
-# HashMap 的底层如何实现？
+# HashMap 的底层如何实现
 
 ## 核心概念
 
-HashMap 是 Java 中最常用的哈希表实现，它用 **数组 + 链表 + 红黑树** 存储键值对，目标是在大多数情况下提供接近 O(1) 的 put/get 性能。
+HashMap 是 Java 中最常用的哈希表实现，底层用 **数组 + 链表 + 红黑树** 存储键值对，目标是在大多数场景下提供平均 `O(1)` 的 put/get 性能。
 
-理解 HashMap 底层，核心抓四件事：
-
-1. **哈希定位**：通过 key 的 hash 值定位数组下标。
-2. **冲突处理**：不同 key 可能落到同一个桶，先用链表存储。
-3. **树化优化**：链表过长时转红黑树，降低极端冲突下的查询成本。
-4. **扩容迁移**：元素数量超过阈值后扩容，减少冲突概率。
-
-JDK 1.8 之后 HashMap 的桶结构大致如下：
+JDK 8 之后的结构可以概括为一句话：**数组做快速寻址，链表处理普通冲突，红黑树优化极端冲突，扩容控制整体冲突概率。** 理解 HashMap 底层，就是理解这四件事如何协作。
 
 ```text
 Node<K,V>[] table
-  ├── null
-  ├── Node -> Node -> Node
-  ├── TreeNode(红黑树)
-  └── Node
+  ├── null                          (空桶)
+  ├── Node → Node → Node            (链表)
+  ├── TreeNode(红黑树根)             (树化后的桶)
+  └── Node                          (单节点)
 ```
-
-## 面试官想考什么
-
-面试官通常不是只想听“数组加链表加红黑树”，而是想确认你是否理解 HashMap 为什么快、什么时候会变慢、以及扩容和并发场景下有什么坑。
-
-常见考点：
-
-- `hash()` 为什么还要做高低位扰动？
-- table 长度为什么通常是 2 的幂？
-- put 时如何定位桶位？
-- 链表什么时候转红黑树？
-- 扩容时元素为什么可以只留在原位置或移动到 `oldCap + index`？
-- HashMap 为什么线程不安全？
 
 ## 标准回答
 
-HashMap 底层维护一个 `Node<K,V>[] table` 数组，每个数组位置叫一个桶。插入元素时，会先根据 key 计算 hash，然后通过 `(n - 1) & hash` 定位桶下标。
+一句话结论：**HashMap 底层是 `Node<K,V>[] table` 数组，每个桶可能是 null、单向链表或红黑树；put 时通过 `hash(key)` 扰动 + `(n-1) & hash` 定位桶，桶空直接放，桶不空查同 key 覆盖或追加新节点；链表长度 ≥ 8 且容量 ≥ 64 时树化为红黑树；size 超过 `capacity * 0.75` 时扩容翻倍。**
 
-如果桶为空，直接放入新节点；如果桶不为空，就说明发生了哈希冲突。HashMap 会先比较 hash 和 key：如果找到相同 key，就覆盖旧值；如果没有相同 key，就把新节点追加到链表或插入红黑树。
+5 个关键设计：
 
-当同一个桶中的链表长度达到树化阈值时，HashMap 会尝试把链表转成红黑树。JDK 1.8 中树化条件不是只看链表长度，还要求数组容量达到一定值：
+1. **数据结构**：`Node[]` 数组，每桶 `Node`（链表）或 `TreeNode`（红黑树，继承自 Node）。
+2. **hash 扰动**：`(h = key.hashCode()) ^ (h >>> 16)`，让高位参与低位计算。
+3. **桶下标**：`(n - 1) & hash`，n 必须是 2 的幂。
+4. **冲突处理**：链地址法（拉链法），链表过长时树化。
+5. **扩容**：`size > threshold` 触发，容量翻倍，元素按 `hash & oldCap` 拆分到原位/高位。
 
-- 链表长度达到 `TREEIFY_THRESHOLD = 8`
-- table 容量至少达到 `MIN_TREEIFY_CAPACITY = 64`
+## 实现原理
 
-如果容量还小，HashMap 更倾向于先扩容，因为冲突多可能只是数组太小导致的。
-
-HashMap 通过 `size > threshold` 触发扩容，其中：
-
-```text
-threshold = capacity * loadFactor
-```
-
-默认负载因子是 `0.75`，这是空间利用率和查询性能之间的折中。扩容时容量通常翻倍，元素会被重新分布到新数组中。
-
-## 深挖追问
-
-### 1. 为什么 table 长度要是 2 的幂？
-
-因为 HashMap 用位运算计算下标：
+### Node 结构
 
 ```java
-index = (table.length - 1) & hash;
+static class Node<K,V> implements Map.Entry<K,V> {
+    final int hash;          // 缓存 hash，避免重复计算
+    final K key;
+    V value;
+    Node<K,V> next;          // 链表下一个节点
+
+    Node(int hash, K key, V value, Node<K,V> next) { ... }
+}
 ```
 
-当 `table.length` 是 2 的幂时，`table.length - 1` 的二进制低位全是 1，可以让 hash 的低位充分参与寻址，效果等价于取模，但性能比 `%` 更好。
+TreeNode 继承自 Node，多了一些红黑树的指针（parent、left、right、prev、red）：
 
-例如容量为 16：
-
-```text
-16 - 1 = 15 = 0000 1111
-index = hash & 0000 1111
+```java
+static final class TreeNode<K,V> extends LinkedHashMap.Entry<K,V> {
+    TreeNode<K,V> parent;
+    TreeNode<K,V> left;
+    TreeNode<K,V> right;
+    TreeNode<K,V> prev;       // 删除时用
+    boolean red;
+    // ...
+}
 ```
 
-### 2. 为什么 hash 要做高低位扰动？
+### 关键常量
 
-JDK 1.8 的 hash 计算会把高 16 位和低 16 位异或：
+```java
+static final int DEFAULT_INITIAL_CAPACITY = 1 << 4;       // 16，默认初始容量
+static final int MAXIMUM_CAPACITY = 1 << 30;              // 2^30，最大容量
+static final float DEFAULT_LOAD_FACTOR = 0.75f;           // 默认负载因子
+static final int TREEIFY_THRESHOLD = 8;                   // 链表树化阈值
+static final int UNTREEIFY_THRESHOLD = 6;                 // 树退化回链表阈值
+static final int MIN_TREEIFY_CAPACITY = 64;               // 树化要求的最小容量
+```
+
+### hash 扰动
 
 ```java
 static final int hash(Object key) {
@@ -85,35 +74,66 @@ static final int hash(Object key) {
 }
 ```
 
-因为数组下标主要依赖 hash 的低位。如果某些 key 的 hashCode 高位差异明显、低位差异不明显，不扰动就容易集中到同一个桶。高低位异或可以让高位信息参与低位寻址，减少冲突。
+设计目的：数组下标 `i = (n - 1) & hash` 只用 hash 的低位，如果 key 的 hashCode 高位差异大、低位相同，不扰动会全部集中到一个桶。把高 16 位异或到低 16 位，让高位信息参与低位寻址，减少冲突。
 
-### 3. 链表转红黑树后一定更快吗？
-
-不一定。红黑树节点更大，维护旋转、变色也有成本。只有当桶内元素较多时，红黑树的 O(log n) 查询优势才明显。所以 HashMap 设置了树化阈值，而不是一冲突就树化。
-
-### 4. 扩容时为什么不用重新完整取模？
-
-JDK 1.8 扩容容量翻倍后，一个节点的新位置只取决于 hash 中新增参与计算的那一位：
-
-```text
-(hash & oldCap) == 0 -> 留在原下标
-(hash & oldCap) != 0 -> 移动到 原下标 + oldCap
-```
-
-这让扩容迁移更高效，也减少了重新计算的成本。
-
-## 实战场景
-
-### 场景 1：自定义对象作为 key
-
-如果用自定义对象作为 HashMap 的 key，必须正确重写 `equals()` 和 `hashCode()`。
+### 桶定位
 
 ```java
-class UserKey {
-    private final Long userId;
+i = (n - 1) & hash;
+```
 
-    UserKey(Long userId) {
+n 是 2 的幂时，`(n-1) & hash` 等价于 `hash % n`，但位运算比取模快。
+
+### 树化条件
+
+```java
+final void treeifyBin(Node<K,V>[] tab, int hash) {
+    int n, index; Node<K,V> e;
+    if (tab == null || (n = tab.length) < MIN_TREEIFY_CAPACITY) {
+        resize();              // 容量 < 64，先扩容
+    } else {
+        // 容量 ≥ 64，链表转红黑树
+    }
+}
+```
+
+链表长度 ≥ 8 但容量 < 64 时扩容，不树化。因为小容量下冲突主要来自数组太小，扩容能把链表拆开，比树化更划算。
+
+### 扩容机制
+
+```text
+threshold = capacity * loadFactor
+扩容条件：++size > threshold
+扩容方式：newCapacity = oldCapacity << 1（翻倍）
+迁移：hash & oldCap == 0 留原位，非 0 移到 原位 + oldCap
+```
+
+### JDK 7 vs JDK 8 对比
+
+| 维度 | JDK 7 | JDK 8 |
+|------|-------|-------|
+| 数据结构 | 数组 + 链表 | 数组 + 链表 + 红黑树 |
+| 插入方式 | 头插法 | 尾插法 |
+| 扩容迁移 | 重新计算 hash 取模 | `hash & oldCap` 一位判断 |
+| 并发问题 | 头插法扩容可能链表成环，CPU 100% | 改尾插后不成环，但仍非线程安全 |
+| hash 扰动 | 9 次扰动（位与、位或、移位） | 1 次异或 + 1 次移位 |
+
+## 代码示例
+
+### 自定义对象作为 key
+
+```java
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
+
+public final class UserKey {
+    private final Long userId;
+    private final String tenantId;
+
+    public UserKey(Long userId, String tenantId) {
         this.userId = userId;
+        this.tenantId = tenantId;
     }
 
     @Override
@@ -121,21 +141,28 @@ class UserKey {
         if (this == o) return true;
         if (!(o instanceof UserKey)) return false;
         UserKey other = (UserKey) o;
-        return java.util.Objects.equals(userId, other.userId);
+        return Objects.equals(userId, other.userId)
+            && Objects.equals(tenantId, other.tenantId);
     }
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(userId);
+        return Objects.hash(userId, tenantId);
+    }
+}
+
+class Demo {
+    public static void main(String[] args) {
+        Map<UserKey, String> cache = new HashMap<>();
+        cache.put(new UserKey(1L, "A"), "Tom");
+
+        // 取出来必须是 Tom，不能是 null
+        System.out.println(cache.get(new UserKey(1L, "A")));
     }
 }
 ```
 
-如果只重写 `equals()` 不重写 `hashCode()`，逻辑上相等的 key 可能落到不同桶，导致 get 取不到数据。
-
-### 场景 2：预估容量减少扩容
-
-如果要一次放入大量元素，可以提前设置容量，减少扩容成本。
+### 预估容量减少扩容
 
 ```java
 int expectedSize = 10_000;
@@ -143,16 +170,69 @@ int capacity = (int) (expectedSize / 0.75f) + 1;
 Map<String, Object> map = new HashMap<>(capacity);
 ```
 
-这在批量导入、缓存预热、构建索引时很有用。
+### Java record 自动生成 equals/hashCode
+
+```java
+public record UserId(Long id, String tenant) {}
+
+Map<UserId, String> map = new HashMap<>();
+map.put(new UserId(1L, "A"), "Tom");
+map.get(new UserId(1L, "A"));   // Tom
+```
+
+## 实战场景
+
+| 场景 | 用法 | 注意点 |
+|------|------|--------|
+| 单线程缓存 | `HashMap` | 默认 16/0.75，预估容量时初始化 |
+| 自定义 key | 重写 `equals` + `hashCode` 或用 `record` | 必须 equals 相等则 hashCode 相等 |
+| 批量导入数据 | `new HashMap<>(expected / 0.75f + 1)` | 避免反复扩容 |
+| 并发读写 | `ConcurrentHashMap` | 不允许 null key/value |
+| 保留插入顺序 | `LinkedHashMap` | 单线程，accessOrder 可做 LRU |
+| 按 key 排序 | `TreeMap` | `O(log n)`，不适合热点数据 |
+| 配置初始化后只读 | `Map.copyOf`（JDK 10+） | 不可变，安全发布 |
+
+## 深挖追问
+
+### 链表转红黑树后一定更快吗？
+
+不一定。红黑树节点比 Node 大（多 4 个指针 + 1 个 boolean），维护旋转、变色也有成本。桶内元素少时链表查询并不慢，所以 HashMap 设了 8 的树化阈值——只有极端冲突才树化。退化阈值 6 而不是 8 是为了避免链表和树之间频繁切换。
+
+### 为什么链表树化阈值是 8？
+
+源码注释基于泊松分布：在负载因子 0.75 下，一个桶有 k 个节点的概率服从 λ=0.5 的泊松分布。桶有 8 个节点的概率约为 `0.00000006`，几乎不会发生。选 8 是"几乎不会触发"的极端兜底，正常情况下不会出现树。
+
+### 扩容时为什么不用重新计算 hash？
+
+HashMap 的 hash 在 put 时已存在 `Node.hash` 字段。扩容时容量翻倍，`(n-1)` 多了一位 1，元素新位置只取决于 hash 在新增位的值，用 `hash & oldCap` 即可判断，无需重新计算。
+
+### HashMap 允许 null key 吗？
+
+允许一个 null key。`hash(null) = 0`，固定放在 `table[0]` 桶。value 也允许 null。ConcurrentHashMap 不允许 null，因为 get 返回 null 时无法区分"key 不存在"和"value 是 null"。
+
+### HashMap 线程安全吗？
+
+不安全。并发 put 会出现数据覆盖、size 错乱、扩容结构异常。JDK 7 头插法扩容可能链表成环导致 CPU 100%，JDK 8 改尾插后不成环但仍非线程安全。并发场景必须用 `ConcurrentHashMap`。
+
+### 为什么不在 put 时直接 synchronized？
+
+因为单线程场景下加锁有性能开销。HashMap 设计目标是单线程最高性能，并发场景交给 `ConcurrentHashMap` 处理。两者定位不同，不要混用。
 
 ## 易错点
 
-- HashMap 不是有序集合，遍历顺序不能依赖。
-- HashMap 允许一个 `null` key，且 null key 通常放在 0 号桶。
-- 链表长度达到 8 不一定马上树化，容量小于 64 时优先扩容。
-- 红黑树退化回链表也有阈值，通常桶内元素减少到较少时会退化。
-- HashMap 线程不安全，并发写入可能导致数据覆盖、丢失或结构异常。
+- HashMap 默认容量是 16，不是 12（12 是 `16 * 0.75` 的扩容阈值）。
+- 链表长度到 8 不一定树化，容量 < 64 时优先扩容。
+- 红黑树退化阈值是 6，不是 8。
+- HashMap 不是有序的，遍历顺序不要依赖。
+- `hashCode` 相等不等于 key 相等，HashMap 在桶内还要调 `equals`。
+- JDK 8 改尾插后仍非线程安全，不要认为"尾插解决了并发问题"。
 
 ## 总结
 
-一句话概括：HashMap 用数组做快速寻址，用链表处理普通冲突，用红黑树优化极端冲突，用扩容控制整体冲突概率。面试回答时不要只背结构，要把 hash 定位、冲突处理、树化条件、扩容迁移和线程安全一起讲清楚。
+HashMap 底层用数组 + 链表 + 红黑树：数组做快速寻址，链表处理普通冲突，红黑树优化极端冲突，扩容控制冲突概率。JDK 8 相比 JDK 7 三大改进：链表过长时树化、扩容迁移改尾插且用一位判断新位置、hash 扰动简化为一次异或。面试时要把 hash 扰动、2 的幂容量、树化条件、扩容迁移、线程安全这几个点串起来讲，不能只背"数组+链表+红黑树"。
+
+## 参考资料
+
+- [OpenJDK HashMap 源码](https://github.com/openjdk/jdk/blob/jdk8u/jdk/src/share/classes/java/util/HashMap.java)
+- [HashMap 源码解析 - 美团技术团队](https://tech.meituan.com/2016/06/24/java-hashmap.html)
+- [Java Platform SE 8 - HashMap](https://docs.oracle.com/javase/8/docs/api/java/util/HashMap.html)

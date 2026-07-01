@@ -1,60 +1,13 @@
-# engine
+# 存储引擎
 
-## 面试复习重点
+本目录覆盖 MySQL 存储引擎的选型与对比、InnoDB 与 MyISAM 的差异、InnoDB 的数据组织方式等核心知识点。
 
-- 索引、事务、锁、日志、SQL 优化和存储结构的整体关系。
-- 从慢 SQL、锁等待、主从延迟等现象反推底层原因。
-- 结合执行计划、监控指标和业务写入模型做优化取舍。
+## 目录
 
-## 建议掌握程度
+- [InnoDB 与 MyISAM 区别是什么](InnoDB与MyISAM区别是什么？.md) — 事务/锁/外键/聚簇索引/崩溃恢复五个维度的核心差异
+- [InnoDB 和 MyISAM 的数据文件组织方式有什么不同](InnoDB和MyISAM的数据文件组织方式有什么不同？.md) — .ibd vs .MYD/.MYI，以及 MySQL 8.0 移除 .frm 的影响
+- [InnoDB 是如何存储数据的](InnoDB是如何存储数据的？.md) — 表空间/段/区/页/行五层结构与数据页内部布局
+- [MySQL 为什么选择 InnoDB 作为默认存储引擎](MySQL为什么选择InnoDB作为默认存储引擎？.md) — 事务/行锁/MVCC/外键/崩溃恢复五项能力
+- [MySQL 常用的存储引擎有哪些](MySQL常用的存储引擎有哪些？.md) — InnoDB/MyISAM/Memory/Archive/CSV/NDB 对比与选型
 
-- **能讲清概念**：用自己的话说明定义、背景和解决的问题。
-- **能画出链路**：把关键组件、核心流程和状态变化串起来。
-- **能回答追问**：准备优缺点、适用场景、常见坑和替代方案。
-- **能落地排查**：结合日志、指标、工具和案例说明定位思路。
-
-## 面试表达模板
-
-1. 先给结论：说明它是什么、解决什么问题。
-2. 再讲原理：说明核心组件、关键流程和数据结构。
-3. 补充场景：结合项目或线上问题说明怎么用。
-4. 说明边界：讲清楚缺点、风险、替代方案和排查手段。
-
-
-## 核心概念
-
-- [InnoDB和MyISAM数据文件组织方式](/03-database/mysql/engine/InnoDB和MyISAM数据文件组织方式.md)
-- [InnoDB是如何存储数据的？](/03-database/mysql/engine/InnoDB是如何存储数据的？.md)
-- [InnoDB与MyISAM区别是什么？](/03-database/mysql/engine/InnoDB与MyISAM区别是什么？.md)
-- [MySQL常用的存储引擎有哪些？](/03-database/mysql/engine/MySQL常用的存储引擎有哪些？.md)
-- [MySQL为什么选择InnoDB作为默认存储引擎？](/03-database/mysql/engine/MySQL为什么选择InnoDB作为默认存储引擎？.md)
-
-## 面试官想考什么
-
-- InnoDB 与 MyISAM 在事务、锁、索引组织、崩溃恢复上的差异。
-- 为什么现代 OLTP 场景通常优先 InnoDB。
-- 存储引擎选择对并发、可靠性、备份恢复的影响。
-
-## 标准回答
-
-存储引擎选择影响事务、锁粒度、索引组织和崩溃恢复。InnoDB 支持事务、行级锁、MVCC 和崩溃恢复，适合多数 OLTP；MyISAM 不支持事务，主要是表级锁，现代业务通常不作为首选。
-
-## 深挖追问
-
-1. 为什么 InnoDB 适合 OLTP？事务、行锁、MVCC、崩溃恢复更完善。
-2. MyISAM 适合什么？历史上的读多写少且无需事务场景。
-3. 引擎会影响索引吗？会，数据和索引组织方式不同。
-
-## 实战场景 / SQL 示例
-
-```sql
-SHOW TABLE STATUS LIKE "orders";
-SHOW CREATE TABLE orders;
--- 关注 Engine、主键、索引和行格式。
-```
-
-## 易错点 / 总结
-
-- 不要在需要事务的业务表上选择不支持事务的引擎。
-- 不要只看读性能，可靠性和恢复能力同样重要。
-- 不同版本细节可能变化，回答时说明基于常见 InnoDB。
+---

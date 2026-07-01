@@ -1,38 +1,17 @@
 # 网络层
 
-这一部分关注网络分层、协议交互、安全机制和问题排查。复习时要能从一次请求的完整链路解释连接建立、传输、路由、加密和异常定位。
+本目录覆盖网络层核心协议与机制：IP 地址、ARP、ICMP、IGMP、CIDR、NAT、DHCP、路由协议，以及跨网段通信全流程。
 
-## 面试复习重点
+## 目录
 
-- OSI/TCP-IP 分层、TCP/UDP、HTTP/HTTPS 和 DNS。
-- 连接建立、拥塞控制、TLS 握手和常见状态码。
-- 网络超时、连接池耗尽、证书异常和抓包定位。
-
-## 建议掌握程度
-
-- **能讲清概念**：先用自己的话解释定义、背景和解决的问题。
-- **能画出链路**：把核心流程、关键组件和状态变化串起来。
-- **能回答追问**：准备优缺点、适用场景、常见坑和替代方案。
-- **能落地排查**：结合日志、指标、工具和案例说明如何定位问题。
-
-## 文章导航
-
-- [ARP协议作用是什么？](/08-network/network-layer/ARP协议作用是什么？.md)
-- [CIDR无分类地址是什么？](/08-network/network-layer/CIDR无分类地址是什么？.md)
-- [DHCP协议作用是什么？](/08-network/network-layer/DHCP协议作用是什么？.md)
-- [ICMP是什么？](/08-network/network-layer/ICMP是什么？.md)
-- [IGMP是什么？](/08-network/network-layer/IGMP是什么？.md)
-- [IPV4和IPV6有什么区别？](/08-network/network-layer/IPV4和IPV6有什么区别？.md)
-- [IP分片与重组机制是什么？](/08-network/network-layer/IP分片与重组机制是什么？.md)
-- [IP地址是如何分类的？](/08-network/network-layer/IP地址是如何分类的？.md)
-- [NAT网络地址转换是什么？](/08-network/network-layer/NAT网络地址转换是什么？.md)
-- [打开网页发生的网络过程是怎么样的？](/08-network/network-layer/打开网页发生的网络过程是怎么样的？.md)
-
-## 面试表达模板
-
-回答这类问题时，建议按下面顺序组织：
-
-1. 先给结论：一句话说明它是什么、解决什么问题。
-2. 再讲原理：说明核心组件、关键流程和数据结构。
-3. 补充场景：结合项目或线上问题说明什么时候用、怎么用。
-4. 说明边界：讲清楚缺点、风险、替代方案和排查手段。
+- [ARP 协议作用是什么](ARP协议作用是什么？.md) — 已知 IP 求 MAC 的地址解析机制，ARP 缓存、免费 ARP、ARP 欺骗防御
+- [CIDR 无分类地址是什么](CIDR无分类地址是什么？.md) — 取消 A/B/C 类边界、任意前缀长度、子网划分与路由聚合、私有 IP 范围
+- [DHCP 协议作用是什么](DHCP协议作用是什么？.md) — DORA 四步自动获取 IP 配置、租期续约、DHCP Relay 跨网段
+- [ICMP 是什么](ICMP是什么？.md) — IP 控制与诊断协议，ping/traceroute 原理、差错报文约束、ICMPv6
+- [IGMP 是什么](IGMP是什么？.md) — IPv4 组播成员管理，主机-路由器信令、Snooping、与 PIM 协作
+- [IPv4 和 IPv6 有什么区别](IPv4和IPv6有什么区别？.md) — 32 位 vs 128 位、首部简化、分片策略、SLAAC/NDP、双栈与 NAT64
+- [IP 分片与重组机制是什么](IP分片与重组机制是什么？.md) — MTU/MSS/PMTUD 关系、IPv4 路由器分片与 IPv6 仅源主机分片、生产中如何避免分片
+- [IP 地址是如何分类的](IP地址是如何分类的？.md) — A/B/C/D/E 五类划分、私有 IP 范围、特殊地址、与 CIDR 的关系
+- [NAT 网络地址转换是什么](NAT网络地址转换是什么？.md) — NAPT 端口复用、NAT 表生命周期、Cone/Symmetric NAT、STUN/TURN 穿透
+- [路由协议有哪些？OSPF 与 BGP 有什么区别](路由协议有哪些？OSPF与BGP有什么区别？.md) — 静态/动态路由、IGP/EGP、链路状态 vs 路径矢量、最长前缀匹配
+- [打开网页发生的网络过程是怎么样的](打开网页发生的网络过程是怎么样的？.md) — DNS/ARP/TCP/TLS/HTTP 全流程串讲、各阶段排障工具

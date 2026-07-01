@@ -1,144 +1,356 @@
-# Java问题排查工具有哪些？
+# Java 问题排查工具有哪些
 
-Java问题排查工具有哪些？
-一、Java调试入门工具
-•  jps
-jps是jdk提供的一个查看当前java进程的小工具， 可以看做是JavaVirtual Machine Process Status Tool的缩写。
-
-jps # 显示进程的ID 和 类的名称
-jps –l # 输出输出完全的包名，应用主类名，jar的完全路径名 
-jps –v # 输出jvm参数
-jps –q # 显示java进程号
-jps -m # main 方法
-jps -l Java问题排查工具有哪些.Java问题排查工具有哪些.xx.xx # 远程查看
-java程序在启动以后，会在java.io.tmpdir指定的目录下，就是临时文件夹里，生成一个类似于hsperfdata_User的文件夹，这个文件夹里（在Linux中为/tmp/hsperfdata_{userName}/），有几个文件，名字就是java进程的pid，因此列出当前运行的java进程，只是把这个目录里的文件名列一下而已。 至于系统的参数什么，就可以解析这几个文件获得。
-•  jstack
-jstack是jdk自带的线程堆栈分析工具，使用该命令可以查看或导出 Java 应用程序中线程堆栈信息。
-
-# 基本
-jstack 2815
-
-# java和native c/c++框架的所有栈信息
-jstack -m 2815
-
-# 额外的锁信息列表，查看是否死锁
-jstack -l 2815
-
-•  jinfo
-jinfo 是 JDK 自带的命令，可以用来查看正在运行的 java 应用程序的扩展参数，包括Java System属性和JVM命令行参数；也可以动态的修改正在运行的 JVM 一些参数。当系统崩溃时，jinfo可以从core文件里面知道崩溃的Java应用程序的配置信息。
-
-# 输出当前 jvm 进程的全部参数和系统属性
-jinfo 2815
-
-# 输出所有的参数
-jinfo -flags 2815
-
-# 查看指定的 jvm 参数的值
-jinfo -flag PrintGC 2815
-
-# 开启/关闭指定的JVM参数
-jinfo -flag +PrintGC 2815
-
-# 设置flag的参数
-jinfo -flag name=value 2815
-
-# 输出当前 jvm 进行的全部的系统属性
-jinfo -sysprops 2815
-
-•  jmap
-命令jmap是一个多功能的命令。它可以生成 java 程序的 dump 文件， 也可以查看堆内对象示例的统计信息、查看 ClassLoader 的信息以及 finalizer 队列。
-
-# 查看堆的情况
-jmap -heap 2815
-
-# dump
-jmap -dump:live,format=b,file=/tmp/heap2.bin 2815
-jmap -dump:format=b,file=/tmp/heap3.bin 2815
-
-# 查看堆的占用
-jmap -histo 2815 | head -10
-
-•  jstat
-
-jstat -gcutil 2815 1000
-
-二、Java调试进阶工具
-brace
-•  查看当前谁调用了ArrayList的add方法，同时只打印当前ArrayList的size大于500的线程调用栈
-
-@OnMethod(clazz = "java.util.ArrayList", method="add", location = @Location(value = Kind.CALL, clazz = "/./", method = "/./"))
-public static void m(@ProbeClassName String probeClass, @ProbeMethodName String probeMethod, @TargetInstance Object instance, @TargetMethodOrField String method) {
-
-    if(getInt(field("java.util.ArrayList", "size"), instance) > 479){
-        println("check who ArrayList.add method:" + probeClass + "#" + probeMethod  + ", method:" + method + ", size:" + getInt(field("java.util.ArrayList", "size"), instance));
-        jstack();
-        println();
-        println("===========================");
-        println();
-    }
-}
-•  监控当前服务方法被调用时返回的值以及请求的参数
-
-@OnMethod(clazz = "com.taobao.sellerhome.transfer.biz.impl.C2CApplyerServiceImpl", method="nav", location = @Location(value = Kind.RETURN))
-public static void mt(long userId, int current, int relation, String check, String redirectUrl, @Return AnyType result) {
-
-    println("parameter# userId:" + userId + ", current:" + current + ", relation:" + relation + ", check:" + check + ", redirectUrl:" + redirectUrl + ", result:" + result);
-}
-注意:
-•  经过观察，1.3.9的release输出不稳定，要多触发几次才能看到正确的结果
-•  正则表达式匹配trace类时范围一定要控制，否则极有可能出现跑满CPU导致应用卡死的情况
-•  由于是字节码注入的原理，想要应用恢复到正常情况，需要重启应用。
-
-2. Greys
-•  sc -df Java问题排查工具有哪些: 输出当前类的详情,包括源码位置和classloader结构
-•  trace class method: 打印出当前方法调用的耗时情况，细分到每个方法, 对排查方法性能时很有帮助。
-
-3. Arthas
-•  Arthas是基于Greys。
-
-4. javOSize
-•  classes：通过修改了字节码，改变了类的内容，即时生效。 所以可以做到快速的在某个地方打个日志看看输出，缺点是对代码的侵入性太大。但是如果自己知道自己在干嘛，的确是不错的玩意儿。
-•  其他功能Greys和btrace都能很轻易做的到，不说了。
-
-JProfiler
-之前判断许多问题要通过JProfiler，但是现在Greys和btrace基本都能搞定了。再加上出问题的基本上都是生产环境(网络隔离)，所以基本不怎么使用了，但是还是要标记一下。
-
-## 面试总结
-
-围绕「Java问题排查工具有哪些？」，面试官通常不只考概念定义，更关注你能否把机制、使用场景和线上问题串起来。
-
-### 核心回答
-
-1. JVM 排障要先保现场，再定位资源维度：CPU、内存、GC、线程、IO。
-2. 常见链路是 top/pidstat 找进程，jstack/jcmd/Arthas 定线程和方法，GC 日志/MAT 定内存问题。
-3. 排障结论必须落到代码热点、配置问题或外部依赖，而不是停留在工具输出。
-
-### 高频追问
-
-- CPU 高为什么不应第一步直接看业务日志？
-- 如何把 Linux 线程 id 转成 jstack 中的 nid？
-- 如何区分死锁、阻塞、等待 IO 和无限循环？
-
-### 实战落地
-
-- **排查类问题**：先收集监控、日志和 JVM 现场信息，再用工具验证假设，避免凭经验改参数。
-- **调优类问题**：先明确目标是降低停顿、提升吞吐还是减少内存，再选择收集器、堆大小和业务代码优化。
-- **面试表达**：用“现象 → 原理 → 工具验证 → 解决方案 → 风险边界”的链路回答。
-
-### 易错点
-
-- 先保存现场快照再重启。
-- 采样要多次，不要根据一次 jstack 下结论。
 ## 核心概念
-Java问题排查工具有哪些？ 可以放在“JVM 运行时能力”这条主线里理解。复习时不要只背结论，要先说明它解决的核心问题，再解释关键机制、适用边界和代价。围绕这个知识点，重点关注：内存区域、对象生命周期、GC Roots、垃圾回收器、类加载、JIT、参数调优和故障定位。如果面试官继续追问，通常会从“为什么这样设计、在什么场景会失效、线上如何排查”三个方向展开。
 
-## 面试回答与追问
-- **标准回答**：先给出 Java问题排查工具有哪些？ 的定位，再说明它依赖的核心原理，最后结合业务场景说明如何使用。回答时要把“能解决什么问题”和“会带来什么成本”一起讲清楚。
-- **常见追问**：如果数据量、并发量或调用链路继续放大，Java问题排查工具有哪些？ 的瓶颈会出现在哪里？如何观测、如何优化、如何回滚？
-- **易错点**：不要把概念和具体实现混在一起，也不要只说 API 名称。面试中更重要的是说清楚边界条件、失败场景和取舍依据。
+JDK 自带一系列排查工具（jps、jstat、jmap、jstack、jcmd、jinfo），加上 Arthas、MAT、JFR、async-profiler 等，构成了 Java 问题排查的工具链。掌握这些工具是排查 OOM、CPU 高、GC 频繁、线程问题的基础。
 
-## 实战场景与排查
-典型落地场景包括：服务出现 OOM、Full GC 频繁、启动慢、类冲突或延迟抖动时的定位与优化。实际处理线上问题时，可以按“现象确认 → 指标采集 → 假设验证 → 小步修复 → 复盘沉淀”的路径推进。先看日志、监控、链路追踪和核心指标，再判断是容量问题、配置问题、代码路径问题，还是外部依赖抖动。
+工具分三类：JDK 命令行工具（jps/jstat/jmap/jstack/jcmd）、可视化工具（JConsole/JVisualVM/JMC）、第三方工具（Arthas/MAT/async-profiler）。生产环境以命令行工具 + Arthas 为主。
+
+```text
+排查工具速查：
+- 进程/类加载：jps、jcmd
+- 内存/堆：jstat、jmap、jcmd GC.heap_info
+- 线程：jstack、jcmd Thread.print
+- JVM 参数：jinfo、jcmd VM.flags
+- 在线诊断：Arthas（dashboard、thread、watch、trace）
+- 堆 dump 分析：Eclipse MAT
+- 性能采样：JFR、async-profiler
+```
+
+## 标准回答
+
+Java 问题排查工具分三类：JDK 命令行（jps/jstat/jmap/jstack/jcmd/jinfo）、可视化（JConsole/JVisualVM/JMC）、第三方（Arthas/MAT/async-profiler）。生产环境以 jcmd + Arthas 为主。jcmd 是 JDK 8+ 推荐的统一入口，能替代大部分传统工具。Arthas 提供在线诊断（dashboard、thread、watch、trace），是排查神器。MAT 用于离线分析 heap dump。
+
+要点：
+
+1. **jps**：列出 Java 进程。
+2. **jstat**：GC 统计、类加载、编译信息。
+3. **jmap**：堆信息、对象直方图、heap dump。
+4. **jstack**：线程栈、死锁检测。
+5. **jcmd**：JDK 8+ 统一入口，推荐使用。
+6. **jinfo**：查看/修改 JVM 参数。
+7. **Arthas**：在线诊断神器。
+8. **MAT**：heap dump 离线分析。
+9. **JFR**：JDK 11+ 生产级性能采样。
+
+## JDK 命令行工具
+
+### jps — 列出 Java 进程
+
+```bash
+jps                # 列出 PID 和主类名
+jps -l             # 输出完整包名 / jar 路径
+jps -v             # 输出 JVM 参数
+jps -m            # 输出 main 方法参数
+jps -q             # 只输出 PID
+```
+
+### jstat — GC 统计
+
+```bash
+# GC 概况，每 1 秒一次，共 10 次
+jstat -gcutil <pid> 1000 10
+
+# 输出：
+#  S0     S1     E      O      M     CCS    YGC   YGCT   FGC  FGCT   GCT
+#  0.00  45.23  67.89  34.56  95.12  91.34   123   1.234   5   0.567  1.801
+
+# 其他选项
+jstat -gc <pid>            # 各代详细大小
+jstat -gccapacity <pid>    # 各代容量
+jstat -class <pid>         # 类加载统计
+jstat -compiler <pid>      # JIT 编译统计
+```
+
+字段含义：
+
+- S0/S1：Survivor 0/1 使用率。
+- E：Eden 使用率。
+- O：老年代使用率。
+- M：元空间使用率。
+- YGC/YGCT：Young GC 次数/总耗时。
+- FGC/FGCT：Full GC 次数/总耗时。
+- GCT：GC 总耗时。
+
+### jmap — 堆信息
+
+```bash
+# 堆概况
+jmap -heap <pid>
+
+# 对象直方图（按实例数排序）
+jmap -histo <pid> | head -20
+
+# 只看存活对象（先触发 Full GC）
+jmap -histo:live <pid> | head -20
+
+# 生成 heap dump
+jmap -dump:format=b,file=/tmp/heap.hprof <pid>
+
+# 生成存活对象的 heap dump
+jmap -dump:live,format=b,file=/tmp/heap.hprof <pid>
+```
+
+注意：`jmap -histo:live` 和 `jmap -dump:live` 会触发 Full GC，生产慎用。
+
+### jstack — 线程栈
+
+```bash
+# 基本线程栈
+jstack <pid>
+
+# 额外锁信息（推荐）
+jstack -l <pid>
+
+# 强制 dump（进程无响应）
+jstack -F <pid>
+
+# 输出到文件
+jstack -l <pid> > /tmp/stack.log
+```
+
+jstack 自动检测死锁，在输出末尾报告 `Found one Java-level deadlock`。
+
+### jcmd — JDK 8+ 统一入口
+
+jcmd 是推荐使用的统一工具，能替代大部分传统工具：
+
+```bash
+# 列出所有 Java 进程
+jcmd -l
+
+# 列出指定 JVM 支持的命令
+jcmd <pid> help
+
+# 堆信息
+jcmd <pid> GC.heap_info
+
+# 对象直方图
+jcmd <pid> GC.class_histogram
+
+# 生成 heap dump
+jcmd <pid> GC.heap_dump /tmp/heap.hprof
+
+# 线程栈
+jcmd <pid> Thread.print
+
+# 查看 JVM 参数
+jcmd <pid> VM.flags
+jcmd <pid> VM.system_properties
+
+# 查看 JVM 版本和系统信息
+jcmd <pid> VM.version
+jcmd <pid> VM.uptime
+
+# 本地内存跟踪（需启用 NMT）
+jcmd <pid> VM.native_memory summary
+
+# 触发 GC
+jcmd <pid> GC.run
+jcmd <pid> GC.run_finalization
+```
+
+### jinfo — 查看/修改 JVM 参数
+
+```bash
+# 查看所有参数
+jinfo -flags <pid>
+
+# 查看指定参数
+jinfo -flag UseG1GC <pid>
+
+# 动态修改参数（仅 manageable 标记的参数）
+jinfo -flag +PrintGC <pid>
+jinfo -flag MaxGCPauseMillis=100 <pid>
+
+# 查看系统属性
+jinfo -sysprops <pid>
+```
+
+## 可视化工具
+
+### JConsole
+
+JDK 自带，轻量级监控：
+
+- 内存（堆、非堆、各代）。
+- 线程（状态、栈）。
+- 类加载。
+- GC 概况。
+- MBean 操作。
+
+```bash
+jconsole <pid>   # 直接连接指定进程
+jconsole          # 选择进程连接
+```
+
+### JVisualVM
+
+功能更丰富的可视化工具（JDK 9+ 需单独下载）：
+
+- 实时监控（CPU、内存、线程、类）。
+- 线程可视化（状态、栈、死锁检测）。
+- 堆 dump 分析（内置）。
+- 插件扩展（Visual GC 等）。
+
+```bash
+jvisualvm
+```
+
+### Java Mission Control (JMC)
+
+JDK 11+ 免费，生产级监控：
+
+- JFR（Java Flight Recorder）录制。
+- 实时监控。
+- 堆分析。
+
+## 第三方工具
+
+### Arthas
+
+阿里开源的在线诊断神器，无需重启应用：
+
+```bash
+# 安装并启动
+curl -O https://arthas.aliyun.com/arthas-boot.jar
+java -jar arthas-boot.jar
+```
+
+常用命令：
+
+| 命令 | 用途 |
+|------|------|
+| `dashboard` | 实时面板（线程/内存/GC） |
+| `thread -n 5` | 最忙的 5 个线程 |
+| `thread -b` | 查找死锁 |
+| `thread --state BLOCKED` | 查看阻塞线程 |
+| `jad 类名` | 反编译 |
+| `watch 方法 "{params,returnObj}"` | 观察方法入参返回值 |
+| `trace 方法` | 调用链路耗时 |
+| `stack 方法` | 方法调用栈 |
+| `monitor 方法 -c 10` | 方法执行统计 |
+| `heapdump /tmp/dump.hprof` | 导出堆 dump |
+| `vmtool` | 查询堆中对象 |
+| `logger --name x --level DEBUG` | 动态调整日志级别 |
+| `ognl` | 执行 OGNL 表达式 |
+| `profiler start --event cpu` | CPU 火焰图 |
+
+### Eclipse MAT
+
+Eclipse Memory Analyzer Tool，离线分析 heap dump：
+
+- Leak Suspects Report：自动分析泄漏点。
+- Dominator Tree：对象保留内存大小排序。
+- Histogram：对象数量和大小统计。
+- Path to GC Roots：对象为什么没被回收。
+- OQL：对象查询语言。
+
+### async-profiler
+
+低开销性能采样工具，生成火焰图：
+
+```bash
+# CPU 采样
+./profiler.sh -d 30 -f cpu.html <pid>
+
+# 内存分配采样
+./profiler.sh -d 30 -e alloc -f alloc.html <pid>
+```
+
+## 代码示例
+
+完整排查示例：
+
+```bash
+# 1. 找到 Java 进程
+jps -lv
+
+# 2. 看 GC 概况
+jstat -gcutil <pid> 1000 10
+
+# 3. 看堆信息
+jcmd <pid> GC.heap_info
+
+# 4. 看对象直方图
+jmap -histo <pid> | head -20
+
+# 5. 抓线程栈
+jstack -l <pid> > /tmp/stack.log
+
+# 6. 生成 heap dump（OOM 时）
+jcmd <pid> GC.heap_dump /tmp/heap.hprof
+
+# 7. 用 MAT 分析
+# 打开 heap.hprof → Leak Suspects Report
+```
+
+## 实战场景
+
+| 场景 | 工具组合 |
+|------|---------|
+| CPU 高 | top -Hp + jstack / Arthas thread -n |
+| OOM | jmap / jcmd heap_dump + MAT |
+| 死锁 | jstack -l / Arthas thread -b |
+| GC 频繁 | jstat -gcutil + GC 日志 |
+| 类加载冲突 | jcmd VM.classloader_stats |
+| 内存泄漏 | 多次 jmap -histo 对比 + MAT |
+
+## 深挖追问
+
+### jcmd 和传统工具有什么区别？
+
+jcmd 是 JDK 8+ 推荐的统一入口，能替代大部分传统工具：
+
+- `jcmd <pid> GC.heap_info` ≈ `jmap -heap <pid>`
+- `jcmd <pid> GC.class_histogram` ≈ `jmap -histo <pid>`
+- `jcmd <pid> GC.heap_dump` ≈ `jmap -dump`
+- `jcmd <pid> Thread.print` ≈ `jstack <pid>`
+- `jcmd <pid> VM.flags` ≈ `jinfo -flags <pid>`
+
+jcmd 更安全（统一接口）、功能更全（支持 NMT、JFR 等）。
+
+### Arthas 为什么是排查神器？
+
+Arthas 提供在线诊断能力，无需重启应用：
+
+- `watch` 看方法参数和返回值。
+- `trace` 看调用链路耗时。
+- `jad` 反编译类（验证部署版本）。
+- `monitor` 方法执行统计。
+- `profiler` 生成火焰图。
+
+生产环境排查问题不用重启应用，是 Arthas 的核心价值。
+
+### jmap -histo:live 有什么风险？
+
+`-histo:live` 会先触发 Full GC，然后统计存活对象。Full GC 会暂停应用，可能导致短时间不可用。生产环境慎用，建议在低峰期执行，或用 `jcmd <pid> GC.class_histogram`（不触发 GC）。
+
+### JFR 和 async-profiler 怎么选？
+
+- JFR：JDK 11+ 内置，生产可用，低开销，商业功能免费。适合长期监控和事后分析。
+- async-profiler：开源，更灵活，支持 CPU/内存/锁采样，生成火焰图直观。适合临时排查。
+
+两者可以配合使用：JFR 长期录制，async-profiler 临时深挖。
+
+## 易错点
+
+- 在生产环境用 `jmap -histo:live`，触发 Full GC 影响业务。
+- 用 `kill -9` 抓 dump，应该用 `kill -3` 或 `jstack`。
+- 忽略 jcmd，还在用 jmap/jstack 等老工具。
+- 用 Arthas 但不知道 `watch`、`trace` 等高级命令。
+- 生成 heap dump 后不用 MAT 分析，只看对象数量。
 
 ## 总结
-复习 Java问题排查工具有哪些？ 时，建议把它和相邻知识点放在一起比较：相同点是什么、区别在哪里、为什么当前场景选择它而不是替代方案。能讲清楚这些内容，才算真正掌握。
+
+Java 问题排查工具分 JDK 命令行（jps/jstat/jmap/jstack/jcmd/jinfo）、可视化（JConsole/JVisualVM/JMC）、第三方（Arthas/MAT/async-profiler）三类。jcmd 是 JDK 8+ 推荐的统一入口。Arthas 是在线诊断神器，无需重启应用。MAT 用于离线分析 heap dump。生产环境排查：CPU 高用 top -Hp + jstack/Arthas，OOM 用 jmap + MAT，死锁用 jstack/Arthas thread -b，GC 频繁用 jstat + GC 日志。
+
+## 参考资料
+
+- [JDK 17 Troubleshooting Tools](https://docs.oracle.com/en/java/javase/17/troubleshoot/)
+- [Arthas Documentation](https://arthas.aliyun.com/doc/)
+- [Eclipse MAT](https://www.eclipse.org/mat/)
+
+---
+
+[← 返回故障排查目录](/01-java-core/jvm/troubleshooting/)

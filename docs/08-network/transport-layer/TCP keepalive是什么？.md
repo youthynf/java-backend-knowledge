@@ -1,49 +1,152 @@
-# TCP keepalive是什么？
+# TCP keepalive 是什么
+
 ## 核心概念
 
-TCP keepalive本质就是TCP的保活机制，主要用于解决通信连接异常断开造成的资源浪费问题。由于服务端一直不会发送数据给客户端，那么服务端是永远无法感知到客户端宕机这个事件的，也就是服务端的 TCP 连接将一直处于 ESTABLISH 状态，占用着系统资源。为了避免这种情况，TCP 搞了个保活机制。
+TCP keepalive 是内核提供的连接保活机制，用于检测**对端主机是否还活着**。如果对端主机宕机（不是进程崩溃）、网线断开或路由不可达，TCP 连接会卡在 `ESTABLISHED` 占用资源。keepalive 周期性发探测包，多次无响应就判定连接死亡，通知应用层。
 
-TCP保活机制的原理是这样的：定义一个时间段（默认7200s），在这个时间段内，如果没有任何连接相关的活动，TCP 保活机制会开始作用，每隔一个时间间隔（默认75s），发送一个探测报文，该探测报文包含的数据非常少，如果连续几个探测报文（默认9次）都没有得到响应，则认为当前的 TCP 连接已经死亡，系统内核将错误信息通知给上层应用程序。
-在 Linux 内核可以有对应的参数可以设置保活时间、保活探测的次数、保活探测的时间间隔，以下都为默认值：
-tcp_keepalive_time=7200：表示保活时间是7200 秒(2小时)，也就2小时内如果没有任何连接相关的活动，则会启动保活机制；
-tcp_keepalive_intvl=75：表示每次检测间隔 75 秒；
-tcp_keepalive_probes=9：表示检测9 次无响应，认为对方是不可达的，从而中断本次的连接。
+注意：keepalive 不是"维持连接"用的，TCP 连接即使没有任何数据也能一直保持。keepalive 是**检测死亡连接**用的。
 
-也就是说在 Linux 系统中，最少需要经过 2小时 11分 15 秒才可以发现一个「死亡」连接。注意，应用程序若想使用 TCP 保活机制需要通过 socket接口设置 SO_KEEPALIVE 选项才能够生效，如果没有设置那么就无法使用 TCP 保活机制。
+## 标准回答
 
-如果开启了 TCP 保活，需要考虑以下几种情况：
-对端程序是正常工作的：当 TCP 保活的探测报文发送给对端，对端会正常响应，这样 TCP 保活时间会被重置，等待下一个 TCP 保活时间的到来；
-对端主机宕机并重启：当 TCP 保活的探测报文发送给对端后，对端是可以响应的，但由于没有该连接的有效信息，会产生一个 RST 报文，这样很快就会发现 TCP 连接已经被重置；
-对端主机宕机：注意不是进程崩溃，进程崩溃后操作系统在回收进程资源的时候，会发送FIN报文，而主机宕机则是无法感知的，所以需要 TCP 保活机制来探测对方是不是发生了主机宕机，或对端由于其他原因导致报文不可达。当 TCP 保活的探测报文发送给对端后，石沉大海，没有响应，连续几次，达到保活探测次数后TCP 会报告该 TCP 连接已经死亡；
+TCP keepalive 三要素（Linux 默认值）：
 
-TCP 保活的这个机制检测的时间是有点长，我们可以自己在应用层实现一个心跳机制。比如，web 服务软件一般都会提供 keepalive timeout 参数，用来指定 HTTP 长连接的超时时间。如果设置了 HTTP长连接的超时时间是 60 秒，web 服务软件就会启动一个定时器，如果客户端在完成一个 HTTP 请求后，在 60 秒内都没有再发起新的请求，定时器的时间一到，就会触发回调函数来释放该连接。
+| 参数 | 默认值 | 含义 |
+|------|--------|------|
+| `tcp_keepalive_time` | 7200 秒 | 连接空闲多久后开始探测 |
+| `tcp_keepalive_intvl` | 75 秒 | 每次探测间隔 |
+| `tcp_keepalive_probes` | 9 次 | 探测失败几次判定死亡 |
 
-TCP Keepalive与HTTP Keep-Alive是一个东西吗？
-不是同一个东西。TCP Keepalive是TCP层实现的，而HTTP Keep-Alive则是应用层实现的。HTTP Keep-Alive也叫HTTP长连接，该功能是应用程序实现的，可以使用同一个TCP连接来发送和接收多个HTTP请求/应答，减少HTTP短连接带来的多次TCP连接和释放开销。为了解决HTTP长连接长期没有数据交互导致资源浪费的问题，web服务软件一般都会提供keepalive_timeout参数，用来指定HTTP长连接的超时时间，通过启动一个定时器，定时器时间一到，就会触发毁掉函数来释放该连接。而TCP的Keepalive也叫TCP保活机制，该功能由内核实现，当客户端和服务端长达一定时间没有进行数据交互，内核为了确保连接是否有效，就会发送探测报文，来检测对方是否还在线，然后来决定是否要关闭连接。
+最坏情况下发现死亡连接需要 `7200 + 75 × 9 = 7875 秒`（约 2 小时 11 分）。生产中通常调短，或直接用应用层心跳。
 
-## 面试总结
-### 核心概念
+keepalive 默认关闭，需要 socket 显式设置 `SO_KEEPALIVE` 才生效。
 
-传输层负责端到端通信。TCP 面向连接、可靠、有序、字节流，依靠三次握手、序列号、确认、重传、滑动窗口、流量控制和拥塞控制；UDP 无连接、开销小、不保证可靠。
+## 详细机制
 
-### 面试官想考什么
+### 探测过程
 
-面试官高频考 TCP 三次握手/四次挥手、TIME_WAIT/CLOSE_WAIT、可靠传输、粘包、拥塞控制、连接异常和性能调优。
+```
+连接空闲 7200 秒
+  ↓
+发送探测包（空数据，序号是上次 ACK-1）
+  ↓
+对端响应:
+  - 正常 ACK → 连接存活，重置计时器，再等 7200 秒
+  - RST → 对端重启过，连接已无效，立即通知应用
+  - 无响应 → 等 75 秒再发，连续 9 次无响应判定死亡
+  ↓
+死亡 → 内核通知应用层（read/write 返回 ETIMEDOUT）
+```
 
-### 标准回答
+### 三种对端状态的处理
 
-TCP 建连通过 SYN、SYN+ACK、ACK 确认双方收发能力；断连通常四次挥手，因为双方方向的数据流要分别关闭。可靠性来自序列号、ACK、超时/快速重传、滑动窗口和校验。TIME_WAIT 保护旧报文消失并保证对端收到最后 ACK；CLOSE_WAIT 多通常是应用未主动关闭连接。UDP 适合实时音视频、DNS、QUIC 等可自定义可靠性或容忍丢包的场景。
+| 对端状态 | 探测结果 | 处理 |
+|---------|---------|------|
+| 正常工作 | 收到 ACK | 重置计时器 |
+| 主机宕机后重启 | 收到 RST | 立即通知应用连接重置 |
+| 主机宕机/网络断 | 无响应 | 重试 9 次后通知连接死亡 |
+| 进程崩溃 | 收到 FIN | 不需要 keepalive，FIN 触发正常关闭 |
 
-### 深挖追问
+注意：进程崩溃时操作系统会发 FIN，TCP 正常关闭流程就处理了，不需要 keepalive。keepalive 主要针对**主机宕机或网络中断**这种 FIN 发不出来的场景。
 
-- 这个现象发生在内核 TCP 状态机、网络链路还是应用代码中？
-- 如何用 ss/netstat、tcpdump、内核计数器证明丢包、重传、半连接或 TIME_WAIT 问题？
-- 哪些 Linux 参数、连接池参数和超时设置会影响生产表现？
+### TCP keepalive vs HTTP Keep-Alive vs 应用层心跳
 
-### 实战场景/示例
+| 机制 | 实现层 | 用途 |
+|------|--------|------|
+| TCP keepalive | 内核 | 检测对端主机是否活着 |
+| HTTP Keep-Alive | 应用层 | 复用 TCP 连接发多个 HTTP 请求 |
+| 应用层心跳 | 应用层 | 检测对端应用是否响应业务 |
 
-Java 服务大量 CLOSE_WAIT，优先检查代码是否未关闭 socket/HTTP 响应流，或连接池释放逻辑异常；大量 TIME_WAIT 则看短连接、主动关闭方和连接复用。
+三者名字相近但完全不同。生产中推荐**应用层心跳**，因为：
+- TCP keepalive 默认 2 小时太长，调短影响所有连接
+- TCP keepalive 只能判断主机是否活着，不能判断应用是否健康（应用死锁时主机还活着）
+- 应用层心跳可携带业务信息，更灵活
 
-### 易错点/总结
+## 代码示例
 
-TCP 是字节流没有消息边界，所以会有粘包/拆包；应用层必须用长度字段、分隔符或固定长度等协议解决。
+Java 启用 TCP keepalive：
+
+```java
+import java.net.*;
+
+Socket socket = new Socket("example.com", 80);
+// 启用 TCP keepalive
+socket.setKeepAlive(true);
+```
+
+JDK 11+ 支持自定义三个参数：
+
+```java
+// JDK 11+ 通过 SocketOption 设置
+import java.net.SocketOption;
+import jdk.net.ExtendedSocketOptions;
+
+socket.setOption(ExtendedSocketOptions.TCP_KEEPIDLE, 60);   // 60 秒空闲后探测
+socket.setOption(ExtendedSocketOptions.TCP_KEEPINTERVAL, 10); // 10 秒间隔
+socket.setOption(ExtendedSocketOptions.TCP_KEEPCOUNT, 3);     // 3 次失败判定死亡
+// 最坏 60 + 10×3 = 90 秒发现死亡连接
+```
+
+应用层心跳示例：
+
+```java
+// Netty IdleStateHandler 实现应用层心跳
+pipeline.addLast(new IdleStateHandler(60, 30, 0));
+pipeline.addLast(new ChannelInboundHandlerAdapter() {
+    @Override
+    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) {
+        if (evt instanceof IdleStateEvent) {
+            IdleStateEvent e = (IdleStateEvent) evt;
+            if (e.state() == IdleState.WRITER_IDLE) {
+                ctx.writeAndFlush(new HeartbeatPacket());  // 发心跳
+            } else if (e.state() == IdleState.READER_IDLE) {
+                ctx.close();  // 60 秒没收到对端数据，关闭连接
+            }
+        }
+    }
+});
+```
+
+## 实战场景
+
+| 场景 | 配置 | 注意点 |
+|------|------|--------|
+| 长连接服务端 | 调短 keepalive 或用应用层心跳 | 默认 2 小时太久，连接泄漏风险 |
+| 移动端长连接 | 应用层心跳 60-300 秒 | 网络切换频繁，TCP keepalive 不够灵活 |
+| IoT 设备 | 应用层心跳 + TCP keepalive 双保险 | 设备可能休眠，需要业务感知 |
+| 内网服务间调用 | 一般不需要 keepalive | 内网链路稳定，连接问题靠重连机制 |
+| 防火墙超时 | keepalive 间隔 < 防火墙超时 | 防火墙通常 30-60 分钟清空闲连接 |
+
+## 深挖追问
+
+**Q1：keepalive 默认为什么不开启？**
+默认开启会浪费带宽（即使应用没数据也定期发包），且 2 小时太长不够灵活。让应用层按需开启更合理。
+
+**Q2：keepalive 探测包长什么样？**
+一个空 ACK 包，序号字段是上次对端 ACK - 1（让对端认为是旧包，回显当前 ACK）。这样既不传输数据又能确认对端活着。
+
+**Q3：keepalive 能检测进程死锁吗？**
+不能。进程死锁时主机还活着，操作系统还能响应 keepalive 探测。要检测应用层健康只能用应用层心跳。
+
+**Q4：NAT 设备对 keepalive 的影响？**
+NAT 设备会清理空闲连接表项（典型 5-30 分钟），如果 keepalive 间隔大于 NAT 超时，连接会被 NAT 清掉。需要 keepalive 间隔小于 NAT 超时。
+
+**Q5：HTTP Keep-Alive 和 TCP keepalive 一起用冲突吗？**
+不冲突，是两个层级的概念。HTTP Keep-Alive 是应用层复用 TCP 连接，TCP keepalive 是内核检测连接活性。可以同时开。
+
+## 易错点
+
+- **"keepalive 维持连接"** — 错，TCP 连接不需要维持，keepalive 是检测死亡。
+- **"keepalive 默认开启"** — 默认关闭，需 `SO_KEEPALIVE` 显式开启。
+- **"keepalive 能检测进程崩溃"** — 不需要，进程崩溃会发 FIN 走正常关闭。
+- **"keepalive 默认参数够用"** — 2 小时太久，生产必须调短或用应用层心跳。
+- **"keepalive 等于 HTTP Keep-Alive"** — 完全不同的概念，前者是内核保活，后者是应用层连接复用。
+
+## 总结
+
+TCP keepalive 是内核检测死亡连接的机制，默认 2 小时才开始探测，生产中通常调短或用应用层心跳替代。和 HTTP Keep-Alive 是完全不同的概念。生产推荐应用层心跳，因为更灵活、能检测应用健康、可携带业务信息。
+
+## 参考资料
+
+- [RFC 1122 — Requirements for Internet Hosts, TCP Keep-Alives](https://datatracker.ietf.org/doc/html/rfc1122#section-4.2.3.6)
+- [RFC 5482 — TCP User Timeout Option](https://datatracker.ietf.org/doc/html/rfc5482)
+- [Linux TCP keepalive 文档](https://www.kernel.org/doc/Documentation/networking/ip-sysctl.txt)

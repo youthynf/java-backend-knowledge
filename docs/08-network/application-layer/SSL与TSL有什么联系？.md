@@ -1,50 +1,212 @@
-# SSL与TSL有什么联系？
+# SSL 与 TLS 有什么联系
 
-SSL与TSL有什么联系？
-SSL和TLS都是用于保障网络通信安全的协议。
-
-SSL是早期的网络安全协议，它有SSL 2.0和SSL 3.0版本。不过，SSL 2.0存在安全漏洞，已经很少使用；SSL 3.0也被发现有安全风险，如POODLE攻击。
-
-TLS是在SSL基础上发展而来的，目前应用更为广泛。TLS的版本包括TLS 1.0、TLS 1.1、TLS 1.2和TLS 1.3。TLS 1.3在安全性和性能上比之前的版本有显著提升，例如它可以更快地完成握手过程，减少网络延迟。
-
-总的来说，TLS是SSL的升级和改进版本，它们的主要功能类似，都是通过加密和身份认证来保护网络通信安全。
-
-## 面试总结
-### 核心概念
-
-SSL 是早期安全传输协议，TLS 是其标准化后的继任者。现实中大家口头说“SSL 证书”“SSL 握手”，多数实际指 TLS。SSL 2.0/3.0 已不安全并被废弃，现代服务应使用 TLS 1.2 或 TLS 1.3。
-
-### 面试官想考什么
-
-面试官主要想看你是否知道 SSL/TLS 的演进、握手目标和安全边界，而不是只纠结名称拼写。还会追问 TLS 如何完成身份认证、密钥协商、加密传输和防篡改。
-
-### 标准回答
-
-SSL/TLS 位于应用层协议和 TCP 之间，为 HTTP、SMTP、MySQL 等协议提供加密通道。握手阶段双方协商协议版本和加密套件，服务端发送证书，客户端验证证书链并完成密钥协商；传输阶段使用对称密钥加密数据并校验完整性。TLS 1.3 简化握手、移除大量弱算法，安全性和性能都优于旧版本。
-
-### 深挖追问
-
-- 为什么不能继续支持 SSLv3、TLS 1.0、TLS 1.1？
-- 证书、私钥、CA、证书链分别承担什么职责？
-- TLS 终止在网关时，网关到后端是否还需要加密？
-
-### 实战场景/代码示例
-
-服务端安全基线通常要求禁用 SSLv3/TLS1.0/TLS1.1，只开放 TLS1.2/1.3，使用 ECDHE 套件保证前向安全，并定期轮换证书。Nginx 中可通过 `ssl_protocols TLSv1.2 TLSv1.3;` 控制协议版本。
-
-### 易错点/总结
-
-标题里的 TSL 通常是 TLS 的笔误。不要把“证书加密所有数据”说成标准答案：证书主要用于身份认证和公钥分发，真正的大流量数据由握手协商出的对称密钥加密。
 ## 核心概念
-SSL与TSL有什么联系？ 可以放在“网络协议能力”这条主线里理解。复习时不要只背结论，要先说明它解决的核心问题，再解释关键机制、适用边界和代价。围绕这个知识点，重点关注：连接建立、报文结构、状态码、长连接、拥塞控制、TLS、代理和超时重试。如果面试官继续追问，通常会从“为什么这样设计、在什么场景会失效、线上如何排查”三个方向展开。
 
-## 面试回答与追问
-- **标准回答**：先给出 SSL与TSL有什么联系？ 的定位，再说明它依赖的核心原理，最后结合业务场景说明如何使用。回答时要把“能解决什么问题”和“会带来什么成本”一起讲清楚。
-- **常见追问**：如果数据量、并发量或调用链路继续放大，SSL与TSL有什么联系？ 的瓶颈会出现在哪里？如何观测、如何优化、如何回滚？
-- **易错点**：不要把概念和具体实现混在一起，也不要只说 API 名称。面试中更重要的是说清楚边界条件、失败场景和取舍依据。
+SSL（Secure Sockets Layer）和 TLS（Transport Layer Security）是同一个东西的不同版本——TLS 是 SSL 的标准化继任者。SSL 由 Netscape 1994 年设计，1.0/2.0/3.0 三代都有安全漏洞，已被废弃。IETF 接管后改名 TLS，发布 1.0/1.1/1.2/1.3 四个版本。生产中常说的"SSL 证书""SSL 握手"实际指 TLS，SSL 协议本身已禁用。
 
-## 实战场景与排查
-典型落地场景包括：接口超时、连接耗尽、网关转发、上传下载、移动端弱网和跨域访问。实际处理线上问题时，可以按“现象确认 → 指标采集 → 假设验证 → 小步修复 → 复盘沉淀”的路径推进。先看日志、监控、链路追踪和核心指标，再判断是容量问题、配置问题、代码路径问题，还是外部依赖抖动。
+## 标准回答
+
+SSL/TLS 的演进：
+
+| 协议 | 年份 | 状态 | 备注 |
+|------|------|------|------|
+| SSL 1.0 | 1994 | 未发布 | 内部测试，有严重漏洞 |
+| SSL 2.0 | 1995 | 2011 年废弃 | 已知漏洞，禁用 |
+| SSL 3.0 | 1996 | 2015 年废弃 | POODLE 攻击，禁用 |
+| TLS 1.0 | 1999 | 2020 年废弃 | BEAST、ROBOT 等漏洞 |
+| TLS 1.1 | 2006 | 2020 年废弃 | 较少使用 |
+| TLS 1.2 | 2008 | 主流 | 当前广泛使用 |
+| TLS 1.3 | 2018 | 推荐 | 性能和安全性大幅提升 |
+
+命名上 SSL 和 TLS 经常混用，但实际部署的几乎都是 TLS。
+
+## 详细机制
+
+### SSL 的诞生
+
+1994 年 Netscape 为 HTTPS 设计 SSL，解决 HTTP 明文传输问题。SSL 1.0 内部使用未发布；SSL 2.0 1995 年发布，存在严重漏洞（弱 MAC、可被中间人攻击）；SSL 3.0 1996 年发布，修复了 2.0 的问题，但仍被发现 POODLE 等漏洞。
+
+### TLS 标准化
+
+1999 年 IETF 接管 SSL，发布 RFC 2246，改名 TLS 1.0。TLS 1.0 实际是 SSL 3.1，只是改了名。后续 1.1（2006）、1.2（2008）、1.3（2018）逐步改进。
+
+### 各版本的安全性问题
+
+| 版本 | 主要漏洞 |
+|------|---------|
+| SSL 2.0 | 弱 MAC、可降级攻击、明文 MAC |
+| SSL 3.0 | POODLE（CBC 漏洞）、可降级到弱加密 |
+| TLS 1.0 | BEAST（CBC 预测）、ROBOT（RSA 加密漏洞） |
+| TLS 1.1 | 修复 BEAST，但仍有弱算法 |
+| TLS 1.2 | 修复大量漏洞，但握手慢、Cipher Suite 复杂 |
+| TLS 1.3 | 移除所有不安全算法，握手简化为 1-RTT |
+
+### TLS 1.3 的关键改进
+
+1. **握手 1-RTT**：从 2-RTT 压到 1-RTT，会话复用支持 0-RTT
+2. **移除弱算法**：移除 RSA 密钥交换（无前向安全）、RC4、DES、3DES、MD5、SHA1
+3. **强制 AEAD**：只保留 AES-GCM、ChaCha20-Poly1305 等加密认证一体化算法
+4. **加密更多握手**：ServerHello 之后的所有握手消息都加密，提升隐私
+5. **简化 Cipher Suite**：从 300+ 减少到 5 个
+
+### SSL/TLS 在协议栈的位置
+
+```
++-------------------+
+| HTTP/SMTP/FTP/... |  应用层
++-------------------+
+| SSL/TLS           |  安全层（加密、认证、完整性）
++-------------------+
+| TCP               |  传输层
++-------------------+
+| IP                |  网络层
++-------------------+
+```
+
+SSL/TLS 是介于应用层和传输层之间的"安全层"，可以为 HTTP、SMTP、IMAP、MySQL 等协议提供加密通道。
+
+### TLS 握手的核心步骤
+
+```
+1. ClientHello：客户端发送支持的 TLS 版本、Cipher Suite 列表、随机数
+2. ServerHello：服务端选定 TLS 版本和 Cipher Suite、随机数
+3. Certificate：服务端发送证书
+4. KeyExchange：双方协商 premaster secret
+5. Finished：双方用协商的密钥加密握手摘要，确认握手完整
+6. 后续 HTTP 报文用对称密钥加密
+```
+
+### 抓包与版本检测
+
+```bash
+# 查看服务端支持的 TLS 版本
+$ openssl s_client -connect example.com:443 -tls1_3
+# 成功连接表示支持 TLS 1.3
+
+$ openssl s_client -connect example.com:443 -tls1_1
+# 失败表示不支持（已禁用）
+
+# 查看握手细节
+$ openssl s_client -connect example.com:443 -showcerts
+SSL-Session:
+    Protocol  : TLSv1.3
+    Cipher    : TLS_AES_256_GCM_SHA384
+
+# 用 nmap 扫描支持的协议
+$ nmap --script ssl-enum-ciphers -p 443 example.com
+|   TLSv1.0: ...
+|   TLSv1.1: ...
+|   TLSv1.2: ...
+|   TLSv1.3: ...
+```
+
+### 命名习惯
+
+虽然实际协议是 TLS，但很多术语沿用 SSL：
+
+- "SSL 证书"实际是 TLS 证书
+- "SSL 握手"实际是 TLS 握手
+- Nginx 配置指令 `ssl_` 开头（如 `ssl_protocols`）
+- Java 类名 `SSLSocket`、`SSLContext`
+
+这是历史遗留，不必纠结名称。
+
+### 配置建议
+
+```nginx
+# Nginx 安全配置
+ssl_protocols TLSv1.2 TLSv1.3;     # 只允许 1.2 和 1.3
+ssl_prefer_server_ciphers on;
+ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:...;
+ssl_ecdh_curve X25519:secp384r1;
+ssl_session_cache shared:SSL:10m;
+ssl_session_timeout 1h;
+ssl_session_tickets off;            # 关闭 Session Ticket（如需前向安全）
+```
+
+```bash
+# 用 Mozilla SSL Configuration Generator 生成安全配置
+# https://ssl-config.mozilla.org/
+```
+
+## 代码示例
+
+Java 服务端指定 TLS 版本：
+
+```java
+import javax.net.ssl.*;
+
+SSLContext ctx = SSLContext.getInstance("TLSv1.3");
+ctx.init(kmf.getKeyManagers(), null, null);
+
+SSLServerSocketFactory ssf = ctx.getServerSocketFactory();
+try (SSLServerSocket server = (SSLServerSocket) ssf.createServerSocket(443)) {
+    server.setEnabledProtocols(new String[]{"TLSv1.2", "TLSv1.3"});   // 禁用旧版本
+    server.setEnabledCipherSuites(new String[]{
+        "TLS_AES_256_GCM_SHA384",
+        "TLS_CHACHA20_POLY1305_SHA256",
+        "TLS_AES_128_GCM_SHA256"
+    });
+    // ...
+}
+```
+
+Java 客户端校验证书：
+
+```java
+import javax.net.ssl.*;
+
+SSLContext ctx = SSLContext.getInstance("TLS");
+ctx.init(null, null, null);   // 用默认 TrustManager（校验 CA）
+
+HttpsURLConnection conn = (HttpsURLConnection) new URL("https://example.com/").openConnection();
+conn.setSSLSocketFactory(ctx.getSocketFactory());
+// 默认 HostnameVerifier 校验证书域名
+// 证书无效会抛 SSLHandshakeException
+```
+
+## 实战场景
+
+| 场景 | 配置 | 注意点 |
+|------|------|--------|
+| Web 服务器 | TLS 1.2 + 1.3 | 禁用 1.0/1.1，避免 POODLE 等 |
+| 移动端 API | TLS 1.3 | 兼容老 Android/iOS 用 1.2 |
+| 内部服务 | mTLS（双向证书） | 用自签名 + 客户端预置 |
+| 老旧客户端 | TLS 1.0（不推荐） | 评估升级成本 |
+| 邮件 | STARTTLS | SMTP/IMAP over TLS |
+
+## 深挖追问
+
+**Q1：为什么 SSL 3.0 不能用了？**
+POODLE 攻击利用 SSL 3.0 的 CBC 填充漏洞，可以解密部分加密数据。RFC 7568 正式废弃 SSL 3.0。
+
+**Q2：TLS 1.0/1.1 为什么废弃？**
+存在 BEAST、CRIME、Lucky13 等攻击，且强制 SHA-1（已不安全）。PCI DSS 要求 2018 年起禁用，主流浏览器 2020 年起停止支持。
+
+**Q3：TLS 1.3 为什么移除 RSA 密钥交换？**
+RSA 密钥交换不支持前向安全（forward secrecy）——如果服务端私钥泄露，所有历史流量都可被解密。ECDHE 每次握手生成临时密钥对，私钥泄露不影响历史流量。
+
+**Q4：TLS 1.3 的 0-RTT 安全吗？**
+有重放风险。攻击者可截获 0-RTT 请求重新发送，服务端会重复处理。所以 0-RTT 只适合幂等请求（GET），不适合非幂等（POST 转账）。
+
+**Q5：自签名证书能用吗？**
+内网可以（配合客户端预置证书），公网不行（浏览器警告）。生产中 Web 服务必须用 CA 签名的证书，Let's Encrypt 提供免费证书。
+
+## 易错点
+
+- **"SSL 和 TLS 是两个不同协议"** — 是同一协议的不同版本，TLS 是 SSL 的继任者。
+- **"现在还用 SSL"** — 不，SSL 已废弃，实际都是 TLS。
+- **"TLS 1.2 和 1.3 差不多"** — 1.3 握手快一倍、移除大量弱算法、强制 AEAD，差异大。
+- **"证书加密所有数据"** — 不，证书只用于身份认证和公钥分发，大流量数据用对称密钥加密。
+- **"自签名证书更安全"** — 不，自签名不被信任，浏览器警告，用户可能忽略。
 
 ## 总结
-复习 SSL与TSL有什么联系？ 时，建议把它和相邻知识点放在一起比较：相同点是什么、区别在哪里、为什么当前场景选择它而不是替代方案。能讲清楚这些内容，才算真正掌握。
+
+SSL 和 TLS 是同一协议的演进：SSL 1.0/2.0/3.0 已废弃（POODLE 等漏洞），TLS 1.0/1.1 已废弃（2020 年起），生产中只用 TLS 1.2 和 1.3。TLS 1.3 是当前推荐版本，握手 1-RTT、移除弱算法、强制前向安全。命名上"SSL 证书""SSL 握手"是历史遗留，实际指 TLS。配置时禁用所有旧版本，使用 ECDHE 套件保证前向安全。
+
+## 参考资料
+
+- [RFC 8446 — TLS 1.3](https://datatracker.ietf.org/doc/html/rfc8446)
+- [RFC 7568 — Deprecating SSLv3](https://datatracker.ietf.org/doc/html/rfc7568)
+- [RFC 8996 — Deprecating TLS 1.0 and TLS 1.1](https://datatracker.ietf.org/doc/html/rfc8996)
+- [Mozilla SSL Configuration Generator](https://ssl-config.mozilla.org/)

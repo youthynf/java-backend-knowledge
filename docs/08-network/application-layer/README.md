@@ -1,76 +1,62 @@
-# 应用层协议
+# 应用层
 
-## 面试复习重点
+本目录覆盖 HTTP/HTTPS、DNS、CDN、邮件协议、WebSocket、RPC 等应用层高频知识点。
 
-- HTTP/HTTPS、DNS、WebSocket 等协议的核心交互流程。
-- 状态码、缓存、连接复用、TLS 握手和跨域等高频追问。
-- 从一次请求链路排查超时、证书、代理和网关问题。
+## 目录
 
-## 建议掌握程度
+### HTTP 基础
 
-- **能讲清概念**：用自己的话说明定义、背景和解决的问题。
-- **能画出链路**：把关键组件、核心流程和状态变化串起来。
-- **能回答追问**：准备优缺点、适用场景、常见坑和替代方案。
-- **能落地排查**：结合日志、指标、工具和案例说明定位思路。
+- [HTTP 的报文结构是怎么样的](HTTP的报文结构是怎么样的？.md) — 起始行 + 头部 + 空行 + 正文，HTTP/2 二进制分帧
+- [HTTP 协议支持的请求方法有哪些](HTTP协议支持的请求方法有哪些？.md) — GET/POST/PUT/PATCH/DELETE 等方法的安全与幂等性
+- [HTTP 常见的状态码有哪些](HTTP常见的状态码有哪些？.md) — 1xx-5xx 状态码语义与 401/403、502/504 区别
+- [HTTP 协议常见的请求头有哪些](HTTP协议常见的请求头有哪些？.md) — Host、Authorization、Cookie、X-Forwarded-For 等头部用途
+- [GET 和 POST 的区别是什么](GET和POST的区别是什么？.md) — 语义差异：安全幂等 vs 不安全不幂等
+- [HTTP 的无状态怎么理解](HTTP的无状态怎么理解？.md) — 协议不维护请求间状态，Cookie/Session/Token 是应用层方案
+- [HTTP 的长连接怎么理解](HTTP的长连接怎么理解？.md) — keep-alive 复用 TCP 连接，HTTP/2 多路复用
+- [HTTP 进行 TCP 连接之后什么情况下会中断](HTTP进行TCP连接之后，什么情况下会中断？.md) — 主动关闭、超时、重传超限、RST 等场景
+- [HTTP、SOCKET 和 GET 的区别是什么](HTTP、SOCKET和GET的区别是什么？.md) — 协议、接口、方法三个不同维度的概念
 
-## 面试表达模板
+### HTTP 版本演进
 
-1. 先给结论：说明它是什么、解决什么问题。
-2. 再讲原理：说明核心组件、关键流程和数据结构。
-3. 补充场景：结合项目或线上问题说明怎么用。
-4. 说明边界：讲清楚缺点、风险、替代方案和排查手段。
+- [HTTP/2 是什么](HTTP-2是什么？.md) — 二进制分帧、多路复用、HPACK、服务端推送
+- [HTTP/3 是什么](HTTP-3是什么？.md) — 基于 QUIC，解决 TCP 队头阻塞与连接迁移
+- [HTTP 1.0 与 HTTP 2.0 区别是什么](HTTP1.0与HTTP2.0区别是什么？.md) — 短连接 vs 多路复用，文本 vs 二进制
+- [HTTP 各个版本是如何管理多个 TCP 连接的](HTTP各个版本是如何管理多个TCP连接的？.md) — 每请求 1 连接 → 6 连接 → 单连接多路复用
+- [HTTP 1.1 队头阻塞是什么](HTTP1.1队头阻塞是什么？.md) — 串行请求-响应模型的应用层 HOL
+- [HTTP/2 的 HPACK 队头阻塞问题是什么](HTTP-2的HPACK对头阻塞问题是什么？.md) — 动态表时序依赖，QPACK 的解决
+- [HTTP 1.1 如何对请求拆包](HTTP1.1如何对请求拆包？.md) — Content-Length 与 Transfer-Encoding: chunked
 
+### HTTP 缓存与安全
 
-本目录覆盖 HTTP、HTTPS、Cookie/Session、WebSocket、DNS、RPC 等应用层高频题。
+- [HTTP 缓存机制是怎么样的](HTTP缓存机制是怎么样的？.md) — 强缓存与协商缓存，Cache-Control/ETag
+- [HTTP 为什么不安全](HTTP为什么不安全？.md) — 窃听、篡改、伪装三大风险
+- [HTTP 和 HTTPS 区别是什么](HTTP和HTTPS区别是什么？.md) — HTTP over TLS 的三大保障
+- [HTTPS 握手过程是怎么样的](HTTPS握手过程是怎么样的？.md) — TLS 1.2 vs 1.3 握手流程与密钥协商
+- [HTTPS 如何优化](HTTPS如何优化？.md) — TLS 1.3、会话复用、OCSP Stapling、ECDSA 证书
+- [HTTPS 如何防范中间人攻击](HTTPS如何防范中间人攻击？.md) — 证书认证 + 密钥协商 + 完整性校验
+- [SSL 与 TLS 有什么联系](SSL与TSL有什么联系？.md) — TLS 是 SSL 的标准化继任者，SSL 已废弃
 
-## 复习建议
+### 会话与认证
 
-- 先用导航建立知识地图，再逐篇补齐自己的项目案例。
-- 每篇文章复习时都按“核心概念 → 面试官想考什么 → 标准回答 → 深挖追问 → 示例/实战场景 → 易错点/总结”检查。
-- 遇到协议、架构或排障题时，主动补充异常分支、监控指标和工程取舍。
+- [Cookie 和 Session 区别是什么](Cookie和Session区别是什么？.md) — 客户端存储 vs 服务端会话
+- [Token、Session、Cookie 区别是什么](token、session、cookie区别是什么？.md) — 三个不同维度的概念对比
+- [JWT 令牌是什么](JWT令牌是什么？.md) — 自包含令牌，Header.Payload.Signature 三段式
+- [localStorage 和 Cookie 区别是什么](localStorage和Cookie区别是什么？.md) — 通信设计 vs 纯客户端存储
+- [如果客户端禁用了 Cookie，Session 还能用吗](如果客户端禁用了cookie，session还能用吗？.md) — URL 重写、隐藏表单、改用 Token
 
-## 文章导航
+### DNS 与 CDN
 
-### 基础文章
+- [DNS 是什么](DNS是什么？.md) — 域名系统层次化结构与解析流程
+- [DNS 域名解析的工作流程是怎么样的](DNS域名解析的工作流程是怎么样的？.md) — 浏览器/OS/hosts/本地 DNS 多级缓存与迭代查询
+- [DNS 底层使用 TCP 还是 UDP](DNS底层使用TCP还是UDP？.md) — 默认 UDP，大响应与区域传送用 TCP
+- [CDN 是什么](CDN是什么？.md) — 边缘节点缓存、就近访问、回源机制
 
-- [Cookie和Session区别是什么？](/08-network/application-layer/Cookie和Session区别是什么？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [DNS域名解析的工作流程是怎么样的？](/08-network/application-layer/DNS域名解析的工作流程是怎么样的？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [DNS底层使用TCP还是UDP？](/08-network/application-layer/DNS底层使用TCP还是UDP？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [DNS是什么？](/08-network/application-layer/DNS是什么？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [GET和POST的区别是什么？](/08-network/application-layer/GET和POST的区别是什么？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [HTTP/2是什么？](/08-network/application-layer/HTTP-2是什么？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [HTTP/2的HPACK对头阻塞问题是什么？](/08-network/application-layer/HTTP-2的HPACK对头阻塞问题是什么？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [HTTP/3是什么？](/08-network/application-layer/HTTP-3是什么？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [HTTP1.0与HTTP2.0区别是什么？](/08-network/application-layer/HTTP1.0与HTTP2.0区别是什么？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [HTTP1.1如何对请求拆包？](/08-network/application-layer/HTTP1.1如何对请求拆包？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [HTTP1.1队头阻塞是什么？](/08-network/application-layer/HTTP1.1队头阻塞是什么？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [HTTPS如何优化？](/08-network/application-layer/HTTPS如何优化？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [HTTPS如何防范中间人攻击？](/08-network/application-layer/HTTPS如何防范中间人攻击？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [HTTPS握手过程是怎么样的？](/08-network/application-layer/HTTPS握手过程是怎么样的？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [HTTP、SOCKET和GET的区别是什么？](/08-network/application-layer/HTTP、SOCKET和GET的区别是什么？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [HTTP为什么不安全？](/08-network/application-layer/HTTP为什么不安全？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [HTTP协议常见的请求头有哪些？](/08-network/application-layer/HTTP协议常见的请求头有哪些？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [HTTP协议支持的请求方法有哪些？](/08-network/application-layer/HTTP协议支持的请求方法有哪些？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [HTTP各个版本是如何管理多个TCP连接的？](/08-network/application-layer/HTTP各个版本是如何管理多个TCP连接的？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [HTTP和HTTPS区别是什么？](/08-network/application-layer/HTTP和HTTPS区别是什么？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [HTTP常见的状态码有哪些？](/08-network/application-layer/HTTP常见的状态码有哪些？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [HTTP的报文结构是怎么样的？](/08-network/application-layer/HTTP的报文结构是怎么样的？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [HTTP的无状态怎么理解？](/08-network/application-layer/HTTP的无状态怎么理解？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [HTTP的长连接怎么理解？](/08-network/application-layer/HTTP的长连接怎么理解？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [HTTP进行TCP连接之后，什么情况下会中断？](/08-network/application-layer/HTTP进行TCP连接之后，什么情况下会中断？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [JWT令牌是什么？](/08-network/application-layer/JWT令牌是什么？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [SSL与TSL有什么联系？](/08-network/application-layer/SSL与TSL有什么联系？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [localStorage和Cookie区别是什么？](/08-network/application-layer/localStorage和Cookie区别是什么？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [token、session、cookie区别是什么？](/08-network/application-layer/token、session、cookie区别是什么？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [如果客户端禁用了cookie，session还能用吗？](/08-network/application-layer/如果客户端禁用了cookie，session还能用吗？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [应用层常用协议有哪些？](/08-network/application-layer/应用层常用协议有哪些？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [既然有HTTP为什么还要有RPC？](/08-network/application-layer/既然有HTTP为什么还要有RPC？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
-- [既然有HTTP为什么还需要WebSocket？](/08-network/application-layer/既然有HTTP为什么还需要WebSocket？.md)：应用层网络面试复习，重点关注核心机制、典型追问、实战场景和易错点。
+### 实时通信与 RPC
 
-## 面试复习检查清单
+- [既然有 HTTP 为什么还需要 WebSocket](既然有HTTP为什么还需要WebSocket？.md) — 全双工通信解决服务端主动推送
+- [既然有 HTTP 为什么还要有 RPC](既然有HTTP为什么还要有RPC？.md) — 内部微服务调用的高性能与治理优势
 
-- 能否用 30 秒给出一句话定义？
-- 能否口述核心流程、关键状态或算法不变量？
-- 能否说出至少 3 个追问点和 2 个易错点？
-- 能否结合项目或线上排障讲一个真实场景？
-- 能否说明方案边界、风险、优化方向和验证指标？
+### 其他应用层协议
+
+- [应用层常用协议有哪些](应用层常用协议有哪些？.md) — HTTP/DNS/SMTP/FTP/SNMP/MQTT 等协议分类
+- [邮件协议有哪些](邮件协议有哪些？.md) — SMTP 发送、POP3/IMAP 接收的完整邮件流程

@@ -1,46 +1,42 @@
-# 基础知识
+# Java 基础
 
-这一部分围绕 基础知识 的核心知识展开，目标是把概念、原理、场景和面试表达组织成可复习、可追问、可落地的知识体系。
+本目录覆盖 Java 核心语法、面向对象、关键字、反射、泛型、注解、异常、SPI 等基础知识点。每篇文章都按"核心概念 → 标准回答 → 实现原理 → 代码示例 → 实战场景 → 深挖追问 → 易错点 → 总结"结构组织，便于面试复习和查漏补缺。
 
-## 面试复习重点
+## 目录
 
-- 核心概念是什么，解决了什么问题，和相邻知识点如何区分。
-- 面试官常从实现原理、适用场景、异常边界和性能影响继续追问。
-- 生产落地时要结合监控、日志、压测和故障预案验证方案。
+### 数据类型与运算
 
-## 建议掌握程度
+- [Java 的基本数据类型有哪些？](Java的基本数据类型有哪些？.md) — 8 种基本类型、大小、范围、默认值与包装类型
+- [基本数据类型的缓存池是什么？](基本数据类型的缓存池是什么？.md) — `Integer`/`Long` 等包装类的缓存机制与 `==` 陷阱
+- [自动装箱和自动拆箱是什么？](自动装箱和自动拆箱是什么？.md) — `valueOf`/`intValue` 语法糖、NPE 与性能陷阱
+- [隐式类型转换是什么？](隐式类型转换是什么？.md) — 拓宽转换、类型提升、复合赋值的隐式强转
+- [BigDecimal 基本原理是什么？](BigDecimal基本原理是什么？.md) — 高精度十进制计算的原理、构造、舍入与比较
+- [Java 的传参方式是什么？](Java的传参方式是什么？.md) — 值传递、引用类型传参行为与 `String` 的特殊性
 
-- **能讲清概念**：先用自己的话解释定义、背景和解决的问题。
-- **能画出链路**：把核心流程、关键组件和状态变化串起来。
-- **能回答追问**：准备优缺点、适用场景、常见坑和替代方案。
-- **能落地排查**：结合日志、指标、工具和案例说明如何定位问题。
+### 面向对象
 
-## 文章导航
+- [面向对象的三大特性是什么？](面向对象的三大特性是什么？.md) — 封装、继承、多态的实现与工程价值
+- [面向对象设计的 SOLID 原则是什么？](面向对象设计的SOLID原则是什么？.md) — SRP/OCP/LSP/ISP/DIP 五大原则
+- [抽象类与接口区别是什么？](抽象类与接口区别是什么？.md) — 设计意图、Java 8+ default 方法与选型
+- [如何区分重载和重写？](如何区分重载和重写？.md) — 编译期绑定 vs 运行期绑定
+- [Comparable 与 Comparator 区别是什么？](Comparable与Comparator区别是什么？.md) — 内部自然排序 vs 外部比较器
+- [如何区分深拷贝与浅拷贝？](如何区分深拷贝与浅拷贝？.md) — 引用字段是否共享、序列化与复制构造器
 
-- [抽象类与接口区别是什么？](/01-java-core/basics/抽象类与接口区别是什么？.md)
-- [基本数据类型的缓存池是什么？](/01-java-core/basics/基本数据类型的缓存池是什么？.md)
-- [面向对象的三大特性是什么？](/01-java-core/basics/面向对象的三大特性是什么？.md)
-- [面向对象设计的SOLID原则是什么？](/01-java-core/basics/面向对象设计的SOLID原则是什么？.md)
-- [如何区分深拷贝与浅拷贝？](/01-java-core/basics/如何区分深拷贝与浅拷贝？.md)
-- [如何区分重载和重写？](/01-java-core/basics/如何区分重载和重写？.md)
-- [隐式类型转换是什么？](/01-java-core/basics/隐式类型转换是什么？.md)
-- [自动装箱和自动拆箱是什么？](/01-java-core/basics/自动装箱和自动拆箱是什么？.md)
-- [BigDecimal基本原理](/01-java-core/basics/BigDecimal基本原理.md)
-- [bigdecimal](/01-java-core/basics/bigdecimal.md)
-- [Comparable与Comparator区别是什么？](/01-java-core/basics/Comparable与Comparator区别是什么？.md)
-- [deep-copy-shallow-copy](/01-java-core/basics/deep-copy-shallow-copy.md)
-- [equals-hashcode](/01-java-core/basics/equals-hashcode.md)
-- [final关键字有什么作用？](/01-java-core/basics/final关键字有什么作用？.md)
-- [Java的传参方式是什么？](/01-java-core/basics/Java的传参方式是什么？.md)
-- [Java的数据类型与大小](/01-java-core/basics/Java的数据类型与大小.md)
-- [Java反射机制是什么？](/01-java-core/basics/Java反射机制是什么？.md)
-- [Java泛型机制是什么？](/01-java-core/basics/Java泛型机制是什么？.md)
+### 关键字与对象语义
 
-## 面试表达模板
+- [final 关键字有什么作用？](final关键字有什么作用？.md) — 变量/方法/类的不可变语义与 JMM
+- [static 关键字有什么作用？](static关键字有什么作用？.md) — 类级别成员、初始化顺序与单例模式
+- [equals 和 hashCode 为什么要一起重写？](equals和hashCode为什么要一起重写？.md) — 对象契约与 HashMap 查找原理
+- [Java 内部类是什么？](Java内部类是什么？.md) — 四种内部类的实现原理与编译产物
+- [序列化和 transient 关键字怎么用？](序列化和transient关键字怎么用？.md) — 序列化机制、版本号、自定义序列化
 
-回答这类问题时，建议按下面顺序组织：
+### 高级特性
 
-1. 先给结论：一句话说明它是什么、解决什么问题。
-2. 再讲原理：说明核心组件、关键流程和数据结构。
-3. 补充场景：结合项目或线上问题说明什么时候用、怎么用。
-4. 说明边界：讲清楚缺点、风险、替代方案和排查手段。
+- [Java 反射机制是什么？](Java反射机制是什么？.md) — Class/Field/Method/Constructor 与框架底层
+- [Java 泛型机制是什么？](Java泛型机制是什么？.md) — 类型擦除、PECS 原则与桥接方法
+- [Java 注解机制是什么？](Java注解机制是什么？.md) — 元注解、保留策略与 Lombok 原理
+- [Java 异常机制是什么？](Java异常机制是什么？.md) — 异常体系、try-with-resources 与统一异常处理
+- [Java 的 SPI 机制是什么？](Java的SPI机制是什么？.md) — ServiceLoader、JDBC 驱动与 Dubbo 扩展点
+- [String 类型与字符串常量池怎么关联？](String类型与字符串常量池怎么关联？.md) — 不可变性、常量池位置与 intern 原理
+
+---

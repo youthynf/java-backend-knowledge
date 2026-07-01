@@ -1,55 +1,211 @@
-# 线程池中的shutdown()与shutdownNow()有什么区别？
+# 线程池中的 shutdown 与 shutdownNow 有什么区别
 
-线程池中的shutdown()与shutdownNow()有什么区别？
-线程池中的shutdown()与shutdownNow()两个方法作用：
-shutdown()：
-将线程池状态设置SHUTDOWN，正在执行的任务继续执行，未执行的不予执行，新加入的任务直接抛RejectedExecutionException异常；
+## 核心概念
 
-shutdownNow()：
-线程池状态为STOP，并试图通过Thread.interrupt()方法来终止线程，但是需要线程支持中断，如果线程中没有sleep、wait、Contition、定时锁等应用，终止失效，所以线程池可能还是需要等待所有正在执行的任务都执行完成了才能退出。
+`shutdown()` 和 `shutdownNow()` 是 `ExecutorService` 接口提供的两个关闭线程池方法，分别对应"温和关闭"和"强制关闭"两种语义。两者的本质区别在于：是否处理队列中的剩余任务、是否中断正在执行的任务。
 
-## 面试总结
+线程池关闭通常配合 `awaitTermination()` 使用，构成"温和等待 → 超时强制"的标准优雅停机模式。
 
-围绕「线程池中的shutdown()与shutdownNow()有什么区别？」，面试官通常不只考概念定义，更关注你能否把机制、使用场景和线上问题串起来。
+## 标准回答
 
-### 核心回答
+| 维度 | `shutdown()` | `shutdownNow()` |
+|------|--------------|------------------|
+| 线程池状态 | SHUTDOWN | STOP |
+| 新任务 | 拒绝（走拒绝策略） | 拒绝（走拒绝策略） |
+| 队列中的任务 | 继续执行完 | 不执行，返回未消费列表 |
+| 正在执行的任务 | 不中断，让它跑完 | 尝试中断（`Thread.interrupt()`） |
+| 返回值 | void | `List<Runnable>`（未执行的任务） |
 
-1. 线程池通过复用线程降低创建销毁成本，并用队列、拒绝策略和参数控制并发压力。
-2. 核心参数要结合任务类型、RT、吞吐、下游容量和机器资源一起评估。
-3. 线上重点关注活跃线程数、队列积压、拒绝次数、任务耗时和异常吞噬。
+简单记忆：`shutdown()` 是"关门谢客、内部消化"，`shutdownNow()` 是"立刻清场、强行中断"。
 
-### 高频追问
+## 实现原理
 
-- 为什么不建议直接使用 Executors 默认工厂？
-- CPU 密集型和 IO 密集型线程数如何估算？
-- 队列满、线程满、下游慢时如何降级和止血？
+### shutdown 源码
 
-### 实战落地
+```java
+public void shutdown() {
+    final ReentrantLock mainLock = this.mainLock;
+    mainLock.lock();
+    try {
+        checkShutdownAccess();
+        advanceRunState(SHUTDOWN);          // 状态切到 SHUTDOWN
+        interruptIdleWorkers();             // 中断"空闲"工作线程
+        onShutdown();                       // 钩子方法，ScheduledThreadPoolExecutor 用来清理延迟任务
+    } finally {
+        mainLock.unlock();
+    }
+    tryTerminate();
+}
+```
 
-- **选型前**：先判断是互斥访问、线程协作、任务编排，还是限流隔离。
-- **编码时**：控制共享变量范围，明确锁对象、超时策略、异常处理和资源释放。
-- **上线后**：观察线程数、队列长度、阻塞时间、拒绝次数和 RT 抖动，必要时用线程 Dump 验证。
+`interruptIdleWorkers` 只中断"空闲"线程——正在 `workQueue.take()` 阻塞等待的线程。如果线程正在执行任务（持有 Worker 锁），不会被中断。
 
-### 易错点
+`take()` 在被中断时会抛 `InterruptedException`，进入 `getTask` 的 catch 分支重新循环，发现状态是 SHUTDOWN 且队列为空时返回 null，工作线程退出。
 
-- 不要使用无界队列掩盖流量问题。
-- 异步任务要显式处理异常、超时和上下文传递。
+### shutdownNow 源码
 
-## 面试复习要点
+```java
+public List<Runnable> shutdownNow() {
+    List<Runnable> tasks;
+    final ReentrantLock mainLock = this.mainLock;
+    mainLock.lock();
+    try {
+        checkShutdownAccess();
+        advanceRunState(STOP);              // 状态切到 STOP
+        interruptWorkers();                 // 中断所有工作线程（不区分空闲）
+        tasks = drainQueue();               // 把队列剩余任务捞出来
+    } finally {
+        mainLock.unlock();
+    }
+    tryTerminate();
+    return tasks;
+}
+```
 
-面试中回答“线程池中的shutdown()与shutdownNow()有什么区别”时，不要只给结论，建议按 **定位 → 原理 → 使用边界 → 排查方式** 展开：
+`interruptWorkers` 调用每个 Worker 的 `interruptIfStarted`，对所有线程发中断信号。但中断只是设置中断标志，真正停下来要靠任务代码响应中断。
 
-1. **先讲定位**：说明它解决的核心问题，以及在整个技术栈中处于哪一层。
-2. **再讲原理**：把关键流程、核心数据结构或关键组件讲清楚，避免只背名词。
-3. **补充边界**：说明它适合什么场景，不适合什么场景，以及常见误用。
-4. **结合排查**：如果线上出现性能、稳定性或一致性问题，要能说出观测指标、日志线索和排查顺序。
+### getTask 对状态的处理
 
-## 标准回答思路
+```java
+private Runnable getTask() {
+    for (;;) {
+        int c = ctl.get();
+        // STOP 状态：不处理队列，返回 null 让线程退出
+        if (runStateAtLeast(c, STOP))
+            return null;
+        // SHUTDOWN 且队列空：返回 null 让线程退出
+        if (runStateAtLeast(c, SHUTDOWN) && workQueue.isEmpty())
+            return null;
+        // SHUTDOWN 且队列非空：继续取任务执行
+        // ...
+    }
+}
+```
 
-可以这样组织答案：**线程池中的shutdown()与shutdownNow()有什么区别 的核心价值是解决特定场景下的工程问题。实际使用时，需要理解它的工作机制、成本和限制，不能只看 API 或表面现象。在线上落地时，还要结合监控、日志和压测结果判断是否真的适合当前业务。**
+### awaitTermination
 
-## 常见追问
+```java
+public boolean awaitTermination(long timeout, TimeUnit unit) {
+    long nanos = unit.toNanos(timeout);
+    final ReentrantLock mainLock = this.mainLock;
+    mainLock.lock();
+    try {
+        for (;;) {
+            if (runStateAtLeast(ctl.get(), TERMINATED))
+                return true;            // 已彻底终止
+            if (nanos <= 0)
+                return false;           // 超时
+            nanos = termination.awaitNanos(nanos);
+        }
+    } finally {
+        mainLock.unlock();
+    }
+}
+```
 
-- 它和相近方案的区别是什么？
-- 如果数据量、并发量或链路复杂度上来，会先暴露什么问题？
-- 线上出现异常时，你会先看哪些指标，如何缩小范围？
+`termination` 是一个 `Condition`，`tryTerminate` 在所有 worker 退出后会 `signalAll`，唤醒等待者。
+
+## 代码示例
+
+### 标准优雅停机
+
+```java
+public void gracefulShutdown(ExecutorService executor) {
+    executor.shutdown();                              // 第一步：温和关闭
+    try {
+        if (!executor.awaitTermination(30, TimeUnit.SECONDS)) {
+            List<Runnable> dropped = executor.shutdownNow();  // 第二步：超时强制
+            log.warn("线程池强制停止，丢弃 {} 个未执行任务", dropped.size());
+            if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
+                log.error("线程池无法停止");
+            }
+        }
+    } catch (InterruptedException e) {
+        executor.shutdownNow();
+        Thread.currentThread().interrupt();
+    }
+}
+```
+
+### Spring Bean 销毁时关闭
+
+```java
+@Bean(destroyMethod = "shutdown")
+public ThreadPoolExecutor orderExecutor() {
+    return new ThreadPoolExecutor(8, 16, 60L, TimeUnit.SECONDS,
+            new ArrayBlockingQueue<>(200));
+}
+
+// 或手动实现 DisposableBean
+@Component
+public class OrderExecutorHolder implements DisposableBean {
+    private final ThreadPoolExecutor executor;
+
+    public void destroy() throws Exception {
+        executor.shutdown();
+        if (!executor.awaitTermination(30, TimeUnit.SECONDS)) {
+            executor.shutdownNow();
+        }
+    }
+}
+```
+
+## 实战场景
+
+| 场景 | 方法 | 注意点 |
+|------|------|--------|
+| 应用优雅停机 | shutdown + awaitTermination + shutdownNow | 必须设超时，配合 Spring ShutdownHook |
+| 临时线程池用完即关 | shutdown + awaitTermination | 短任务用 shutdownNow 也行 |
+| 强制止损（如下游故障） | shutdownNow | 任务不响应中断时仍会跑完 |
+| 拒绝服务排查 | isShutdown 判断后再提交 | shutdown 后 execute 会触发拒绝策略 |
+
+## 深挖追问
+
+### shutdownNow 能保证立刻停止所有线程吗？
+
+不能。它只是发中断信号。如果任务在 `Thread.sleep`、`Object.wait`、`BlockingQueue.take` 等可中断方法上阻塞，会抛 `InterruptedException` 退出；但如果任务在 CPU 循环里跑且不检查中断标志，会一直跑完。
+
+### shutdown 后还能提交任务吗？
+
+不能。`execute` 开头检查到非 RUNNING 状态会走拒绝策略，默认 `AbortPolicy` 抛 `RejectedExecutionException`。`submit` 同理。
+
+### shutdown 会等队列里的任务执行完吗？
+
+会。`shutdown` 后工作线程继续从队列取任务执行，直到队列空、工作线程数为 0，状态进入 TIDYING 再 TERMINATED。可以用 `awaitTermination` 等待这个过程结束。
+
+### 为什么不直接 stop 一个线程？
+
+`Thread.stop()` 已被废弃。它会在任意位置强制终止线程，可能破坏对象状态和锁保护的不变量，导致数据不一致。中断机制是协作式的，由任务自己决定何时退出，更安全。
+
+### 优雅停机时如何让正在执行的任务也能感知？
+
+任务代码主动检查中断标志：
+
+```java
+executor.submit(() -> {
+    while (!Thread.currentThread().isInterrupted() && hasMoreWork()) {
+        doOneBatch();
+    }
+    cleanup();
+});
+```
+
+并在可中断阻塞方法上响应 `InterruptedException`，重新设置中断标志后退出。
+
+## 易错点
+
+- 调用 `shutdown()` 后没等 `awaitTermination` 就退出 JVM，正在执行的任务被强杀。
+- `shutdownNow()` 以为能强制中断所有任务，结果任务不响应中断，依然跑了几分钟。
+- 优雅停机没设超时，进程退出时一直挂在 `awaitTermination` 上。
+- Spring Bean 没声明 `destroyMethod`，容器关闭时线程池仍在跑，进程退不掉。
+
+## 总结
+
+`shutdown` 与 `shutdownNow` 是温和与强制两种关闭语义：前者处理完队列再退，后者立即停止并返回未处理任务。生产环境的标准优雅停机模式是 `shutdown → awaitTermination(timeout) → shutdownNow → awaitTermination`。理解中断是协作式而非强制的，是判断"强制关闭"边界的关键。
+
+## 参考资料
+
+- [JDK ThreadPoolExecutor 源码](https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/concurrent/ThreadPoolExecutor.java)
+- [Java 并发编程的艺术](https://book.douban.com/subject/26591326/)
+
+---

@@ -1,56 +1,199 @@
-# TCP连接一端断电和进程崩溃有何区别？
+# TCP 连接一端断电和进程崩溃有何区别
+
 ## 核心概念
 
-TCP连接一端断电和进程崩溃有何区别，探讨这个问题需要基于是否开启了TCP keepalive进行考虑。如果开启了TCP keepalive，可以参考【TCP keepalive是什么】一文。本文主要讨论在没有开启TCP Keepalive时的情况分析。
-主机崩溃+无数据传输
-在没有开启TCP keepalive，且双方已知没有数据交互的情况下，如果客户端的主机崩溃了，服务端时无法感知到的，再加上服务端没有开启TCP keepalive，有没有数据交互的情况下，服务端的TCP连接会一直处于【ESTABLISHED】连接状态，直到服务端重启进程。
+进程崩溃和主机断电对 TCP 的影响截然不同：**进程崩溃时操作系统会发 FIN，对端正常进入四次挥手**；**主机断电无法发 FIN，对端需要靠重传或 keepalive 才能发现**。这是排查"连接莫名卡住"问题的关键区分点。
 
+## 标准回答
+
+| 情况 | 是否发 FIN | 对端反应 | 发现方式 |
+|------|-----------|---------|---------|
+| 进程崩溃 | 操作系统代发 FIN | 对端正常四次挥手 | 立即感知 |
+| 主机断电（不开机） | 无法发 FIN | 对端连接卡住 | 重传超时或 keepalive |
+| 主机断电后重启 | 重启后丢失连接状态 | 对端发包时收到 RST | 发数据时感知 |
+| 拔网线（物理断） | 不影响 TCP 状态 | 对端不知 | 数据重传或 keepalive |
+
+进程崩溃由操作系统兜底（OS 回收进程资源时发 FIN），主机断电操作系统都死了，没人发 FIN。
+
+## 详细机制
+
+### 进程崩溃
+
+```
 进程崩溃
-TCP的连接信息是由内核维护的，所以当服务端的进程崩溃后，内核需要挥手该进程的所有TCP连接资源，于是内核会发送第一次挥手FIN报文，后续的挥手也都是在内核完成，并不需要进程的参与，所以即使服务端的进程退出了，还是能与客户端完成TCP四次挥手的过程。
+  ↓
+操作系统回收进程资源
+  ↓
+OS 内核代发 FIN（不需要进程参与）
+  ↓
+对端收到 FIN，进入 CLOSE_WAIT
+  ↓
+对端 read() 返回 0（EOF）或 -1（连接关闭）
+  ↓
+应用层感知到连接断开
+```
 
-主机崩溃+有数据传输
-在客户端宕机后，服务端向客户端发送的报文会得不到响应，在一定时长后，服务端就会触发超时重传机制，重传未得到响应的报文。重传报文的过程中，客户端重启完成后，客户端内核就会接收到重传的报文，然后根据报文的消息传递给对应的进程：
-如果客户端上没有进程绑定该TCP报文的目标端口号，那么客户端内核就会回复RST报文，重置该TCP连接。
-如果客户端上有进程绑定了该TCP报文的目标端口号，由于客户端主机重启后，之前的TCP连接数据结构已经丢失了，客户端内核里的协议栈会发现找不到这个TCP连接的socket结构体，于是就会回复RST报文，重置该TCP连接。
-因此，只要有一方重启完成后，收到之前的TCP连接的报文，都会回复RST报文，以此断开连接。
+进程崩溃时 TCP 连接信息在内核中，OS 会扫到这些连接并发 FIN，对端正常进入四次挥手。**不需要 keepalive**。
 
-如果客户端主机宕机后，一直没有重启
-这种情况，服务端超时重传报文的次数达到一定阈值后，内核会判断出这个TCP有问题，然后通过Socket接口通知应用程序，于是服务端的TCP连接就会断开。
-TCP的数据报文具体重传多少次呢？Linux系统中，提供一个tcp_retries2配置项，默认值是15。不过并不是一定会重试15次后才会通知应用程序终止该TCP连接，内核会根据tcp_retries2设置的值，计算出一个timeout（如果tcp_retries=15，那么计算得到的timeout=924600ms），如果重传间隔超过了这个timeout，则认为超过了阈值，就会停止重传，然后就会断开连接。
-为什么是924600ms？
-TCP 使用 指数退避（Exponential Backoff） 控制重传间隔，每次超时时间（RTO, Retransmission Timeout）按以下规则增长：
-初始超时（RTO）：由 TCP 的 RTT（Round-Trip Time）测量动态计算（通常下限为 200ms）
-退避规则：每次重传的超时时间为前一次的 2 倍（直到上限）。
-Linux 内核中，重传间隔的基准值（TCP_RTO_MIN）默认为 200ms，最大间隔（TCP_RTO_MAX）为 120秒。内核的退避约束：
-前 10 次重传按指数增长（200ms ~ 102.4s）。
-第 11 次起固定为 TCP_RTO_MAX（120s），避免无限增长。
-最终15次的结果就是924600ms
+### 主机断电（不开机）
 
-发生超时重传的过程中，每一轮的超时时间（RTO）都是倍数增长的。而RTO是基于RTT（一个报文的往返时间）来计算的，如果RTT较大，那么计算出来的RTO就越大，那么经过几轮重传后，就可能很快达到了上面的timeout值了，就会触发停止重传，然后断开连接。
+```
+主机断电
+  ↓
+无法发 FIN（OS 都死了）
+  ↓
+对端不知道，连接保持 ESTABLISHED
+  ↓
+对端发数据时收不到 ACK，触发重传
+  ↓
+重传达 tcp_retries2 上限（默认 15），约 924 秒
+  ↓
+内核通知应用层 ETIMEDOUT，连接断开
+```
 
-## 面试总结
-### 核心概念
+如果对端不发数据，且未开 keepalive，连接会一直卡在 ESTABLISHED。
 
-传输层负责端到端通信。TCP 面向连接、可靠、有序、字节流，依靠三次握手、序列号、确认、重传、滑动窗口、流量控制和拥塞控制；UDP 无连接、开销小、不保证可靠。
+### 主机断电后重启
 
-### 面试官想考什么
+```
+主机断电 → 重启
+  ↓
+重启后丢失所有 TCP 连接状态
+  ↓
+对端发包到重启的主机
+  ↓
+重启的主机找不到对应连接（socket 不存在）
+  ↓
+回 RST 报文
+  ↓
+对端收到 RST，连接立即关闭
+```
 
-面试官高频考 TCP 三次握手/四次挥手、TIME_WAIT/CLOSE_WAIT、可靠传输、粘包、拥塞控制、连接异常和性能调优。
+对端发包时才知道对方重启了。如果对端不发数据，仍要等重传或 keepalive。
 
-### 标准回答
+### tcp_retries2 和重传超时
 
-TCP 建连通过 SYN、SYN+ACK、ACK 确认双方收发能力；断连通常四次挥手，因为双方方向的数据流要分别关闭。可靠性来自序列号、ACK、超时/快速重传、滑动窗口和校验。TIME_WAIT 保护旧报文消失并保证对端收到最后 ACK；CLOSE_WAIT 多通常是应用未主动关闭连接。UDP 适合实时音视频、DNS、QUIC 等可自定义可靠性或容忍丢包的场景。
+Linux 中数据段重传次数由 `tcp_retries2` 控制（默认 15）。重传间隔指数退避：
 
-### 深挖追问
+- 前 10 次按指数增长（200ms ~ 102.4s）
+- 第 11 次起固定 120s
+- 15 次总耗时约 924.6 秒（约 15 分钟）
 
-- 这个现象发生在内核 TCP 状态机、网络链路还是应用代码中？
-- 如何用 ss/netstat、tcpdump、内核计数器证明丢包、重传、半连接或 TIME_WAIT 问题？
-- 哪些 Linux 参数、连接池参数和超时设置会影响生产表现？
+```bash
+$ sysctl net.ipv4.tcp_retries2
+net.ipv4.tcp_retries2 = 15
+```
 
-### 实战场景/示例
+调整这个值能改变对端宕机的发现速度。
 
-Java 服务大量 CLOSE_WAIT，优先检查代码是否未关闭 socket/HTTP 响应流，或连接池释放逻辑异常；大量 TIME_WAIT 则看短连接、主动关闭方和连接复用。
+### keepalive 兜底
 
-### 易错点/总结
+未开 keepalive 且无数据传输时，主机断电后对端永远不知道。开启 keepalive 后：
 
-TCP 是字节流没有消息边界，所以会有粘包/拆包；应用层必须用长度字段、分隔符或固定长度等协议解决。
+```
+空闲 tcp_keepalive_time（默认 7200 秒）
+  ↓
+发探测包，无响应
+  ↓
+重试 tcp_keepalive_probes 次（默认 9）
+  ↓
+判定连接死亡
+```
+
+最坏 7200 + 75×9 = 7875 秒（约 2 小时 11 分）。生产中通常调短。
+
+## 代码示例
+
+Java 处理进程崩溃和断电的不同：
+
+```java
+import java.net.*;
+import java.io.*;
+
+public class RobustClient {
+    public static void main(String[] args) {
+        while (true) {
+            try (Socket socket = new Socket("server.example.com", 8080)) {
+                socket.setKeepAlive(true);  // 兜底检测主机宕机
+                socket.setSoTimeout(30000);  // 读超时 30 秒
+
+                BufferedReader in = new BufferedReader(
+                    new InputStreamReader(socket.getInputStream()));
+                String line;
+                while ((line = in.readLine()) != null) {
+                    System.out.println("Recv: " + line);
+                }
+                // readLine 返回 null → 对端正常关闭（进程崩溃或主动 close）
+                System.out.println("Server closed gracefully");
+            } catch (SocketTimeoutException e) {
+                System.out.println("Read timeout, reconnecting");
+            } catch (IOException e) {
+                System.out.println("Connection lost: " + e.getMessage());
+                // 主机断电、网络中断 → 这里感知到
+            }
+
+            try { Thread.sleep(5000); } catch (InterruptedException e) {}
+        }
+    }
+}
+```
+
+调整内核参数加速发现：
+
+```bash
+# 调短 keepalive：60 秒空闲开始探测，10 秒间隔，3 次失败
+$ sysctl net.ipv4.tcp_keepalive_time=60
+$ sysctl net.ipv4.tcp_keepalive_intvl=10
+$ sysctl net.ipv4.tcp_keepalive_probes=3
+# 最坏 60 + 10×3 = 90 秒发现主机宕机
+
+# 减小数据重传次数，加速发现
+$ sysctl net.ipv4.tcp_retries2=8  # 默认 15，调小加速失败
+```
+
+## 实战场景
+
+| 场景 | 现象 | 处理 |
+|------|------|------|
+| 服务进程 OOM 崩溃 | 客户端立即收到 EOF | 自动重连机制 |
+| 服务主机宕机 | 客户端卡住约 15 分钟 | 调短 `tcp_retries2` 或开 keepalive |
+| 服务主机重启 | 客户端发包时收到 RST | 自动重连 |
+| 网络中断（无数据） | 连接永久卡住 | 必须开 keepalive 或应用层心跳 |
+| 网络中断（有数据） | 重传 15 分钟后失败 | 同上 |
+
+## 深挖追问
+
+**Q1：进程被 kill -9 和正常退出对 TCP 一样吗？**
+一样。OS 回收进程资源时不区分正常退出还是被杀，都会发 FIN。
+
+**Q2：进程崩溃时缓冲区的数据会发出去吗？**
+会。OS 会尝试把发送缓冲区的数据发完再发 FIN。但如果对端不可达，数据丢失。
+
+**Q3：主机断电后多长时间对端能发现？**
+- 有数据传输：`tcp_retries2` 重传上限（默认 15 次，约 924 秒）
+- 无数据传输 + keepalive：约 2 小时（默认）
+- 无数据传输 + 无 keepalive：永远发现不了
+
+**Q4：容器被强制停止（docker kill）属于哪种？**
+属于进程崩溃。容器本质是进程，被 kill 时 OS 回收资源发 FIN。
+
+**Q5：进程崩溃对端 read 返回什么？**
+返回 -1（EOF），表示对端关闭。如果对端是 RST 关闭则返回 -1 并设置 errno 为 ECONNRESET。
+
+## 易错点
+
+- **"进程崩溃需要 keepalive 才能发现"** — 不需要，OS 会发 FIN。
+- **"主机断电对端立即知道"** — 不，要靠重传或 keepalive 发现。
+- **"主机重启和主机宕机一样"** — 不一样，重启后会回 RST。
+- **"调短 `tcp_retries2` 没副作用"** — 有，正常网络抖动也可能触发连接断开。
+- **"进程被 kill -9 不会发 FIN"** — 会，OS 兜底发 FIN。
+
+## 总结
+
+进程崩溃由 OS 兜底发 FIN，对端立即感知；主机断电无法发 FIN，对端要靠重传（约 15 分钟）或 keepalive（默认 2 小时）发现。生产中长连接服务必须配置应用层心跳或调短 keepalive，否则主机宕机会导致连接卡死、资源泄漏。理解这个区别是排查"连接莫名卡住"的起点。
+
+## 参考资料
+
+- [RFC 793 — TCP, Connection Close](https://datatracker.ietf.org/doc/html/rfc793#section-3.5)
+- [RFC 1122 — TCP Keep-Alives](https://datatracker.ietf.org/doc/html/rfc1122#section-4.2.3.6)
+- [Linux tcp_retries2 文档](https://www.kernel.org/doc/Documentation/networking/ip-sysctl.txt)

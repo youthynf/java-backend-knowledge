@@ -1,117 +1,263 @@
-# Redis 主从集群可以保证数据一致性吗？
+# Redis 主从集群可以保证数据一致性吗
 
 ## 核心概念
 
-Redis 主从复制默认是**异步复制**。主节点写入成功后通常会立即返回客户端，然后再把写命令传播给从节点。因此 Redis 主从集群默认不能保证强一致性，只能保证最终一致性。
+Redis 主从复制默认是异步的：主节点写入成功后立即返回客户端，然后再把写命令传播给从节点。这意味着主从之间存在复制延迟——主节点上有的数据从节点可能还没有。所以 Redis 主从集群默认只能保证最终一致，不能保证强一致。
 
-一句话回答：**Redis 主从复制不能天然保证强一致。主从之间存在复制延迟，主节点故障切换时可能丢失尚未同步到从节点的数据。可以通过 `WAIT`、`min-replicas-to-write`、合理的哨兵/集群配置降低风险，但不能把 Redis 当成强一致数据库。**
+更严重的是故障切换时的数据丢失：主节点写入后还没来得及同步给从节点就宕机，从节点被提升为新主，原主未同步的写入就丢了。脑裂场景下旧主继续接收写入，恢复后会被新主覆盖，旧主的写入全部消失。
 
-## 面试官想考什么
-
-1. 是否知道 Redis 复制默认异步；
-2. 是否理解主从延迟和故障切换导致的数据丢失窗口；
-3. 是否了解 `WAIT`、`min-replicas-to-write` 等增强手段；
-4. 是否能说明脑裂问题和解决思路；
-5. 是否能根据业务一致性要求选择方案。
+可以通过 `WAIT`、`min-replicas-to-write` 等机制降低风险，但不能把 Redis 变成强一致数据库。强一致需求要用 ZooKeeper、etcd 等 CP 系统。
 
 ## 标准回答
 
-### 1. 正常复制流程
+Redis 主从集群不能保证强一致，只能保证最终一致。原因：复制默认异步，主从之间存在延迟；故障切换时未同步的命令会丢；脑裂时旧主写入被新主覆盖。可以通过 `WAIT numreplicas timeout` 让客户端等待副本确认、`min-replicas-to-write` + `min-replicas-max-lag` 阻止孤主写入，降低风险但不等于强一致。强一致需求应选 ZooKeeper、etcd 等 CP 系统。
 
-Redis 主从复制包括：
+要点：
 
-- 全量同步：从节点初次同步或偏移差距太大时，主节点生成 RDB 发送给从节点；
-- 增量同步：主节点把写命令追加到 replication backlog，从节点按 offset 继续追赶。
+1. 异步复制：主节点不等从节点 ACK，性能高但有丢失窗口。
+2. 故障切换丢数据：主节点宕机时未同步的命令会永久丢失。
+3. 读写分离旧读：复制延迟期间读从节点可能拿到旧数据。
+4. `WAIT` 命令：让客户端等待副本确认收到复制流，但不保证持久化。
+5. `min-replicas-to-write`：从节点不足或延迟过高时主节点拒绝写入，降低脑裂风险。
 
-正常情况下，主节点接收写命令后返回客户端，再异步把命令同步给从节点。只要是异步，就一定存在延迟窗口。
+## 实现原理
 
-### 2. 故障切换导致数据丢失
-
-典型场景：
-
-```text
-客户端写入 master 成功
-master 还没同步给 slave
-master 宕机
-slave 被提升为新 master
-```
-
-这时客户端以为成功的数据，在新 master 上不存在，这就是主从异步复制导致的数据丢失。
-
-### 3. 读写分离导致读到旧数据
-
-如果业务写主库、读从库，复制延迟期间可能发生：
+### 异步复制的丢失窗口
 
 ```text
-写入用户资料成功 -> 立刻读从库 -> 读到旧资料
+t0: 客户端 SET k v 发给主节点
+t1: 主节点执行命令，写 AOF，返回 OK 给客户端
+t2: 主节点通过命令传播把 SET k v 发给从节点  <-- 异步，不等
+t3: 从节点执行 SET k v，更新 offset
+
+如果 t1-t2 之间主节点宕机：
+  - 从节点被提升为新主
+  - 客户端以为写入成功的 k=v 在新主上不存在
+  - 数据丢失
 ```
 
-所以对“写后立刻读”的强一致场景，要读主库，或者引入版本号、延迟读、会话一致性等策略。
+### 读写分离的旧读问题
 
-## 深挖追问
+```text
+t0: 客户端 A SET user:1 {name:"Tom"}  -> 主节点执行成功
+t1: 客户端 B 立即 GET user:1           -> 读从节点
+t2: 从节点尚未同步 t0 的写入            -> 返回 {name:"Old"}
 
-1. **为什么 Redis 主从默认不做同步复制？** 同步复制会显著增加写延迟并降低可用性，Redis 更偏向高性能和最终一致。
-2. **`WAIT` 是否等于强一致？** 不等于。它只等待指定副本确认收到复制流，不保证永久落盘，也不能完全消除故障切换窗口。
-3. **读从库如何避免读到旧数据？** 强一致读走主库；或使用写后短时间读主、版本号校验、延迟双删/重试等业务策略。
-4. **脑裂为什么会丢数据？** 网络分区后旧 master 继续接收写入，新 master 也开始写；恢复后旧 master 会被新 master 覆盖，分区期间旧 master 的写入可能消失。
+业务表现：刚改完资料立刻查还是旧的
+```
 
-## 增强一致性的手段
+### 脑裂场景的数据丢失
 
-### `WAIT` 命令
+```text
+原主 M (192.168.1.10)             从 S1, S2
+   |                                 |
+   | ---网络分区---                  |
+   |                                 |
+M 仍能接受客户端写入                  哨兵认为 M 下线
+缓存到 replication buffer             选举 S1 为新主
+（无法同步给从节点）                   S1 开始接受写入
+   |                                 |
+   | ---网络恢复---                  |
+   |                                 |
+哨兵把 M 降级为 S1 的从节点
+M 触发全量复制，清空本地数据
+分区期间 M 接收的写入全部丢失
+```
 
-`WAIT numreplicas timeout` 可以让客户端等待写入被指定数量的从节点确认。
+### WAIT 命令的作用与局限
 
 ```bash
-SET order:1 paid
-WAIT 1 1000
+SET order:1001 paid
+WAIT 1 1000    # 等待至少 1 个从节点在 1000ms 内确认收到复制流
 ```
 
-含义是等待至少 1 个从节点在 1000ms 内确认收到复制。但它不是严格强一致：只确认从节点接收复制流，不代表永久落盘；超时后的业务语义要自己处理；写延迟也会升高。
+`WAIT` 的语义：让客户端阻塞，直到指定数量的从节点确认收到了复制流（不等于持久化、不等于执行完成）。
 
-### `min-replicas-to-write`
+局限：
 
-可以要求主节点在从节点数量不足或延迟过高时拒绝写入：
+- 只确认从节点收到了字节流，不保证从节点执行完。
+- 不等从节点 fsync 落盘，从节点宕机仍可能丢。
+- 超时返回的是已确认数量，可能是 0，业务要自己处理。
+- 在 Cluster 模式下只对当前 key 所在主节点的从节点生效。
+
+### min-replicas-to-write 配置
 
 ```conf
+# 主节点至少有 1 个从节点延迟不超过 10 秒时才接受写入
 min-replicas-to-write 1
 min-replicas-max-lag 10
 ```
 
-含义是：至少有 1 个从节点延迟不超过 10 秒，主节点才接受写入。它能减少孤主继续写入的风险，但仍不是严格强一致。
+工作机制：
 
-### 避免脑裂
+```text
+主节点每次处理写命令前检查：
+  当前 ACK 有效的从节点数量 >= min-replicas-to-write
+  且每个从节点的 lag <= min-replicas-max-lag
+  满足 -> 正常写入
+  不满足 -> 返回错误 NOREPLICAS
 
-脑裂是指网络分区后，旧 master 仍然对外提供写服务，同时另一个 slave 被提升为新 master，导致两边都接受写入。恢复后旧 master 会被新 master 覆盖，旧 master 上的数据可能丢失。
+效果：
+  脑裂时 M 与所有从节点失联
+  M 拒绝写入，避免脑裂期间产生新数据
+  网络恢复后 M 已无新增数据，被降级为从不会丢失
+```
 
-降低风险的手段：
+### Redis 版本演进的一致性增强
 
-- 合理配置 Sentinel quorum 和多数派；
-- 配置 `min-replicas-to-write`；
-- 客户端及时感知主节点切换；
-- 重要写入不要依赖 Redis 单独承诺强一致。
+| 版本 | 增强 |
+|------|------|
+| 2.8 | 引入 PSYNC 增量复制，减少全量复制导致的不一致窗口 |
+| 4.0 | psync2，故障切换后部分场景仍可增量 |
+| 5.0 | `replicaof` 取代 `slaveof`，复制日志更详细 |
+| 6.0 | `WAIT` 在 Cluster 模式下更准确 |
+| 7.0 | 多 Replica backlog，故障切换后从节点恢复更平滑 |
+
+### 一致性等级与适用场景
+
+| 一致性等级 | 实现方式 | 适用场景 |
+|------------|----------|----------|
+| 最终一致 | 默认异步复制 | 缓存、计数器、排行榜 |
+| 读己写 | 客户端写后短时间读主 / 会话粘性 | 用户资料更新 |
+| 单调读 | 同一用户固定读同一从节点 | 信息流 |
+| 强一致读 | 关键读走主节点 | 账户余额查询 |
+| 接近强一致 | `WAIT` + `min-replicas-to-write` | 限流、分布式锁（仍有窗口） |
+| 真正强一致 | 改用 etcd/ZooKeeper | 配置中心、选主 |
+
+## 代码示例
+
+### WAIT 实战
+
+```bash
+# 写入关键数据，等待 2 个从节点确认
+SET order:1001 paid
+WAIT 2 5000
+
+# 返回值 2 表示 2 个从节点确认
+# 返回值 0 表示超时无确认，业务要做补偿（重试或回滚）
+```
+
+### Java 客户端使用 WAIT
+
+```java
+// Jedis
+jedis.set("order:1001", "paid");
+Long confirmed = jedis.waitReplicates(2, 5000); // 等待 2 个副本，5 秒超时
+if (confirmed < 2) {
+    // 补偿：记录日志、走异步对账、或回滚
+    log.warn("WAIT confirmed={}, expected=2", confirmed);
+}
+
+// Lettuce
+RedisCommands<String, String> sync = connection.sync();
+sync.set("order:1001", "paid");
+Long confirmed = sync.dispatch(ConsoleCommands.createWait(2, 5000));
+```
+
+### 配置 min-replicas
+
+```conf
+# 主节点配置
+min-replicas-to-write 1
+min-replicas-max-lag 10
+
+# 配合哨兵
+sentinel monitor mymaster 192.168.1.10 6379 2
+sentinel down-after-milliseconds mymaster 5000
+sentinel failover-timeout mymaster 30000
+sentinel parallel-syncs mymaster 1
+```
+
+### 读写分离一致性策略
+
+```java
+public class ConsistentRedisClient {
+    private JedisPool masterPool;
+    private List<JedisPool> slavePools;
+
+    // 强一致读：直接读主
+    public String readStrong(String key) {
+        try (Jedis jedis = masterPool.getResource()) {
+            return jedis.get(key);
+        }
+    }
+
+    // 写后读：写入后 1 秒内读主
+    public String readAfterWrite(String key, long writeTimestamp) {
+        if (System.currentTimeMillis() - writeTimestamp < 1000) {
+            return readStrong(key);
+        }
+        return readFromSlave(key);
+    }
+
+    // 普通读：读从
+    public String readFromSlave(String key) {
+        // 轮询或随机选从节点
+        JedisPool pool = slavePools.get(ThreadLocalRandom.current().nextInt(slavePools.size()));
+        try (Jedis jedis = pool.getResource()) {
+            return jedis.get(key);
+        }
+    }
+}
+```
 
 ## 实战场景
 
-### 缓存场景
+| 场景 | 一致性策略 | 注意点 |
+|------|------------|--------|
+| 缓存 | 最终一致，读从写主 | 缓存击穿和雪崩要单独防护 |
+| 用户资料 | 写后短时间读主 | 设置 1-2 秒会话粘性窗口 |
+| 计数器 | 异步复制 + 定期对账 | 关键计数走 MySQL |
+| 分布式锁 | Redlock 或 etcd | 单 Redis 主从锁在切换时可能失效 |
+| 排行榜 | 最终一致 | 重建可从原始数据重算 |
+| 限流 | `WAIT` + `min-replicas-to-write` | 限流本身有容错，少量误差可接受 |
 
-缓存数据可以接受短暂不一致，一般使用最终一致即可。主从切换造成少量缓存丢失，通常可以从数据库重新加载。
+## 深挖追问
 
-### 分布式锁场景
+### 1. Redis 为什么不直接做同步复制？
 
-如果使用单 Redis 主从做锁，主节点刚加锁成功还没同步就宕机，从节点升主后可能允许另一个客户端再次加锁，导致锁失效。强一致锁应考虑 Redlock 的适用边界，或者使用 ZooKeeper、etcd 等 CP 系统。
+同步复制会显著增加写延迟：主节点要等所有从节点 ACK 才返回客户端，从节点慢或网络抖动直接拖垮主节点。而且同步复制降低可用性——任何一个从节点故障都会导致主节点拒绝写入。Redis 的定位是高性能缓存，选择了异步复制 + 最终一致。
 
-### 计数器/排行榜场景
+### 2. WAIT 能保证强一致吗？
 
-如果少量数据丢失不可接受，要考虑写 MySQL/日志作为权威数据源，Redis 只做加速层，或者通过异步补偿校准。
+不能。`WAIT` 只确认从节点收到了复制流（字节流），不保证从节点执行完，更不保证 fsync 落盘。从节点宕机仍可能丢。`WAIT` 是"降低风险"，不是"实现强一致"。如果业务真要强一致，应该用 CP 系统。
+
+### 3. min-replicas-to-write 能彻底解决脑裂吗？
+
+不能。它只是降低风险：脑裂时孤主拒绝写入，避免新增数据被覆盖。但脑裂期间旧主已经接收的写入仍可能丢失（在它降级为从时清空）。而且配置 `min-replicas-to-write 1` 意味着只要有一个从节点延迟正常就允许写，仍然有窗口。
+
+### 4. 主从切换后从节点会丢多少数据？
+
+取决于复制延迟和切换速度。最坏情况：主节点宕机前一刻刚写入但还没传播，从节点没收到，这部分丢失。哨兵 `down-after-milliseconds` 越小切换越快，但误判概率也越高。典型配置下丢失窗口在 1-30 秒。
+
+### 5. 如何监控主从一致性？
+
+```bash
+# 主节点
+redis-cli INFO replication | grep -E "master_repl_offset|connected_slaves|lag"
+
+# 从节点
+redis-cli INFO replication | grep -E "slave_repl_offset|master_link_status|master_last_io_seconds_ago"
+
+# 计算 lag = master_repl_offset - slave_repl_offset
+```
+
+监控 `master_repl_offset - slave_repl_offset` 的差值，超过阈值告警。Prometheus + redis_exporter 有现成指标。
 
 ## 易错点
 
-- Redis 主从不是强一致复制；
-- `WAIT` 能降低风险，但不能把 Redis 变成 CP 数据库；
-- 读从库可能读到旧值；
-- 哨兵只负责故障发现和自动切换，不保证零丢失；
-- 重要业务不要把 Redis 当唯一权威存储。
+- 把"主从同步"等同于"强一致"——异步复制必然有窗口。
+- `WAIT` 超时返回 0 时不处理——业务要做补偿。
+- `min-replicas-to-write` 在 Cluster 模式下按节点生效，不是按槽。
+- 读从节点拿到旧值就以为缓存坏了——可能是正常复制延迟。
+- 主从切换后立即大量写入新主，从节点还没同步完，容易加剧延迟。
 
 ## 总结
 
-Redis 主从集群默认只能保证最终一致，不能保证强一致。面试时要讲清楚异步复制、故障切换丢失窗口、读写分离旧读、`WAIT` 和 `min-replicas-to-write` 的作用与局限。最终方案要根据业务容忍度选择：缓存可最终一致，核心账务类数据应由 MySQL、etcd、ZooKeeper 等更强一致组件兜底。
+Redis 主从集群默认只能保证最终一致，不能保证强一致。原因有三：异步复制有延迟、故障切换丢数据、脑裂场景旧主写入被覆盖。`WAIT` 和 `min-replicas-to-write` 是降低风险的工具，不是实现强一致的手段。真正强一致的场景要选 etcd、ZooKeeper 等 CP 系统。工程实践：缓存类业务接受最终一致，关键数据走 MySQL + 异步对账，分布式锁等场景评估容忍度后选合适工具。
+
+## 参考资料
+
+- [Redis Replication 官方文档](https://redis.io/docs/management/replication/)
+- [Redis WAIT 命令](https://redis.io/commands/wait/)
+- [Redis Sentinel 高可用](https://redis.io/docs/management/sentinel/)

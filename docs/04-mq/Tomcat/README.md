@@ -1,30 +1,17 @@
 # Tomcat
 
-这一部分关注消息中间件、搜索/网关/应用服务器等常用基础设施。复习时要围绕可靠性、顺序性、幂等、性能瓶颈和故障恢复来组织答案。
+Tomcat 是 Apache 软件基金会的开源 Java Servlet 容器，实现了 Servlet、JSP、WebSocket 规范。通过分层容器模型（Server/Service/Connector/Engine/Host/Context/Wrapper）提供 Web 服务能力。Spring Boot 默认内嵌 Tomcat，是 Java Web 最常用的运行容器。
 
-## 面试复习重点
+## 目录
 
-- 核心概念是什么，解决了什么问题，和相邻知识点如何区分。
-- 面试官常从实现原理、适用场景、异常边界和性能影响继续追问。
-- 生产落地时要结合监控、日志、压测和故障预案验证方案。
+- [Tomcat 是什么](Tomcat是什么？.md) — 分层容器、Connector/Container、线程模型、调优
+- [Tomcat 的类加载机制是怎么样的](Tomcat的类加载机制是怎么样的？.md) — 多级 ClassLoader、应用隔离、热部署
 
-## 建议掌握程度
+## 核心要点
 
-- **能讲清概念**：先用自己的话解释定义、背景和解决的问题。
-- **能画出链路**：把核心流程、关键组件和状态变化串起来。
-- **能回答追问**：准备优缺点、适用场景、常见坑和替代方案。
-- **能落地排查**：结合日志、指标、工具和案例说明如何定位问题。
-
-## 文章导航
-
-- [Tomcat入门概要](/04-mq/Tomcat/Tomcat入门概要.md)
-- [Tomcat 的类加载机制是怎么样的？](/04-mq/Tomcat/Tomcat的类加载机制是怎么样的？.md)
-
-## 面试表达模板
-
-回答这类问题时，建议按下面顺序组织：
-
-1. 先给结论：一句话说明它是什么、解决什么问题。
-2. 再讲原理：说明核心组件、关键流程和数据结构。
-3. 补充场景：结合项目或线上问题说明什么时候用、怎么用。
-4. 说明边界：讲清楚缺点、风险、替代方案和排查手段。
+- **分层容器**：Server → Service → Connector + Engine → Host → Context → Wrapper。
+- **Connector**：网络通信层，支持 HTTP/1.1、HTTP/2、AJP 协议，NIO（默认）/NIO2/APR 模型。
+- **Container**：请求处理层，按 Engine → Host → Context → Wrapper 找到对应 Servlet。
+- **线程模型**：Master-Slave Reactor，Poller 线程轮询事件，Worker 线程池处理请求。
+- **类加载**：每个 Web 应用独立 WebappClassLoader，优先加载 WEB-INF/classes 和 WEB-INF/lib，打破双亲委派实现应用隔离。
+- **调优参数**：`maxThreads`、`acceptCount`、`maxConnections`、`connectionTimeout`、`minSpareThreads`。

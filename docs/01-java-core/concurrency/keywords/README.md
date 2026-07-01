@@ -1,35 +1,27 @@
 # 并发关键字
 
-这一部分重点理解线程协作、锁、内存可见性、AQS 与线程池治理。面试中通常会从 API 使用追问到底层状态流转、阻塞唤醒和生产事故排查。
+本目录覆盖 Java 并发的核心关键字与内存模型规则：synchronized、volatile、final 的底层原理，以及 JMM 的 Happens-Before 原则。这些是写出线程安全代码的理论基础。
 
-## 面试复习重点
+## 目录
 
-- 核心概念是什么，解决了什么问题，和相邻知识点如何区分。
-- 面试官常从实现原理、适用场景、异常边界和性能影响继续追问。
-- 生产落地时要结合监控、日志、压测和故障预案验证方案。
+- [synchronized 基本原理是什么？](synchronized基本原理是什么？.md) — Mark Word / Monitor / 锁升级（无锁→偏向→轻量级→重量级）
+- [volatile 基本原理是什么？](volatile基本原理是什么？.md) — 内存屏障（LoadLoad/StoreStore/LoadStore/StoreLoad）/ 可见性 / 禁止重排序 / DCL 单例
+- [Happens-Before 原则是什么？](Happens-Before原则是什么？.md) — JMM 8 大规则与传递性
+- [final 重排序规则是什么？](final重排序规则是什么？.md) — 写 final 域 / 读 final 域 / 引用类型 final 域的内存屏障约束
+- [synchronized 与 ReentrantLock 区别是什么？](synchronized与ReentrantLock区别是什么？.md) — 实现层级、可中断、超时、公平、多 Condition 全维度对比
+- [synchronized 与 volatile 有什么区别？](synchronized与volatile有什么区别？.md) — 互斥性、原子性、可见性、性能开销对比
 
-## 建议掌握程度
+## 关联阅读
 
-- **能讲清概念**：先用自己的话解释定义、背景和解决的问题。
-- **能画出链路**：把核心流程、关键组件和状态变化串起来。
-- **能回答追问**：准备优缺点、适用场景、常见坑和替代方案。
-- **能落地排查**：结合日志、指标、工具和案例说明如何定位问题。
+- [公平锁与非公平锁实现原理与区别是什么？](../JUC/公平锁与非公平锁实现原理与区别是什么？.md) — 公平锁与非公平锁的 AQS 实现
+- [悲观锁和乐观锁的区别是什么？](../JUC/悲观锁和乐观锁的区别是什么？.md) — 悲观锁与乐观锁对比
+- [Java 有哪些锁？](../basics/Java有哪些锁？.md) — 锁分类总览
 
-## 文章导航
+## 学习建议
 
-- [final重排序规则详解](/01-java-core/concurrency/keywords/final重排序规则详解.md)
-- [Happens-Before原则是什么？](/01-java-core/concurrency/keywords/Happens-Before原则是什么？.md)
-- [synchronized基本原理详解](/01-java-core/concurrency/keywords/synchronized基本原理详解.md)
-- [synchronized与ReentrantLock场景分析](/01-java-core/concurrency/keywords/synchronized与ReentrantLock场景分析.md)
-- [synchronized与ReentrantLock区别是什么？](/01-java-core/concurrency/keywords/synchronized与ReentrantLock区别是什么？.md)
-- [synchronized与volatile比较](/01-java-core/concurrency/keywords/synchronized与volatile比较.md)
-- [volatile基本原理详解](/01-java-core/concurrency/keywords/volatile基本原理详解.md)
+1. 先看 **synchronized 基本原理** 和 **volatile 基本原理**，理解两大关键字的底层机制。
+2. 再看 **Happens-Before 原则**，把零散的可见性规则串成体系。
+3. 接着看 **final 重排序规则**，理解不可变对象的初始化安全。
+4. 最后看两篇对比文章，建立 synchronized / ReentrantLock / volatile 的选型判断。
 
-## 面试表达模板
-
-回答这类问题时，建议按下面顺序组织：
-
-1. 先给结论：一句话说明它是什么、解决什么问题。
-2. 再讲原理：说明核心组件、关键流程和数据结构。
-3. 补充场景：结合项目或线上问题说明什么时候用、怎么用。
-4. 说明边界：讲清楚缺点、风险、替代方案和排查手段。
+学完本目录后，可继续看 [JUC](../JUC/) 中 AQS、ReentrantLock、并发集合的实现细节。

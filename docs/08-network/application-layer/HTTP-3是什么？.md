@@ -1,72 +1,270 @@
-# HTTP/3是什么？
+# HTTP/3 是什么
 
-HTTP/3是什么？
-一、HTTP/2局限性
-HTTP/2 虽然具有多个流并发传输的能力，但是传输层是 TCP 协议，于是存在以下缺陷：
-TCP队头阻塞：HTTP/2 多个请求跑在一个TCP连接中，如果序列号较低的TCP段在网络传输中丢失了，即使序列号较高的TCP段已经被接收了，应用层也无法从内核中读取到这部分数据，从HTTP视角看就是多个请求被阻塞了；
-TCP和TLS握手时延：对于HTTP/1和HTTP/2协议，TCP和TLS是分层的，分别属于内核实现的传输层、OpenssL 库实现的表示层，因此它们难以合并在一起，需要先TCP握手，再TLS握手，存在3-RTT的时延。此外TCP具有拥塞控制的特性，刚建立的连接会有个「慢启动」的过程，也存在一定的时延；
-连接迁移需要重新连接：移动设备从4G网络环境切换到Wifi时，由于TCP是基于四元组来确认一条TCP连接的，那么网络环境变化后，就会导致IP地址或端口变化，于是TCP只能断开连接，然后再重新建立连接，切换网络环境的成本高；
-
-二、HTTP/3如何解决
-UDP是一个简单的不可靠传输协议，没有依赖关系，不需要建立连接，因此天然比TCP快。HTTP/3将传输层从TCP替换成了UDP，并基于UDP协议在「应用层」上实现了QUIC协议，具有TCP类似的连接管理、拥塞窗口、流量控制的网络特性，来保证数据的可靠传输。QUIC协议具有很多特点，如：
-无队头阻塞：QUIC连接上的多个Stream之间并没有依赖，都是独立的，也不会有底层协议限制，某个流发生丢包了，只会影响该流，其他流不受影响；
-建立连接速度快：HTTP/3的QUIC协议并不是与TLS分层，而是QUIC内部包含了TLS，它在自己的帧会携带TLS里的「记录」，再加上QUIC使用的是TLS 1.3，因此仅需1-RTT就可以「同时」完成建立连接与密钥协商，甚至在第二次连接的时候，应用数据包可以和QUIC握手信息(连接信息+TLS信息)一起发送，达到0-RTT的效果；
-连接迁移：QUIC协议没有用四元组的方式来绑定连接，而是通过「连接ID」来标记通信的两个端点，客户端和服务器可以各自选择一组ID来标记自己，因此即使移动设备的网络变化后，导致IP地址变化了，只要仍保有上下文信息（比如连接ID、TLS密钥等），就可以无缝地复用原连接，消除重连的成本；
-动态表同步：HTTP/3升级使用QPACK头部压缩算法，通过两个特殊的单向流来同步双方的动态表，解决了HTTP/2中的HPACK队头阻塞问题（动态表具有时序性的，如果首个请求包丢失，将会导致后续的请求包无法正确解码，因为对方的动态表尚未正确建立，因此后续的请求解码需要阻塞直到丢失的数据包重传过来）。
-
-三、QUIC握手过程
-客户端发送Client Hello（Initial Packet）：
-CRYPTO帧：TLS1.3的Client Hello消息，协商加密套件和对称密钥参数；
-传输层参数：如初始化流量控制窗口、最大UDP数据包大小；
-连接ID（CID）：唯一标识连接（解决NAT设备IP变化导致重连问题）；
-服务端响应Server Hello（Handshare Packet）：
-CRYPTO帧：TLS1.3的Server Hello+证书+finished；
-传输层确认：协商最终的参数（如支持最大的Stream数量）；
-生成会话票证：用于后续0-RTT恢复（类似TLS的Session Ticket）；
-客户端确认Client Finalize（Handshare Packet）：
-CRYPTO帧：TLS1.3的Finished消息；
-开始发送应用数据：此时连接已经加密，可传输HTTP/3请求。
-关键点：
-QUIC将TLS1.3握手嵌入到QUIC协议中，省去了TCP握手的1-RTT；
-首次连接总延迟：1-RTT（TLS1.3本身需要1-RTT，QUIC无额外开销）
-客户端和服务器各自维护一组连接ID（CID），用于标识同一个连接；而Ticket票据则用于避免重新握手协商对称密钥。
-
-## 面试总结
-### 核心概念
-
-HTTP/3 基于 QUIC，运行在 UDP 之上，把传输层可靠性、拥塞控制、TLS 1.3 握手和多路复用放到用户态实现。
-
-### 面试官想考什么
-
-面试官常考 HTTP/3 为什么用 UDP、如何解决 TCP 队头阻塞、0-RTT/连接迁移的意义。
-
-### 标准回答
-
-HTTP/2 虽然支持多路复用，但底层 TCP 丢包会阻塞同一连接上的所有流。QUIC 在 UDP 上实现独立流，多路复用时一个流丢包不阻塞其他流；同时内置 TLS 1.3，可减少握手耗时，并支持连接 ID 迁移。
-
-### 深挖追问
-
-- 这个行为发生在浏览器、客户端库、代理网关还是后端服务？
-- 如果接口偶发超时/失败，如何用 curl、DevTools、网关日志和 tcpdump 分层验证？
-- 连接池、缓存、CDN、TLS 或反向代理配置会怎样改变现象？
-
-### 实战场景/示例
-
-移动端网络从 Wi-Fi 切到 4G 时，QUIC 可通过连接 ID 保持连接语义，降低重连成本。
-
-### 易错点/总结
-
-QUIC 不是不可靠传输，它是在 UDP 上重新实现可靠传输和拥塞控制。
 ## 核心概念
-HTTP/3是什么？ 可以放在“网络协议能力”这条主线里理解。复习时不要只背结论，要先说明它解决的核心问题，再解释关键机制、适用边界和代价。围绕这个知识点，重点关注：连接建立、报文结构、状态码、长连接、拥塞控制、TLS、代理和超时重试。如果面试官继续追问，通常会从“为什么这样设计、在什么场景会失效、线上如何排查”三个方向展开。
 
-## 面试回答与追问
-- **标准回答**：先给出 HTTP/3是什么？ 的定位，再说明它依赖的核心原理，最后结合业务场景说明如何使用。回答时要把“能解决什么问题”和“会带来什么成本”一起讲清楚。
-- **常见追问**：如果数据量、并发量或调用链路继续放大，HTTP/3是什么？ 的瓶颈会出现在哪里？如何观测、如何优化、如何回滚？
-- **易错点**：不要把概念和具体实现混在一起，也不要只说 API 名称。面试中更重要的是说清楚边界条件、失败场景和取舍依据。
+HTTP/3 是 HTTP 协议的第三个主要版本，2022 年发布（RFC 9114）。与 HTTP/1.x 和 HTTP/2 基于 TCP 不同，HTTP/3 基于 QUIC 协议（RFC 9000），QUIC 跑在 UDP 之上。HTTP/3 解决了 HTTP/2 的两个核心痛点：TCP 层队头阻塞和握手慢（TCP+TLS 双重握手），并支持连接迁移，更适合移动网络。
 
-## 实战场景与排查
-典型落地场景包括：接口超时、连接耗尽、网关转发、上传下载、移动端弱网和跨域访问。实际处理线上问题时，可以按“现象确认 → 指标采集 → 假设验证 → 小步修复 → 复盘沉淀”的路径推进。先看日志、监控、链路追踪和核心指标，再判断是容量问题、配置问题、代码路径问题，还是外部依赖抖动。
+## 标准回答
+
+HTTP/3 的核心特性：
+
+1. **基于 QUIC over UDP**：避开 TCP 内核僵化，应用层重新实现可靠传输
+2. **无 TCP 队头阻塞**：QUIC 各 Stream 独立，一个流丢包不阻塞其他流
+3. **合并握手**：传输层握手和 TLS 1.3 握手合并，1-RTT 首次连接，0-RTT 会话恢复
+4. **连接迁移**：用 Connection ID 标识连接，IP 变化不断连
+5. **QPACK 头部压缩**：HTTP/3 版本的 HPACK，解决动态表的队头阻塞
+
+## 详细机制
+
+### 1. HTTP/2 的痛点
+
+**TCP 层队头阻塞**：
+
+```
+HTTP/2 多 Stream 跑在一个 TCP 连接上：
+Stream1 数据1 ──> Stream2 数据1 ──> Stream1 数据2
+Stream1 数据1 在网络中丢失
+TCP 必须重传 Stream1 数据1 才能交付 Stream2 数据1 给应用层
+→ 所有 Stream 都被阻塞
+```
+
+TCP 保证字节流有序，HTTP/2 多 Stream 无法绕开。
+
+**握手慢**：
+
+HTTP/2 over TLS：TCP 握手 1 RTT + TLS 握手 1-2 RTT = 2-3 RTT 才能发数据。
+
+**连接迁移困难**：
+
+TCP 用四元组标识连接，移动设备网络切换（4G → Wi-Fi）IP 变化，连接断开。
+
+### 2. HTTP/3 的协议栈
+
+```
+HTTP/3:
++-------------------+
+| HTTP/3 (语义)     |  应用层
++-------------------+
+| QUIC              |  传输层（用户态）
++-------------------+
+| UDP               |  传输层（内核）
++-------------------+
+| IP                |
++-------------------+
+```
+
+QUIC 在 UDP 之上重新实现可靠传输、拥塞控制、流量控制，避开 TCP 内核僵化，让协议可以快速演进。
+
+### 3. QUIC 的核心特性
+
+#### 无队头阻塞
+
+QUIC 各 Stream 独立：
+
+```
+Stream1 数据1 丢失
+Stream2 数据1 已到达 → 直接交付给应用层
+只有 Stream1 等待重传
+```
+
+每个 Stream 有自己的序号空间，丢一个 Stream 的包不影响其他 Stream。
+
+#### 合并握手
+
+QUIC 把传输层握手和 TLS 1.3 握手合并：
+
+```
+首次连接（1-RTT）:
+Client → Server: QUIC Initial + TLS ClientHello + KeyShare
+Client ← Server: QUIC Initial + TLS ServerHello + Cert + Finished
+Client → Server: TLS Finished + HTTP 请求（已加密）
+
+会话恢复（0-RTT）:
+Client → Server: QUIC + TLS ClientHello + 早期数据（HTTP 请求）
+Client ← Server: TLS ServerHello + HTTP 响应
+```
+
+vs HTTP/2：
+
+```
+HTTP/2 首次：TCP 1 RTT + TLS 1-2 RTT = 2-3 RTT
+HTTP/3 首次：1 RTT
+HTTP/3 恢复：0 RTT
+```
+
+#### 连接迁移
+
+QUIC 用 Connection ID（CID）标识连接，与 IP 解耦：
+
+```
+Wi-Fi: Client(192.168.1.5:12345) → Server(1.2.3.4:443), CID=abc
+切换到 4G: Client(10.0.0.5:54321) → Server(1.2.3.4:443), CID=abc
+Server 看到 CID=abc，识别为同一连接，继续传输
+```
+
+TCP 用四元组标识，IP 变了连接就断。QUIC 用 CID，IP 变了连接保持。
+
+#### 可靠传输
+
+QUIC 自己实现 ACK、重传、拥塞控制：
+
+- **Packet Number 单调递增**：新包和重传包 PN 不同，避免 TCP 重传二义性
+- **ACK Delay**：接收方在 ACK 中带上自己延迟的时间，发送方精确估算 RTT
+- **SACK**：原生支持选择确认
+- **拥塞控制可插拔**：默认 CUBIC，可换 BBR 等，不需升级内核
+
+#### 加密更多握手
+
+QUIC 把大部分握手消息都加密，连包头部都加密，提升隐私：
+
+- TCP 头部明文，QUIC 大部分头部加密
+- 中间设备无法看到 QUIC 包内部细节，无法做基于 TCP 字段的 QoS
+
+### 4. QPACK 头部压缩
+
+HTTP/3 用 QPACK 替代 HPACK，解决动态表的队头阻塞：
+
+**HPACK 的问题**：
+
+```
+HTTP/2 多 Stream 共享一个动态表
+Stream1 的头部加入动态表，但 Stream1 包丢失
+后续 Stream 用动态表索引时无法解码（依赖 Stream1 的头部先建表）
+→ 阻塞
+```
+
+**QPACK 的解决**：
+
+- 用两个特殊单向 Stream 同步动态表
+- 即使原 Stream 丢包，动态表同步 Stream 可独立补齐
+- 大部分情况下静态表足够，动态表更新异步进行
+
+### 5. QUIC 握手流程
+
+```
+Client                                          Server
+  | --- Initial Packet ---------------->          |
+  |     - Connection ID (CID)                    |
+  |     - TLS 1.3 ClientHello                    |
+  |     - 加密套件、KeyShare                       |
+  |                                              |
+  | <== Initial + Handshake Packet ===========   |
+  |     - TLS ServerHello                        |
+  |     - 证书                                    |
+  |     - TLS Finished                           |
+  |     - 传输参数（流控窗口等）                    |
+  |                                              |
+  | --- Handshake Packet (Finished) --------->   |
+  | --- 0-RTT / 1-RTT 应用数据 -------------->   |
+  | <== 应用数据（HTTP 响应）=================   |
+```
+
+首次连接 1-RTT，会话恢复 0-RTT。
+
+### 抓包与测试
+
+```bash
+# 用 curl --http3 测试
+$ curl --http3 -I https://www.cloudflare.com
+HTTP/3 200
+date: ...
+content-type: text/html
+
+# 浏览器 DevTools 看协议
+# Network → Protocol 列：h3 = HTTP/3
+
+# 抓包
+$ tcpdump -i any -n 'udp port 443'
+10:00:00 IP C.5000 > S.443: UDP, length 1200
+# QUIC 包封装在 UDP 中
+
+# 用 quiche 或 nghttp3 测试
+$ quiche-client https://example.com/
+```
+
+## 代码示例
+
+Java 客户端用 HTTP/3（Jetty 12+）：
+
+```java
+import org.eclipse.jetty.client.*;
+import org.eclipse.jetty.http3.client.HTTP3Client;
+
+HTTP3Client http3Client = new HTTP3Client();
+HttpClient client = new HttpClient(http3Client);
+client.start();
+
+// 发起 HTTP/3 请求
+ContentResponse response = client.GET("https://www.cloudflare.com");
+System.out.println("Status: " + response.getStatus());
+```
+
+服务端启用 HTTP/3（Caddy）：
+
+```caddyfile
+example.com {
+    bind 0.0.0.0 {
+        protocols h1 h2 h3
+    }
+    reverse_proxy backend:8080
+}
+```
+
+Nginx 1.25+ 支持 HTTP/3：
+
+```nginx
+server {
+    listen 443 quic reuseport;       # HTTP/3 over QUIC
+    listen 443 ssl http2;            # 同时支持 HTTP/2
+    server_name example.com;
+    ssl_certificate /etc/nginx/ssl/example.com.crt;
+    ssl_certificate_key /etc/nginx/ssl/example.com.key;
+
+    add_header Alt-Svc 'h3=":443"; ma=86400';   # 告知客户端支持 HTTP/3
+}
+```
+
+## 实战场景
+
+| 场景 | 优势 | 注意点 |
+|------|------|--------|
+| 移动端 App | 连接迁移、0-RTT | 客户端 SDK 需支持 QUIC |
+| 弱网用户 | 无 TCP 队头阻塞 | UDP 可能被防火墙丢 |
+| CDN | 多路复用提升吞吐 | 部分 ISP 不放行 UDP 443 |
+| 实时音视频 | 低延迟 | 需应用层 FEC 或重传策略 |
+| 微服务 | 1-RTT 建连 | gRPC over HTTP/3 仍在演进 |
+
+## 深挖追问
+
+**Q1：HTTP/3 基于 UDP 会不会被防火墙挡？**
+会。部分企业网络和防火墙不放行 UDP 443。HTTP/3 实现有回退机制：连接失败时回退到 HTTP/2 over TCP。
+
+**Q2：0-RTT 有什么风险？**
+重放攻击。攻击者可截获 0-RTT 早期数据重发，服务端会重复处理。仅用于幂等请求（GET）。
+
+**Q3：HTTP/3 比 HTTP/2 快多少？**
+首包延迟减少 1 RTT，弱网下显著。稳态吞吐差异不大（都受拥塞控制限制）。HTTP/3 CPU 开销略高（用户态协议栈）。
+
+**Q4：QUIC 怎么处理 NAT？**
+用 Connection ID 标识连接，NAT 重新绑定端口不影响。但 NAT 设备对 UDP 的处理可能不如 TCP 成熟，UDP 连接表项可能更短。
+
+**Q5：HTTP/3 替代 HTTP/2 吗？**
+不完全是。两者会长期共存，浏览器先用 HTTP/2，服务端通过 Alt-Svc 头告知支持 HTTP/3，下次连接浏览器尝试 HTTP/3，失败回退 HTTP/2。
+
+## 易错点
+
+- **"HTTP/3 基于 TCP"** — 错，基于 QUIC over UDP。
+- **"QUIC 不可靠"** — 错，QUIC 在 UDP 之上自己实现可靠性。
+- **"HTTP/3 完全消除队头阻塞"** — 跨 Stream 消除，单 Stream 内仍有序。
+- **"0-RTT 总是好的"** — 有重放风险，仅用于幂等请求。
+- **"HTTP/3 一定比 HTTP/2 快"** — 首包延迟有优势，稳态差异不大，CPU 开销更高。
 
 ## 总结
-复习 HTTP/3是什么？ 时，建议把它和相邻知识点放在一起比较：相同点是什么、区别在哪里、为什么当前场景选择它而不是替代方案。能讲清楚这些内容，才算真正掌握。
+
+HTTP/3 基于 QUIC over UDP，解决了 HTTP/2 的 TCP 层队头阻塞和握手慢问题，支持连接迁移适合移动网络。QUIC 把传输层握手和 TLS 1.3 握手合并，1-RTT 首次连接，0-RTT 会话恢复。QPACK 替代 HPACK 解决动态表队头阻塞。代价是 CPU 开销、UDP 网络兼容性、负载均衡支持复杂度。生产中浏览器和 CDN 已广泛支持，企业网络常需回退到 HTTP/2。
+
+## 参考资料
+
+- [RFC 9114 — HTTP/3](https://datatracker.ietf.org/doc/html/rfc9114)
+- [RFC 9000 — QUIC](https://datatracker.ietf.org/doc/html/rfc9000)
+- [HTTP/3 介绍](https://blog.cloudflare.com/http-3-from-root-to-tip/)

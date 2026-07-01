@@ -1,62 +1,349 @@
-# JWT令牌是什么？
+# JWT 令牌是什么
 
-JWT令牌是什么？
-JWT（JSON Web Token）是一种开放标准（RFC 7519），它定义了一种紧凑和独立的方式，用于在各方之间以JSON对象安全地传递信息。JWT的信息可以被验证和信任，因为它是数字签名的。
-
-JWT结构
-JWT 由三部分组成，它们以 . 分隔，依次为：头部（Header）、载荷（Payload）、签名（Signature）。
-头部（Header）：通常包含两部分信息，分别是签名的算法（如HS256、RS256、ES256等）和令牌的类型（一般为JWT，表示该令牌是一个JWT令牌）；
-载荷（Payload）：包含各种声明，分为标准声明和自定义声明，常用自定义声明来承载想要包含的数据信息；
-签名（Signature）：使用头部中指定的签名算法，对Base64编码后的头部和载荷以及一个密钥进行签名操作。通过签名确保临牌的完整性，防止令牌中途被篡改。
-
-JWT令牌和传统方式有什么区别：
-无状态性：JWT是无状态的令牌，不需要在服务器端存储会话信息，且令牌中包含了所有必要的信息，如用户身份、权限等。这使得JWT在分布式系统中更加适用，可以方便地进行扩展和跨域访问
-安全性：JWT使用密钥对令牌进行签名，确保令牌的完整性和真实性。只有持有正确密钥的服务器才能对令牌进行验证和解析。这种方式比传统的基于会话和Cookie的验证更加安全，有效防止了CSRF（跨站请求伪造）等攻击；
-跨域支持：JWT令牌可以在不同域之间传递，适用于跨域访问的场景。通过在请求的头部或参数中携带JWT令牌可以实现无需Cookie的跨域身份验证。
-
-JWT令牌为什么能解决集群部署，什么是集群部署：
-在传统的基于会话Session和Cookie的身份验证方式中，会话信息通常存储在服务器的内存或数据库中。但在集群部署中，不同服务器之间没有共字的会话信息，这会导致用户在不同服务器之间切换时需要重新登录，或者需要引入额外的共享机制(如Redis)，增加了复杂性和性能开销。而JWT令牌通过在令牌中包含所有必要的身份验证和会话信息，使得服务器无需存储会话信息，从而解决了集群部署中的身份验证和会话管理问题。当用户进行登录认证后，服务器将生成一个JWT令牌并返回给客户端。客户端在后续的请求中携带该令牌，服务器可以通过对令牌进行验证和解析来获取用户身份和权限信息，而无需访问共享的会话存储。由于JWT令牌是自包含的，服务器可以独立地对令牌进行验证，而不需要依赖其他服务器或共享存储。这使得集群中的每个服务器都可以独立处理请求，提高了系统的可伸缩性和容错性。
-
-JWT的缺点：
-JWT 一旦派发出去，在失效之前都是有效的，没办法即时撤销JWT。
-要解决这个问题的话，得在业务层增加判断逻辑，比如增加黑名单机制。使用内存数据库比如 Redis 维护一个黑名单，如果想让某个 JWT失效的话就直接将这个T 加入到 黑名单 即可。然后，每次使用 JWT 进行请求的话都会先判断这个 JWT 是否存在于黑名单中。
-
-## 面试总结
-### 核心概念
-
-Cookie、Session、Token、JWT 都用于解决 HTTP 无状态下的身份和会话问题。Cookie 是客户端存储和自动携带机制，Session 是服务端会话，Token/JWT 通常由客户端携带并由服务端校验。
-
-### 面试官想考什么
-
-面试官想考登录态存储位置、安全风险、分布式 Session、JWT 优缺点以及 Cookie 被禁用时的替代方案。
-
-### 标准回答
-
-Session 数据在服务端，客户端只保存 SessionId；Token/JWT 可减少服务端会话存储压力，但撤销、过期和泄露处理要设计好。Cookie 会自动随域名请求携带，localStorage 不会自动携带但容易被 XSS 读取。敏感令牌要配合 HTTPS、HttpOnly、SameSite、短有效期和刷新机制。
-
-### 深挖追问
-
-- 这个行为发生在浏览器、客户端库、代理网关还是后端服务？
-- 如果接口偶发超时/失败，如何用 curl、DevTools、网关日志和 tcpdump 分层验证？
-- 连接池、缓存、CDN、TLS 或反向代理配置会怎样改变现象？
-
-### 实战场景/示例
-
-前后端分离系统可用 Authorization Bearer Token；传统 Web 可用 Session + Cookie。分布式部署时 Session 通常外置到 Redis。
-
-### 易错点/总结
-
-JWT 不是加密本身，默认只是签名防篡改，载荷不要放敏感明文。
 ## 核心概念
-JWT令牌是什么？ 可以放在“网络协议能力”这条主线里理解。复习时不要只背结论，要先说明它解决的核心问题，再解释关键机制、适用边界和代价。围绕这个知识点，重点关注：连接建立、报文结构、状态码、长连接、拥塞控制、TLS、代理和超时重试。如果面试官继续追问，通常会从“为什么这样设计、在什么场景会失效、线上如何排查”三个方向展开。
 
-## 面试回答与追问
-- **标准回答**：先给出 JWT令牌是什么？ 的定位，再说明它依赖的核心原理，最后结合业务场景说明如何使用。回答时要把“能解决什么问题”和“会带来什么成本”一起讲清楚。
-- **常见追问**：如果数据量、并发量或调用链路继续放大，JWT令牌是什么？ 的瓶颈会出现在哪里？如何观测、如何优化、如何回滚？
-- **易错点**：不要把概念和具体实现混在一起，也不要只说 API 名称。面试中更重要的是说清楚边界条件、失败场景和取舍依据。
+JWT（JSON Web Token，RFC 7519）是一种紧凑的、自包含的令牌格式，用于在双方之间安全传递信息。JWT 由 Header、Payload、Signature 三部分组成，用 `.` 分隔，整体 Base64URL 编码。JWT 的核心特性是"自包含"——载荷中携带用户身份等信息，服务端用签名验证完整性，无需查 Session 存储。这让 JWT 适合分布式、无状态的现代应用，但带来撤销难、载荷暴露等新问题。
 
-## 实战场景与排查
-典型落地场景包括：接口超时、连接耗尽、网关转发、上传下载、移动端弱网和跨域访问。实际处理线上问题时，可以按“现象确认 → 指标采集 → 假设验证 → 小步修复 → 复盘沉淀”的路径推进。先看日志、监控、链路追踪和核心指标，再判断是容量问题、配置问题、代码路径问题，还是外部依赖抖动。
+## 标准回答
+
+JWT 的核心要点：
+
+1. **结构**：Header.Payload.Signature，Base64URL 编码
+2. **签名**：用密钥对 Header+Payload 签名，防篡改
+3. **自包含**：载荷中携带用户身份，服务端无需查 Session
+4. **无状态**：服务端不存会话，水平扩展友好
+5. **不可撤销**：一旦签发，到期前无法主动失效（除非黑名单）
+
+## 详细机制
+
+### JWT 结构
+
+```
+xxxxx.yyyyy.zzzzz
+```
+
+**Header**（头部）：
+
+```json
+{
+  "alg": "HS256",
+  "typ": "JWT"
+}
+```
+
+Base64URL 编码后是第一部分 `xxxxx`。
+
+**Payload**（载荷）：
+
+```json
+{
+  "sub": "1234567890",
+  "name": "John Doe",
+  "iat": 1516239022,
+  "exp": 1516242622
+}
+```
+
+包含声明（Claims），分三类：
+
+- **标准声明**（RFC 7519）：iss（签发者）、sub（主题）、aud（受众）、exp（过期）、nbf（生效时间）、iat（签发时间）、jti（唯一 ID）
+- **私有声明**：业务自定义字段（userId、role 等）
+- **公共声明**：IANA 注册的声明（email、name 等）
+
+Base64URL 编码后是第二部分 `yyyyy`。
+
+**Signature**（签名）：
+
+```
+HMACSHA256(
+  base64UrlEncode(header) + "." + base64UrlEncode(payload),
+  secret
+)
+```
+
+用 Header 中指定的算法（HS256、RS256、ES256 等）对 Header+Payload 签名。第三部分 `zzzzz`。
+
+### 完整 JWT 示例
+
+```
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+```
+
+解码后：
+
+```
+Header: {"alg":"HS256","typ":"JWT"}
+Payload: {"sub":"1234567890","name":"John Doe","iat":1516239022}
+Signature: SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+```
+
+### 工作流程
+
+```
+1. 客户端登录
+   POST /api/login { username, password }
+
+2. 服务端验证后签发 JWT
+   JWT = Header.Payload.Signature
+   响应: { token: "eyJhbGc..." }
+
+3. 客户端存储 JWT（localStorage 或 Cookie）
+
+4. 后续请求带 JWT
+   GET /api/orders
+   Authorization: Bearer eyJhbGc...
+
+5. 服务端验证
+   - 用密钥重新计算签名，与 JWT 中签名对比
+   - 检查 exp 是否过期
+   - 检查 iss/aud 等声明
+   验证通过 → 从 Payload 取 userId，处理请求
+```
+
+### 签名算法
+
+| 算法 | 类型 | 用法 |
+|------|------|------|
+| HS256 | 对称（HMAC + SHA-256） | 签发和验证用同一密钥 |
+| RS256 | 非对称（RSA + SHA-256） | 私钥签发，公钥验证 |
+| ES256 | 非对称（ECDSA + SHA-256） | 私钥签发，公钥验证 |
+
+- **HS256**：简单，但密钥泄露风险高（任何持有密钥的人都能签发）
+- **RS256/ES256**：公私钥分离，公钥可公开，私钥只在签发方。微服务场景常用（验证方只需公钥）
+
+### JWT vs Session
+
+| 维度 | Session | JWT |
+|------|---------|-----|
+| 状态存储 | 服务端（内存/Redis） | 客户端（载荷中） |
+| 服务端查 Session | 是 | 否 |
+| 撤销 | 简单（删 Session 即可） | 难（需黑名单） |
+| 分布式扩展 | 需共享 Session 存储 | 天然支持 |
+| 载荷大小 | SessionId 几十字节 | JWT 数百字节到几 KB |
+| 安全性 | SessionId 不可读 | 载荷可读（仅签名防篡改） |
+| 跨域 | 受 Cookie 同源限制 | Authorization 头跨域友好 |
+
+### JWT 的优势
+
+1. **无状态**：服务端不存会话，水平扩展无需共享存储
+2. **跨域友好**：通过 Authorization 头传递，不受 Cookie 同源策略限制
+3. **自包含**：载荷中携带用户信息，减少数据库查询
+4. **标准化**：RFC 7519，跨语言支持
+5. **防篡改**：签名保证完整性
+
+### JWT 的劣势
+
+1. **不可撤销**：签发后到期前一直有效。要主动撤销需黑名单（变回有状态）
+2. **载荷暴露**：Base64URL 编码不是加密，任何人可读。**不要放敏感信息**
+3. **载荷大**：每次请求带完整 JWT，比 SessionId 大
+4. **续期复杂**：要发新 JWT，旧 JWT 仍有效
+5. **密钥管理**：HS256 密钥泄露全完；RS256 私钥要安全保管
+
+### 撤销 JWT 的方案
+
+**方案 1：黑名单**
+
+```java
+// Redis 维护黑名单
+redis.set("jwt:blacklist:" + jti, "1", expirationInSec);
+
+// 验证时检查黑名单
+if (redis.exists("jwt:blacklist:" + jti)) {
+    throw new InvalidTokenException("Token revoked");
+}
+```
+
+**方案 2：短有效期 + Refresh Token**
+
+```
+Access Token: 短（15 分钟）
+Refresh Token: 长（7 天），存服务端可撤销
+
+客户端用 Access Token 调接口
+过期后用 Refresh Token 换新 Access Token
+登出时删 Refresh Token
+```
+
+**方案 3：版本号**
+
+```
+JWT 载荷: { userId:42, tokenVersion:1 }
+用户表: { id:42, tokenVersion:1 }
+
+验证时检查 JWT 中 tokenVersion 与数据库是否一致
+改密码时 tokenVersion+1，所有旧 JWT 失效
+```
+
+### 安全注意事项
+
+1. **不要在载荷放敏感信息**：Base64URL 可解码，密码、身份证号等不能放
+2. **HTTPS 传输**：JWT 在 Authorization 头，HTTP 明文可被截获
+3. **短有效期**：Access Token 建议 15-30 分钟
+4. **强密钥**：HS256 密钥至少 256 位随机数
+5. **验证所有声明**：exp、iss、aud 等都要校验，不要只验签名
+6. **算法白名单**：防止 alg=none 攻击（攻击者把 alg 改成 none 绕过签名）
+
+### 抓包与调试
+
+```bash
+# 解码 JWT（不验签）
+$ echo "eyJhbGc..." | cut -d. -f2 | base64 -d 2>/dev/null
+{"sub":"1234567890","name":"John Doe","iat":1516239022}
+
+# 用 jwt.io 在线调试
+# https://jwt.io/
+
+# curl 测试
+$ curl -H "Authorization: Bearer eyJhbGc..." https://api.example.com/orders
+```
+
+## 代码示例
+
+Java 生成和验证 JWT（jjwt 库）：
+
+```java
+import io.jsonwebtoken.*;
+import java.util.*;
+
+public class JwtUtil {
+    private static final String SECRET = "my-very-secure-secret-key-at-least-256-bits";
+    private static final long EXPIRATION = 900_000L;   // 15 分钟
+
+    // 生成 JWT
+    public static String generate(Long userId, String username) {
+        return Jwts.builder()
+            .setSubject(userId.toString())
+            .claim("username", username)        // 自定义声明
+            .setIssuedAt(new Date())
+            .setExpiration(new Date(System.currentTimeMillis() + EXPIRATION))
+            .signWith(SignatureAlgorithm.HS256, SECRET)
+            .compact();
+    }
+
+    // 验证 JWT
+    public static Claims verify(String token) {
+        try {
+            return Jwts.parser()
+                .setSigningKey(SECRET)
+                .parseClaimsJws(token)     // 验证签名和过期
+                .getBody();
+        } catch (ExpiredJwtException e) {
+            throw new RuntimeException("Token expired");
+        } catch (JwtException e) {
+            throw new RuntimeException("Invalid token");
+        }
+    }
+}
+```
+
+Spring Boot JWT 拦截器：
+
+```java
+import org.springframework.web.servlet.HandlerInterceptor;
+import javax.servlet.http.*;
+
+public class JwtInterceptor implements HandlerInterceptor {
+    @Override
+    public boolean preHandle(HttpServletRequest req, HttpServletResponse resp, Object h) throws Exception {
+        String auth = req.getHeader("Authorization");
+        if (auth == null || !auth.startsWith("Bearer ")) {
+            resp.setStatus(401);
+            return false;
+        }
+        try {
+            Claims claims = JwtUtil.verify(auth.substring(7));
+            req.setAttribute("userId", Long.parseLong(claims.getSubject()));
+            return true;
+        } catch (Exception e) {
+            resp.setStatus(401);
+            return false;
+        }
+    }
+}
+
+// 注册拦截器
+@Configuration
+public class WebConfig implements WebMvcConfigurer {
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(new JwtInterceptor())
+            .addPathPatterns("/api/**")
+            .excludePathPatterns("/api/login", "/api/register");
+    }
+}
+```
+
+Refresh Token 机制：
+
+```java
+@PostMapping("/api/login")
+public TokenResponse login(@RequestBody LoginRequest req) {
+    User user = authService.login(req);
+    String access = JwtUtil.generate(user.getId(), user.getName());   // 15 分钟
+    String refresh = UUID.randomUUID().toString();                    // Refresh Token
+    redis.setex("refresh:" + refresh, 7 * 86400, user.getId().toString());
+    return new TokenResponse(access, refresh);
+}
+
+@PostMapping("/api/refresh")
+public TokenResponse refresh(@RequestBody RefreshRequest req) {
+    String userId = redis.get("refresh:" + req.getRefreshToken());
+    if (userId == null) {
+        throw new UnauthorizedException("Invalid refresh token");
+    }
+    String newAccess = JwtUtil.generate(Long.parseLong(userId), ...);
+    return new TokenResponse(newAccess, req.getRefreshToken());
+}
+
+@PostMapping("/api/logout")
+public void logout(@RequestBody RefreshRequest req) {
+    redis.del("refresh:" + req.getRefreshToken());   // 撤销 Refresh Token
+}
+```
+
+## 实战场景
+
+| 场景 | 方案 | 注意点 |
+|------|------|--------|
+| 前后端分离 | JWT in Authorization | 配 HTTPS，不放敏感信息 |
+| 微服务 | RS256 JWT | 公钥分发给各服务验证 |
+| 单点登录（SSO） | JWT 跨域传递 | 短期 Access + Refresh |
+| 移动端 | JWT | 安全存储，防泄露 |
+| IoT 设备 | JWT | 设备身份认证 |
+| 内部服务 | mTLS 更合适 | JWT 适合外部用户 |
+
+## 深挖追问
+
+**Q1：JWT 加密吗？**
+默认不加密，只签名。载荷 Base64URL 编码可读，签名保证不被篡改。要加密用 JWE（JSON Web Encryption）。
+
+**Q2：JWT 和 OAuth 2.0 什么关系？**
+OAuth 2.0 是授权框架，定义流程；JWT 是令牌格式，可作为 Access Token 的实现。OAuth 2.0 不强制用 JWT，但实际中常组合使用。
+
+**Q3：JWT 一定比 Session 好吗？**
+不一定。Session 撤销容易、载荷不暴露、载荷小。需要主动撤销、敏感数据的场景 Session 更合适。分布式无状态场景 JWT 更好。
+
+**Q4：alg=none 攻击是什么？**
+攻击者把 Header 中 alg 改成 none，签名部分留空，服务端如果没强制算法就会跳过签名验证。防护：算法白名单，拒绝 none。
+
+**Q5：JWT 过期后怎么办？**
+Access Token 过期用 Refresh Token 换新的。Refresh Token 过期需重新登录。不要在 Access Token 中放 Refresh Token。
+
+## 易错点
+
+- **"JWT 是加密"** — 不，默认只签名，载荷可读。
+- **"JWT 比 Session 安全"** — 不绝对，载荷暴露是风险。
+- **"JWT 可以撤销"** — 默认不能，需黑名单或 Refresh Token。
+- **"载荷可以放密码"** — 不可以，Base64URL 可解码。
+- **"JWT 一定跨域友好"** — 是，但要配合 CORS。
 
 ## 总结
-复习 JWT令牌是什么？ 时，建议把它和相邻知识点放在一起比较：相同点是什么、区别在哪里、为什么当前场景选择它而不是替代方案。能讲清楚这些内容，才算真正掌握。
+
+JWT 是自包含的令牌格式，由 Header、Payload、Signature 组成，用密钥签名防篡改。优势是无状态、跨域友好、自包含；劣势是不可撤销、载荷暴露、续期复杂。生产推荐：短 Access Token + 长 Refresh Token + HTTPS + 强密钥。载荷不放敏感信息，验证所有声明，算法白名单防 alg=none 攻击。Session 和 JWT 各有适用场景，按需选择。
+
+## 参考资料
+
+- [RFC 7519 — JSON Web Token (JWT)](https://datatracker.ietf.org/doc/html/rfc7519)
+- [RFC 7515 — JSON Web Signature (JWS)](https://datatracker.ietf.org/doc/html/rfc7515)
+- [JWT.io 调试工具](https://jwt.io/)
+- [OWASP — JWT Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_for_Java_Cheat_Sheet.html)

@@ -1,53 +1,343 @@
-# Redis如何实现延迟队列？
+# Redis 如何实现延迟队列
 
 ## 核心概念
 
-Redis如何实现延迟队列？
-延迟队列是指把当前要做的事情，往后推迟一段时间再做。延迟队列的常见使用场景有以下几种：
-在淘宝、京东等购物平台上下单，超过一定时间未付款，订单会自动取消；
-打车的时候，在规定时间没有车主接单，平台会取消你的单并提醒你暂时没有车主接单；
-点外卖的时候，如果商家在10分钟还没接单，就会自动取消订单；
+延迟队列指消息发送后不立即被消费，而是等到指定时间到达后才被消费者取出。常见业务场景：订单 30 分钟未付款自动取消、用户注册后 7 天发送召回 push、定时任务调度、限时优惠结束。
 
-在 Redis 可以使用有序集合（ZSet）的方式来实现延迟消息队列的，ZSet 有一个 Score 属性可以用来存储延迟执行的时间。
-使用 zadd score1 value1 命令就可以一直往内存中生产消息，添加元素并设置时间score。
+Redis 本身没有原生"延迟队列"数据结构，但可以通过 **ZSet、Keyspace Notification、Stream** 三种方式实现，各有取舍。
 
-# 语法：ZADD 队列名 执行时间戳 消息内容
-# 示例：添加10秒后执行的消息
-redis-cli ZADD delay_queue $(date -d "+10 seconds" +%s) "task1"
-利用 zrangebysocre 查询符合条件的所有待处理的任务，通过循环执行队列任务即可。
-
-# 获取当前时间戳
-current=$(date +%s)
-
-# 获取所有已到期的消息（分数≤当前时间）
-redis-cli ZRANGEBYSCORE delay_queue 0 $current
-
-# 原子化移除并处理消息（使用管道）
-redis-cli --pipe << EOF
-ZRANGEBYSCORE delay_queue 0 $current LIMIT 0 1
-ZREM delay_queue "\$(ZRANGEBYSCORE delay_queue 0 $current LIMIT 0 1)"
-EOF
+一句话结论：**轻量场景用 ZSet（score 为执行时间戳，定时轮询）；强可靠场景用 Stream（Redis 5.0+）；生产推荐 Redisson 的 RDelayedQueue 或 RocketMQ 等专业 MQ。Keyspace Notification 不推荐用于核心业务（不可靠）。**
 
 ## 标准回答
 
-Redis 基础题不要只说“快”，要说明内存模型、数据结构、网络模型、持久化、高可用以及使用边界。它适合做缓存、计数、排行榜、分布式锁、队列等，但不是无限容量的主数据库。
+| 方案 | 实现 | 优点 | 缺点 | 推荐度 |
+|------|------|------|------|--------|
+| ZSet | score = 执行时间，定时轮询 | 简单、可控 | 多消费者需协调、无 ACK | 轻量场景 |
+| Keyspace Notification | 订阅 key 过期事件 | 零开发 | 不可靠、易丢消息 | 不推荐 |
+| Stream + XADD/XREAD | 消息带延迟时间戳 | 可靠、有 ACK | 实现复杂 | 强可靠场景 |
+| Redisson RDelayedQueue | 封装 ZSet + 队列 | API 友好 | 依赖 Redisson | 生产推荐 |
+
+## 详细机制
+
+### 方案一：ZSet 实现延迟队列（最常用）
+
+**核心思路**：用 ZSet 的 score 存消息的执行时间戳，消费者定时扫描"已到期"的消息。
+
+```text
+生产者：ZADD delay_queue <unix_timestamp> <message>
+消费者：ZRANGEBYSCORE delay_queue 0 <now> LIMIT 0 100 → 取出到期消息
+       ZREM delay_queue <message> → 删除已处理消息
+```
+
+**关键点**：
+
+1. `ZRANGEBYSCORE` + `ZREM` 必须原子（多消费者场景），否则消息会被多次消费；
+2. 原子方案：Lua 脚本一次性"取出 + 删除"；
+3. 轮询间隔影响延迟精度，通常 1 秒；
+4. 消息 score 应该用毫秒级时间戳，提高精度。
+
+#### Lua 脚本原子取消息
+
+```lua
+-- pop_expired.lua
+-- KEYS[1] = ZSet key
+-- ARGV[1] = current timestamp (ms)
+-- ARGV[2] = max count
+local items = redis.call('ZRANGEBYSCORE', KEYS[1], 0, ARGV[1], 'LIMIT', 0, ARGV[2])
+if #items > 0 then
+    redis.call('ZREM', KEYS[1], unpack(items))
+end
+return items
+```
+
+```bash
+# 取出到期的最多 100 条消息
+EVAL "local items = redis.call('ZRANGEBYSCORE', KEYS[1], 0, ARGV[1], 'LIMIT', 0, ARGV[2]) if #items > 0 then redis.call('ZREM', KEYS[1], unpack(items)) end return items" 1 delay_queue 1690000000000 100
+```
+
+### 方案二：Keyspace Notification（不推荐核心业务）
+
+Redis 的键空间通知能在 key 过期、被删时发 Pub/Sub 消息。利用此机制可实现延迟队列：把消息设过期时间，订阅过期事件。
+
+```bash
+# 开启键空间通知
+CONFIG SET notify-keyspace-events Ex
+
+# 客户端订阅
+SUBSCRIBE __keyevent@0__:expired
+
+# 生产消息
+SET delay:msg:1001 "task1" EX 60
+# 60 秒后过期，触发通知
+```
+
+**致命缺点**：
+
+1. **过期事件通过 Pub/Sub 传播，没有持久化**，订阅者不在线时消息丢失；
+2. **过期事件不保证送达**：Redis 在惰性删除/定期删除时才产生事件，可能晚于 TTL；
+3. **没有 ACK 机制**，消息消费失败无法重试；
+4. **集群模式下通知只在主节点**，跨节点订阅复杂；
+5. **过期 key 的 value 不可获取**：通知只发 key 名，value 已被删除。
+
+所以 Keyspace Notification 仅适合"丢一条没关系"的辅助通知场景。
+
+### 方案三：Redis Stream 实现延迟队列
+
+Redis 5.0 引入 Stream，支持持久化、消费者组、ACK。配合 `XADD` 时间戳和定时调度可实现延迟队列。
+
+```bash
+# 生产消息（带执行时间）
+XADD delay_stream * task '{"id":1,"executeAt":1690000060}'
+
+# 消费者定时扫描
+# 1. XRANGE 取所有消息
+# 2. 业务侧判断 executeAt 是否到期
+# 3. 到期则处理 + XACK
+# 4. 未到期跳过
+```
+
+**优点**：持久化、消费者组、ACK 机制完备；
+**缺点**：Stream 本身不支持按时间过滤，需业务侧判断，复杂度高。
+
+更适合用 Stream + ZSet 组合：ZSet 存待执行任务的 ID，到期后从 Stream 取消息体。
+
+### 方案四：Redisson RDelayedQueue（生产推荐）
+
+Redisson 封装了基于 ZSet 和 List 的延迟队列，API 友好。
+
+```java
+RBlockingQueue<String> queue = redisson.getBlockingQueue("tasks");
+RDelayedQueue<String> delayedQueue = redisson.getDelayedQueue(queue);
+
+// 投递延迟消息，10 分钟后进入 queue
+delayedQueue.offer("task1", 10, TimeUnit.MINUTES);
+
+// 消费者从 queue 取（阻塞）
+String task = queue.take();
+process(task);
+```
+
+Redisson 内部：
+
+1. 投递时把消息存入 ZSet（key = `redisson_delay_queue_timeout:{queueName}`），score = 当前时间 + 延迟；
+2. 客户端启动后台线程定期把到期消息从 ZSet 移到目标队列；
+3. 消费者从目标队列（key = `redisson_delay_queue:{queueName}`）消费。
+
+**优点**：API 简单，可靠，支持阻塞消费；
+**缺点**：依赖 Redisson 客户端。
+
+## 代码示例
+
+### ZSet + Lua 延迟队列（轻量自实现）
+
+```java
+@Service
+public class DelayQueueService {
+    @Autowired private RedisTemplate<String, String> redis;
+
+    private static final String POP_LUA =
+        "local items = redis.call('ZRANGEBYSCORE', KEYS[1], 0, ARGV[1], 'LIMIT', 0, ARGV[2]) " +
+        "if #items > 0 then redis.call('ZREM', KEYS[1], unpack(items)) end " +
+        "return items";
+
+    // 投递延迟消息
+    public void offer(String queue, String message, long delaySec) {
+        long execAt = System.currentTimeMillis() + delaySec * 1000;
+        redis.opsForZSet().add(queue, message, execAt);
+    }
+
+    // 消费者定时拉取
+    @Scheduled(fixedRate = 1000)
+    public void consume() {
+        long now = System.currentTimeMillis();
+        DefaultRedisScript<List> script = new DefaultRedisScript<>(POP_LUA, List.class);
+        List<String> items = redis.execute(
+            script,
+            Collections.singletonList("delay:order"),
+            String.valueOf(now),
+            "100"
+        );
+        for (String item : items) {
+            try {
+                process(item);
+            } catch (Exception e) {
+                // 处理失败，重新入队
+                redis.opsForZSet().add("delay:order", item, now + 60_000);
+            }
+        }
+    }
+
+    private void process(String item) {
+        // 业务处理
+    }
+}
+```
+
+### Redisson 延迟队列（生产推荐）
+
+```java
+@Service
+public class OrderCancelService {
+    @Autowired private RedissonClient redisson;
+
+    public void scheduleCancel(Long orderId) {
+        RBlockingQueue<Long> queue = redisson.getBlockingQueue("order:cancel");
+        RDelayedQueue<Long> delayed = redisson.getDelayedQueue(queue);
+        // 30 分钟后 orderId 进入 queue
+        delayed.offer(orderId, 30, TimeUnit.MINUTES);
+    }
+
+    // 消费者独立线程
+    @PostConstruct
+    public void startConsumer() {
+        new Thread(() -> {
+            RBlockingQueue<Long> queue = redisson.getBlockingQueue("order:cancel");
+            while (!Thread.currentThread().isInterrupted()) {
+                try {
+                    Long orderId = queue.take();  // 阻塞等待
+                    cancelOrderIfUnpaid(orderId);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } catch (Exception e) {
+                    // 异常重试
+                }
+            }
+        }).start();
+    }
+
+    private void cancelOrderIfUnpaid(Long orderId) {
+        // 业务逻辑
+    }
+}
+```
+
+### Stream + ZSet 组合（强可靠）
+
+```java
+@Service
+public class StreamDelayQueue {
+    @Autowired private RedisTemplate<String, ?> redis;
+
+    private static final String STREAM = "delay:stream";
+    private static final String ZSET = "delay:zset";
+
+    // 投递：消息体存 Stream，ID 存 ZSet
+    public String offer(String payload, long delayMs) {
+        String recordId = redis.opsForStream().add(
+            StreamRecords.objectBacked(payload).withStreamKey(STREAM)
+        ).getValue();
+        long execAt = System.currentTimeMillis() + delayMs;
+        redis.opsForZSet().add(ZSET, recordId, execAt);
+        return recordId;
+    }
+
+    // 消费：扫描 ZSet，到期则从 Stream 取并 ACK
+    @Scheduled(fixedRate = 1000)
+    public void consume() {
+        long now = System.currentTimeMillis();
+        Set<String> ids = redis.opsForZSet().rangeByScore(ZSET, 0, now);
+        if (ids == null || ids.isEmpty()) return;
+
+        for (String id : ids) {
+            List<MapRecord<String, Object, Object>> records = redis.opsForStream()
+                .range(STREAM, Range.range(id, id));
+            if (records != null && !records.isEmpty()) {
+                process(records.get(0));
+            }
+            redis.opsForStream().delete(STREAM, id);
+            redis.opsForZSet().remove(ZSET, id);
+        }
+    }
+}
+```
+
+## 实战场景
+
+| 场景 | 推荐方案 | 延迟精度 |
+|------|----------|----------|
+| 订单超时取消 | Redisson RDelayedQueue | 分钟级 |
+| 用户召回 push | RocketMQ 延迟消息 | 分钟级 |
+| 定时任务调度 | ZSet | 秒级 |
+| 限时优惠结束 | Redisson | 分钟级 |
+| 实时延迟（秒级） | ZSet + 短轮询 | 秒级 |
+| 强可靠（金融场景） | RocketMQ / Pulsar | 分钟级 |
+| 异步通知 | ZSet | 秒级 |
 
 ## 深挖追问
 
-1. Redis 为什么快？内存、高效结构、事件循环和少锁竞争。
-2. Redis 能替代数据库吗？多数场景不能，持久化和一致性边界不同。
-3. 使用 Redis 最怕什么？大 Key、热 Key、无 TTL、容量失控和阻塞命令。
+### ZSet 延迟队列如何避免消息丢失？
 
-## 实战场景 / SQL 示例
+1. 消费者取出消息后立即 ZREM（Lua 原子）；
+2. 业务处理失败时把消息重新 ZADD 回去（带新 score）；
+3. 处理成功后才确认；失败重试有上限；
+4. Redis 开 AOF 持久化，避免宕机丢消息。
 
-```text
-SETEX token:uid:100 3600 <token>
-INCR article:pv:1
-ZINCRBY hot:rank 1 article:1
-```
+### ZSet 队列消息量大时性能怎么样？
 
-## 易错点 / 总结
+ZSet 的 `ZRANGEBYSCORE` 是 O(log(N) + M)，N 是元素总数，M 是返回数。百万级消息下毫秒级。但 ZSet 内存占用较高（每个元素约 60 字节），亿级消息不适合。
 
-- 不要只背概念，要能落到 SQL 和业务场景。
-- 不要忽略边界条件、数据规模和并发。
-- 不确定版本差异时要说明“取决于版本/配置”。
+### 多消费者如何分配消息？
+
+用 Lua 原子"取出 + 删除"，保证一条消息只被一个消费者拿到。或按业务 key 分桶到多个 ZSet，提升并行度。
+
+### 延迟精度受什么影响？
+
+- 轮询间隔：1 秒轮询则精度 1 秒；
+- Redis 负载：高负载下命令排队，影响精度；
+- 消费者处理速度：处理慢则消息堆积；
+- 客户端与 Redis 的时间差：建议用 Redis 的 `TIME` 命令同步。
+
+### Redisson RDelayedQueue 内部如何工作？
+
+1. `offer` 时把消息存入 ZSet（key = `redisson_delay_queue_timeout:{queueName}`），score = 执行时间；
+2. 客户端启动后台线程定期把到期消息从 ZSet 移到目标队列（key = `redisson_delay_queue:{queueName}`）；
+3. 消费者 `take()` 从目标队列阻塞读取。
+
+### Redis 延迟队列 vs 专业 MQ 怎么选？
+
+| 维度 | Redis 延迟队列 | RocketMQ 等 |
+|------|----------------|-------------|
+| 可靠性 | 中（依赖 Redis 持久化） | 高（多副本+ACK） |
+| 吞吐 | 高 | 高 |
+| 延迟精度 | 秒级 | 秒级（固定延迟级别） |
+| 运维 | 已有 Redis 则简单 | 独立部署 |
+| 生态 | Redis 内 | 完善监控 |
+| 延迟级别 | 任意 | RocketMQ 开源版仅 18 个固定级别 |
+
+中小项目用 Redis 足够；金融级业务用专业 MQ。
+
+### Keyspace Notification 的过期时间精度如何？
+
+不保证。Redis 过期键的处理依赖惰性删除（访问时）和定期删除（每 100ms 抽样）。一个 TTL=60s 的 key 可能在 60s 时被读触发删除，也可能 65s 时才被定期删除抽到。所以通知可能晚到几秒。
+
+### Redis 7.0 的 Stream 有什么新特性？
+
+- `XAUTOCLAIM`：自动认领超时未 ACK 的消息（类似 RocketMQ 的回溯）；
+- `XADD` 支持 `NOMKSTREAM` 选项（不存在则不创建）；
+- 性能优化：单 Stream 支持更高吞吐。
+
+对延迟队列实现帮助不大，但可靠性提升。
+
+## 易错点
+
+- 用 ZRANGEBYSCORE + ZREM 两步非原子，多消费者消息重复；
+- Keyspace Notification 用于核心业务，丢消息；
+- 轮询间隔过长导致延迟精度差；
+- 消息失败不重试，丢任务；
+- ZSet 无限增长，内存撑爆；
+- 把延迟精度要求秒级的业务放到分钟级轮询；
+- 消费者宕机时未处理的消息丢失（ZSet 已删除但业务未完成）；
+- Redisson RDelayedQueue 客户端不启动消费，消息堆积在 ZSet。
+
+## 总结
+
+Redis 实现延迟队列的主流方案是 **ZSet（轻量自实现）和 Redisson RDelayedQueue（生产推荐）**。ZSet 思路：score 存执行时间，Lua 原子取出 + 删除。Keyspace Notification 不可靠，不推荐核心业务。Stream 适合强可靠但复杂。**生产实践优先选 Redisson 或专业 MQ（RocketMQ）**，自研 ZSet 方案适合中小项目。
+
+## 参考资料
+
+- [Redis 官方文档：Sorted Sets](https://redis.io/docs/data-types/sorted-sets/)
+- [Redisson 文档：Distributed collections](https://github.com/redisson/redisson/wiki/7.-distributed-collections)
+- [Redis 键空间通知](https://redis.io/docs/manual/keyspace-notifications/)
+- [Redis Stream 文档](https://redis.io/docs/data-types/streams/)
+
+---

@@ -1,82 +1,228 @@
-# Java基础线程机制是怎么样的？
+# Java 基础线程机制是怎么样的
 
-Java基础线程机制是怎么样的？
-Executor
-Executor管理多个异步任务的执行，而无需程序员显式地管理线程的生命周期。这里的异步是指多个任务的执行互不干扰，不需要进行同步操作。主要有三种Executor：
-a. CachedThreadPool：一个任务创建一个线程；
-b. FixedThreadPool：所有任务只能使用固定数量的线程；
-c. SingleThreadExecutor：相当于大小为1的FixedThreadPool。
+## 核心概念
 
-public static void main(String[] args) {
-    ExecutorService executorService = Executors.newCachedThreadPool();
-    for (int i = 0; i < 5; i++) {
-        executorService.execute(new MyRunnable());
+Java 线程机制围绕三个问题展开：怎么造线程、怎么调度线程、怎么让线程协作。线程的创建方式在另一篇专门讲，本篇聚焦"基础机制"——线程生命周期管理中常用 API：`sleep()` / `yield()` / `join()` / `interrupt()` / `setDaemon()`，以及线程池 `Executor` 框架的最小使用。
+
+理解这一篇的关键是区分"调度建议"和"强制控制"：`yield()` 是建议调度器让出 CPU，调度器可以不理；`sleep()` 是当前线程休眠指定时间，但不释放锁；`join()` 是当前线程等目标线程结束。`interrupt()` 只是设置中断标志，是否响应由目标线程决定。
+
+## 标准回答
+
+Java 基础线程机制由 Thread 类提供的 API 和 Executor 框架两部分组成。Thread 类的常用控制方法：`sleep()` 让当前线程休眠不释放锁；`yield()` 建议让出 CPU；`join()` 等待目标线程结束；`interrupt()` 设置中断标志；`setDaemon(true)` 设置为守护线程。
+
+1. **sleep()**：当前线程阻塞指定毫秒，不释放任何锁，会响应中断抛 `InterruptedException`。
+2. **yield()**：提示调度器让出 CPU，仅是建议，调度器可以忽略；不会释放锁。
+3. **join()**：当前线程等待目标线程执行结束，本质是在目标线程上 `wait()`。
+4. **interrupt()**：协作式中断，只设置标志位；如果目标线程在 `sleep/wait/join` 中，会抛 `InterruptedException` 并清除标志。
+5. **Daemon**：守护线程在所有非守护线程结束后被 JVM 强制终止，`setDaemon()` 必须在 `start()` 前调用。
+6. **Executor**：用线程池管理线程生命周期，生产环境替代 `new Thread`。
+
+## 实现原理
+
+### sleep() vs wait() 的本质区别
+
+| 维度 | Thread.sleep() | Object.wait() |
+|------|----------------|---------------|
+| 所属类 | Thread | Object |
+| 是否释放锁 | 不释放 | 释放 monitor 锁 |
+| 使用前提 | 任意位置 | 必须持有该对象 monitor（synchronized 块内） |
+| 唤醒方式 | 超时 / 中断 | notify / notifyAll / 超时 / 中断 |
+| 用途 | 简单延时 | 线程间协作 |
+
+`sleep()` 是 Thread 类的静态方法，让当前线程进入 `TIMED_WAITING`；`wait()` 是 Object 方法，让当前线程进入 `WAITING` 并释放锁。
+
+### yield() 的真实行为
+
+`Thread.yield()` 在 HotSpot 上对应 `os::naked_yield()`，Linux 上调用 `sched_yield()` 系统调用，把当前线程从 running 切回 ready 队列。调度器可以选择立刻再调度它，也可以调度其他线程。`yield()` 不释放锁，因此用 `yield()` 做同步协作会死锁。
+
+### join() 的实现
+
+`join()` 内部是个带超时的 `wait()` 循环：
+
+```java
+// java.lang.Thread 简化版
+public final synchronized void join(long millis) throws InterruptedException {
+    long base = System.currentTimeMillis();
+    long now = 0;
+    while (isAlive()) {
+        long delay = millis - now;
+        if (delay <= 0) break;
+        wait(delay);     // 在 this(Thread 对象) 上 wait
+        now = System.currentTimeMillis() - base;
     }
-    executorService.shutdown();
 }
+```
 
-Daemon
-守护线程是程序运行时在后台提供服务的进程。当所有非守护线程结束时，程序也就终止了，同时杀死所有守护线程。main()属于非守护线程，使用setDaemon()方法将一个线程设置为守护线程。
+线程结束时 JVM 会自动调用 `this.notifyAll()`，唤醒所有 `join()` 等待的线程。这也解释了为什么 `join()` 要 synchronized——`wait()` 必须持有 monitor。
 
-public static void main(String[] args) {
-    Thread thread = new Thread(new MyRunnable());
-    thread.setDaemon(true);
-}
+### interrupt() 的协作语义
 
-sleep()
-Thread.sleep(millisec)方法会休眠当前正在执行的线程，millisec单位为毫秒。sleep()可能会抛出InterruptedException，因为异常不能跨线程传播会main()中，因此必须在本地进行处理的。
+`interrupt()` 只设置中断标志位 `interruptFlag = true`，不强行停止线程。响应方式分两种：
 
+- 线程在 `sleep/wait/join` 等可中断阻塞中：抛 `InterruptedException`，并清除中断标志。
+- 线程在正常运行：仅设置标志，由业务代码通过 `Thread.currentThread().isInterrupted()` 主动检查。
+
+正确处理中断的模板：
+
+```java
 public void run() {
     try {
-        Thread.sleep(3000);
+        while (!Thread.currentThread().isInterrupted()) {
+            // 业务逻辑
+        }
     } catch (InterruptedException e) {
-        e.printStackTrace();
+        // sleep/wait 抛出的异常，标志位已被清
+        Thread.currentThread().interrupt(); // 恢复中断状态，让上层感知
     }
 }
+```
 
-yeild()
-对静态方法Thread.yield()的调用声明了当前线程已经完成了生命周期中最重要的部分，可以切换给其他线程来执行。该方法只是对线程调度的一个建议，而且也只是建议具有相同优先级的其他线程可以运行。
+### Executor 框架
 
-public void run() {
-    Thread.yield();
+`Executor` 接口解耦"任务提交"和"任务执行"。`ExecutorService` 是核心接口，`ThreadPoolExecutor` 是生产实现。JUC 还提供 `Executors` 工厂方法，但生产环境禁止用它的 `newFixedThreadPool` / `newCachedThreadPool` / `newSingleThreadExecutor`——队列或线程数无界，容易 OOM。
+
+```java
+// 生产推荐写法
+ExecutorService pool = new ThreadPoolExecutor(
+        4, 8, 60L, TimeUnit.SECONDS,
+        new ArrayBlockingQueue<>(200),
+        new ThreadFactoryBuilder().setNameFormat("biz-pool-%d").build(),
+        new ThreadPoolExecutor.CallerRunsPolicy());
+```
+
+## 代码示例
+
+### sleep() 响应中断
+
+```java
+public class SleepDemo {
+    public static void main(String[] args) throws InterruptedException {
+        Thread t = new Thread(() -> {
+            try {
+                Thread.sleep(5000);
+                System.out.println("woke up");
+            } catch (InterruptedException e) {
+                System.out.println("interrupted during sleep");
+                Thread.currentThread().interrupt();
+            }
+        });
+        t.start();
+        Thread.sleep(100);
+        t.interrupt(); // 1 秒后中断，t 抛 InterruptedException
+    }
 }
+```
 
-## 面试总结
+### join() 等待子线程
 
-围绕「Java基础线程机制是怎么样的？」，面试官通常不只考概念定义，更关注你能否把机制、使用场景和线上问题串起来。
+```java
+public class JoinDemo {
+    public static void main(String[] args) throws InterruptedException {
+        Thread t1 = new Thread(() -> {
+            try { Thread.sleep(300); } catch (InterruptedException ignored) {}
+            System.out.println("t1 done");
+        });
+        Thread t2 = new Thread(() -> {
+            try { Thread.sleep(500); } catch (InterruptedException ignored) {}
+            System.out.println("t2 done");
+        });
+        t1.start(); t2.start();
+        t1.join(); t2.join(); // 主线程等 t1、t2 都结束
+        System.out.println("all done");
+    }
+}
+```
 
-### 核心回答
+### yield() 让出 CPU
 
-1. Java 并发问题的核心是共享状态在多线程下的可见性、原子性和有序性。
-2. 设计并发方案时要明确线程之间如何协作、如何退出、如何处理异常和超时。
-3. 工程上还要考虑线程池复用、上下文清理、监控告警和压测验证。
+```java
+public class YieldDemo {
+    public static void main(String[] args) {
+        Thread producer = new Thread(() -> {
+            for (int i = 0; i < 5; i++) {
+                System.out.println("produce " + i);
+                Thread.yield(); // 建议让 consumer 跑
+            }
+        });
+        Thread consumer = new Thread(() -> {
+            for (int i = 0; i < 5; i++) {
+                System.out.println("consume " + i);
+            }
+        });
+        consumer.start();
+        producer.start();
+    }
+}
+```
 
-### 高频追问
+### 守护线程
 
-- 这个机制解决的是互斥、通信、调度还是资源隔离？
-- 高并发下可能出现死锁、饥饿、活锁还是性能退化？
-- 如何用线程 Dump 或指标证明你的判断？
+```java
+public class DaemonDemo {
+    public static void main(String[] args) {
+        Thread daemon = new Thread(() -> {
+            while (true) {
+                try { Thread.sleep(1000); } catch (InterruptedException e) { break; }
+                System.out.println("daemon tick");
+            }
+        });
+        daemon.setDaemon(true); // 必须在 start 前
+        daemon.start();
 
-### 实战落地
+        try { Thread.sleep(3000); } catch (InterruptedException ignored) {}
+        System.out.println("main exit, JVM will kill daemon");
+    }
+}
+```
 
-- **选型前**：先判断是互斥访问、线程协作、任务编排，还是限流隔离。
-- **编码时**：控制共享变量范围，明确锁对象、超时策略、异常处理和资源释放。
-- **上线后**：观察线程数、队列长度、阻塞时间、拒绝次数和 RT 抖动，必要时用线程 Dump 验证。
+## 实战场景
 
-### 易错点
+| 场景 | 用法 | 注意点 |
+|------|------|--------|
+| 限流 / 退避 | `Thread.sleep(backoff)` | 用 `TimeUnit.SECONDS.sleep(1)` 更可读，要捕获中断 |
+| 等待子线程汇总 | `thread.join(timeout)` | 必须设超时，避免子线程死循环拖垮主流程 |
+| 后台监控任务 | `daemon = true` | 不要在守护线程里做关键资源清理，JVM 终止时不保证 finally 执行 |
+| 优雅停机 | `executor.shutdown()` + `awaitTermination()` | 配合 `interrupt()` 让任务主动退出 |
+| 长任务取消 | `future.cancel(true)` | 任务要响应中断才有效，忽略中断的任务无法取消 |
 
-- 不要用 sleep 代替同步协作。
-- 不要忽略中断、超时和资源释放。
-## 核心概念
-Java基础线程机制是怎么样的？ 可以放在“并发能力”这条主线里理解。复习时不要只背结论，要先说明它解决的核心问题，再解释关键机制、适用边界和代价。围绕这个知识点，重点关注：线程安全、可见性、原子性、锁竞争、线程池参数、队列选择、拒绝策略和故障隔离。如果面试官继续追问，通常会从“为什么这样设计、在什么场景会失效、线上如何排查”三个方向展开。
+## 深挖追问
 
-## 面试回答与追问
-- **标准回答**：先给出 Java基础线程机制是怎么样的？ 的定位，再说明它依赖的核心原理，最后结合业务场景说明如何使用。回答时要把“能解决什么问题”和“会带来什么成本”一起讲清楚。
-- **常见追问**：如果数据量、并发量或调用链路继续放大，Java基础线程机制是怎么样的？ 的瓶颈会出现在哪里？如何观测、如何优化、如何回滚？
-- **易错点**：不要把概念和具体实现混在一起，也不要只说 API 名称。面试中更重要的是说清楚边界条件、失败场景和取舍依据。
+### sleep(0) 有什么用？
 
-## 实战场景与排查
-典型落地场景包括：高并发接口、异步任务、定时任务、批量处理、缓存刷新、消息消费等需要控制吞吐与稳定性的场景。实际处理线上问题时，可以按“现象确认 → 指标采集 → 假设验证 → 小步修复 → 复盘沉淀”的路径推进。先看日志、监控、链路追踪和核心指标，再判断是容量问题、配置问题、代码路径问题，还是外部依赖抖动。
+`Thread.sleep(0)` 让当前线程主动让出 CPU 一次，等价于 `yield()`。在某些忙等场景下用于降低 CPU 占用，但不释放锁。
+
+### 为什么 wait/notify 必须在 synchronized 块内？
+
+`wait()` 释放锁的前提是当前线程持有锁，否则没有锁可释放，因此 JVM 在 `wait()` 入口检查 `monitor`，没持有就抛 `IllegalMonitorStateException`。这也是 `wait/notify` 设计上的硬约束。
+
+### interrupted() 和 isInterrupted() 的区别？
+
+两者都返回中断标志，但 `Thread.interrupted()`（静态方法）会**清除**标志位，`isInterrupted()`（实例方法）**不清除**。线程池里的 worker 用 `interrupted()` 来消费中断信号。
+
+### join() 为什么是 synchronized 的？
+
+`join()` 内部调用 `wait()`，而 `wait()` 要求当前线程持有调用对象的 monitor。`join()` 把自己声明为 synchronized 方法，等价于 `synchronized(this) { ... }`，从而保证 `wait()` 合法。
+
+### 守护线程的 finally 会执行吗？
+
+不保证。JVM 在所有非守护线程结束后会立即退出，守护线程被强制终止，`finally` 块可能不会执行。所以不要在守护线程里写关键资源释放逻辑。
+
+## 易错点
+
+- 用 `Thread.sleep()` 代替同步协作——sleep 不释放锁，做轮询会浪费 CPU 且无法及时响应。
+- `wait/notify` 不在 synchronized 块内——抛 `IllegalMonitorStateException`。
+- `setDaemon()` 在 `start()` 之后调用——抛 `IllegalThreadStateException`。
+- 吞掉 `InterruptedException` 不恢复中断标志——上层无法感知中断，破坏协作机制。
+- 用 `Thread.stop()` / `Thread.suspend()` 强行停止线程——已废弃，可能导致锁不释放或数据不一致。
 
 ## 总结
-复习 Java基础线程机制是怎么样的？ 时，建议把它和相邻知识点放在一起比较：相同点是什么、区别在哪里、为什么当前场景选择它而不是替代方案。能讲清楚这些内容，才算真正掌握。
+
+Java 基础线程机制围绕 Thread API 和 Executor 框架展开。`sleep` 不释放锁、`wait` 释放锁、`yield` 仅建议让出 CPU、`join` 本质是 wait、`interrupt` 是协作式标志——这五点是面试核心。生产环境用线程池替代 `new Thread`，禁用 `Executors` 工厂方法。正确处理中断、避免 `Thread.stop` 这类废弃 API，是工程化的基本要求。
+
+## 参考资料
+
+- [Thread 类官方文档](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/lang/Thread.html)
+- [Java Concurrency in Practice 第 5、7 章](https://jcip.net/)
+- [为什么 Thread.stop 被废弃](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/lang/Thread.html#stop())
+
+---

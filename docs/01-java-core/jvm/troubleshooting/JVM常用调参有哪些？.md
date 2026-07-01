@@ -1,85 +1,277 @@
-# JVM常用调参有哪些？
+# JVM 常用调参有哪些
 
-JVM常用调参有哪些？
-一、JVM参数
-•  -Xms堆最小值、-Xmx堆最大堆值：单位默认字节都是以k、m做单位的。通常这两个配置参数相等，避免每次空间不足，动态扩容带来的影响。
-•  -Xmn：新生代大小
-•  -Xss：每个线程池的堆栈大小。在jdk5以上的版本，每个线程堆栈大小为1m，jdk5以前的版本是每个线程池大小为256k。一般在相同物理内存下，如果减少－xss值会产生更大的线程数，但不同的操作系统对进程内线程数是有限制的，是不能无限生成。
-•  -XX:NewRatio：设置新生代与老年代比值，如果设置了-Xmn的情况下，该参数是不需要在设置的。
-•  -XX:PermSize：设置永久代的初始值，默认是物理内存的六十四分之一
-•  -XX:MaxPermSize：设置持久代最大值，默认是物理内存的四分之一
-•  -XX:MaxTenuringThreshold：新生代中对象存活次数，默认15。(若对象在eden区，经历一次MinorGC后还活着，则被移动到Survior区，年龄加1。以后，对象每次经历MinorGC，年龄都加1。达到阀值，则移入老年代)
-•  -XX:SurvivorRatio：Eden区与Subrvivor区大小的比值，如果设置为8，两个Subrvivor区与一个Eden区的比值为2:8，一个Survivor区占整个新生代的十分之一；
-•  -XX:+UseFastAccessorMethods：原始类型快速优化
-•  -XX:+AggressiveOpts：编译速度加快
-•  -XX:PretenureSizeThreshold：对象超过多大值时直接在老年代中分配
-整个堆大小的计算公式: JVM 堆大小 ＝ 年轻代大小＋年老代大小＋持久代大小。
-增大新生代大小就会减少对应的年老代大小，设置-Xmn值对系统性能影响较大，所以如果设置新生代大小的调整，则需要严格的测试调整。而新生代是用来存放新创建的对象，大小是随着堆大小增大和减少而有相应的变化，默认值是保持堆大小的十五分之一，-Xmn参数就是设置新生代的大小，也可以通过-XX:NewRatio来设置新生代与年老代的比例，java 官方推荐配置为3:8。
-
-新生代的特点就是内存中的对象更新速度快，在短时间内容易产生大量的无用对象，如果在这个参数时就需要考虑垃圾回收器设置参数也需要调整。推荐使用: 复制清除算法和并行收集器进行垃圾回收，而新生代的垃圾回收叫做初级回收。
-
-StackOverflowError和OutOfMemoryException。当线程中的请求的栈的深度大于最大可用深度，就会抛出前者；若内存空间不够，无法创建新的线程，则会抛出后者。栈的大小直接决定了函数的调用最大深度，栈越大，函数嵌套可调用次数就越多。
-
-经验：
-•  -Xmn用于设置新生代的大小。过小会增加Minor GC频率，过大会减小老年代的大小。一般设为整个堆空间的1/4或1/3.XX:SurvivorRatio用于设置新生代中survivor空间(from/to)和eden空间的大小比例；
-•  -XX:TargetSurvivorRatio表示，当经历Minor GC后，survivor空间占有量(百分比)超过它的时候，就会压缩进入老年代(当然，如果survivor空间不够，则直接进入老年代)。默认值为50%。
-•  为了性能考虑，一开始尽量将新生代对象留在新生代，避免新生的大对象直接进入老年代。因为新生对象大部分都是短期的，这就造成了老年代的内存浪费，并且回收代价也高(Full GC发生在老年代和方法区Perm)；
-•  当Xms=Xmx，可以使得堆相对稳定，避免不停震荡；
-•  一般来说，MaxPermSize设为64MB可以满足绝大多数的应用了。若依然出现方法区溢出，则可以设为128MB。若128MB还不能满足需求，那么就应该考虑程序优化了，减少动态类的产生。
-
-二、回收器的JVM参数
-•  -XX:+UseSerialGC：串行垃圾回收，现在基本很少使用。
-•  -XX:+UseParNewGC：新生代使用并行，老年代使用串行；
-•  -XX:+UseConcMarkSweepGC：新生代使用并行，老年代使用CMS(一般都是使用这种方式)，CMS是Concurrent Mark Sweep的缩写，并发标记清除，一看就是老年代的算法，所以，它可以作为老年代的垃圾回收器。CMS不是独占式的，它关注停顿时间；
-•  -XX:ParallelGCThreads：指定并行的垃圾回收线程的数量，最好等于CPU数量；
-•  -XX:+DisableExplicitGC：禁用System.gc()，因为它会触发Full GC，这是很浪费性能的，JVM会在需要GC的时候自己触发GC。
-•  -XX:CMSFullGCsBeforeCompaction：在多少次GC后进行内存压缩，这个是因为并行收集器不对内存空间进行压缩的，所以运行一段时间后会产生很多碎片，使得运行效率降低。
-•  -XX:+CMSParallelRemarkEnabled：降低标记停顿；
-•  -XX:+UseCMSCompactAtFullCollection：在每一次Full GC时对老年代区域碎片整理，因为CMS是不会移动内存的，因此会非常容易出现碎片导致内存不够用的；
-•  -XX:+UseCmsInitiatingOccupancyOnly：使用手动触发或者自定义触发cms 收集，同时也会禁止hostspot自行触发CMS GC；
-•  -XX:CMSInitiatingOccupancyFraction：使用CMS作为垃圾回收，使用70%后开始CMS收集；
-•  -XX:CMSInitiatingPermOccupancyFraction：设置perm gen使用达到多少百比时触发垃圾回收，默认是92%；
-•  -XX:+CMSIncrementalMode：设置为增量模式；
-•  -XX:+CmsClassUnloadingEnabled：CMS是不会默认对永久代进行垃圾回收的，设置此参数则是开启；
-•  -XX:+PrintGCDetails：开启详细GC日志模式，日志的格式是和所使用的算法有关；
-•  -XX:+PrintGCDateStamps：将时间和日期也加入到GC日志中。
-
-## 面试总结
-
-围绕「JVM常用调参有哪些？」，面试官通常不只考概念定义，更关注你能否把机制、使用场景和线上问题串起来。
-
-### 核心回答
-
-1. JVM 排障要先保现场，再定位资源维度：CPU、内存、GC、线程、IO。
-2. 常见链路是 top/pidstat 找进程，jstack/jcmd/Arthas 定线程和方法，GC 日志/MAT 定内存问题。
-3. 排障结论必须落到代码热点、配置问题或外部依赖，而不是停留在工具输出。
-
-### 高频追问
-
-- CPU 高为什么不应第一步直接看业务日志？
-- 如何把 Linux 线程 id 转成 jstack 中的 nid？
-- 如何区分死锁、阻塞、等待 IO 和无限循环？
-
-### 实战落地
-
-- **排查类问题**：先收集监控、日志和 JVM 现场信息，再用工具验证假设，避免凭经验改参数。
-- **调优类问题**：先明确目标是降低停顿、提升吞吐还是减少内存，再选择收集器、堆大小和业务代码优化。
-- **面试表达**：用“现象 → 原理 → 工具验证 → 解决方案 → 风险边界”的链路回答。
-
-### 易错点
-
-- 先保存现场快照再重启。
-- 采样要多次，不要根据一次 jstack 下结论。
 ## 核心概念
-JVM常用调参有哪些？ 可以放在“JVM 运行时能力”这条主线里理解。复习时不要只背结论，要先说明它解决的核心问题，再解释关键机制、适用边界和代价。围绕这个知识点，重点关注：内存区域、对象生命周期、GC Roots、垃圾回收器、类加载、JIT、参数调优和故障定位。如果面试官继续追问，通常会从“为什么这样设计、在什么场景会失效、线上如何排查”三个方向展开。
 
-## 面试回答与追问
-- **标准回答**：先给出 JVM常用调参有哪些？ 的定位，再说明它依赖的核心原理，最后结合业务场景说明如何使用。回答时要把“能解决什么问题”和“会带来什么成本”一起讲清楚。
-- **常见追问**：如果数据量、并发量或调用链路继续放大，JVM常用调参有哪些？ 的瓶颈会出现在哪里？如何观测、如何优化、如何回滚？
-- **易错点**：不要把概念和具体实现混在一起，也不要只说 API 名称。面试中更重要的是说清楚边界条件、失败场景和取舍依据。
+JVM 参数控制堆大小、收集器、GC 行为、日志、OOM 处理等。掌握常用调参是 JVM 调优和故障排查的基础。JVM 参数分三类：标准参数（`-`，所有 JVM 支持）、`-X` 参数（扩展参数，HotSpot 特定）、`-XX` 参数（高级选项，不稳定）。
 
-## 实战场景与排查
-典型落地场景包括：服务出现 OOM、Full GC 频繁、启动慢、类冲突或延迟抖动时的定位与优化。实际处理线上问题时，可以按“现象确认 → 指标采集 → 假设验证 → 小步修复 → 复盘沉淀”的路径推进。先看日志、监控、链路追踪和核心指标，再判断是容量问题、配置问题、代码路径问题，还是外部依赖抖动。
+生产环境推荐配置原则：`-Xms = -Xmx`（避免扩缩容抖动）、合理选择 GC、开启 GC 日志和 OOM 自动 dump、容器内留出本地内存余量。
+
+```text
+JVM 参数格式：
+-XX:+Flag       布尔开关，启用
+-XX:-Flag       布尔开关，关闭
+-XX:key=value   键值对
+
+JDK 版本差异：
+- 永久代 → 元空间：JDK 7→8
+- CMS 废弃：JDK 9，移除：JDK 14
+- GC 日志参数：JDK 8 vs JDK 9+（Xlog）
+- G1 默认：JDK 9+
+```
+
+## 标准回答
+
+JVM 参数按堆内存、栈、元空间、GC 收集器、GC 日志、OOM 处理分类。生产环境必设：`-Xms=-Xmx`、合理 GC（G1/ZGC）、GC 日志（`-Xlog:gc*`）、`-XX:+HeapDumpOnOutOfMemoryError`、`-XX:+DisableExplicitGC`。JDK 版本差异要注意：JDK 8 用 `-XX:+PrintGCDetails`，JDK 9+ 用 `-Xlog:gc*`；JDK 8+ 永久代替换为元空间；JDK 9+ G1 默认，JDK 14 CMS 移除。
+
+要点：
+
+1. **堆参数**：`-Xms`、`-Xmx`、`-Xmn`、`-XX:NewRatio`、`-XX:SurvivorRatio`。
+2. **栈参数**：`-Xss`。
+3. **元空间参数**：`-XX:MetaspaceSize`、`-XX:MaxMetaspaceSize`。
+4. **GC 选择**：`-XX:+UseG1GC`、`-XX:+UseZGC`、`-XX:+UseParallelGC`。
+5. **G1 参数**：`-XX:MaxGCPauseMillis`、`-XX:G1HeapRegionSize`、`-XX:InitiatingHeapOccupancyPercent`。
+6. **GC 日志**：JDK 8 用 `-XX:+PrintGCDetails`，JDK 9+ 用 `-Xlog:gc*`。
+7. **OOM 处理**：`-XX:+HeapDumpOnOutOfMemoryError`、`-XX:HeapDumpPath`。
+8. **诊断**：`-XX:+PrintFlagsFinal`、`-XX:+UnlockDiagnosticVMOptions`。
+
+## 堆内存参数
+
+| 参数 | 含义 | 默认值 | 建议值 |
+|------|------|--------|--------|
+| `-Xms` | 堆初始大小 | 物理内存/64 | 与 `-Xmx` 相同 |
+| `-Xmx` | 堆最大大小 | 物理内存/4 | 根据应用需要 |
+| `-Xmn` | 新生代大小 | - | 堆的 1/3 ~ 1/2 |
+| `-XX:NewRatio` | 老年代:新生代 | 2 | 2（即 1:2） |
+| `-XX:SurvivorRatio` | Eden:Survivor | 8 | 6~8 |
+| `-XX:MaxTenuringThreshold` | 晋升老年代年龄 | 15 | 6~15 |
+| `-XX:PretenureSizeThreshold` | 大对象直接进老年代阈值 | 0 | 按需设置 |
+| `-XX:+UseAdaptiveSizePolicy` | 自适应新生代大小 | G1 开启 | - |
+
+生产建议：`-Xms` 和 `-Xmx` 设相同，避免堆动态扩缩容的开销。
+
+## 栈内存参数
+
+| 参数 | 含义 | 默认值 | 建议值 |
+|------|------|--------|--------|
+| `-Xss` | 每个线程的栈大小 | 512K~1M | 256K~1M |
+
+`-Xss` 影响线程数：栈越大调用深度越深，但同样物理内存下能创建的线程数越少。
+
+## 元空间参数（JDK 8+）
+
+| 参数 | 含义 | 默认值 | 建议值 |
+|------|------|--------|--------|
+| `-XX:MetaspaceSize` | 元空间初始大小 | ~21M | 256M |
+| `-XX:MaxMetaspaceSize` | 元空间最大大小 | 无限制 | 256M~512M |
+| `-XX:MinMetaspaceFreeRatio` | GC 后最小空闲比例 | 40 | - |
+| `-XX:MaxMetaspaceFreeRatio` | GC 后最大空闲比例 | 70 | - |
+
+JDK 8 之前用永久代：`-XX:PermSize`、`-XX:MaxPermSize`。
+
+## 直接内存参数
+
+| 参数 | 含义 | 默认值 | 建议值 |
+|------|------|--------|--------|
+| `-XX:MaxDirectMemorySize` | 直接内存最大值 | 与 `-Xmx` 相同 | 按需限制 |
+| `-XX:+DisableExplicitGC` | 禁止 `System.gc()` | 关闭 | 生产开启 |
+
+## GC 收集器参数
+
+| 参数 | 选择 |
+|------|------|
+| `-XX:+UseSerialGC` | Serial + Serial Old |
+| `-XX:+UseParNewGC` | ParNew + Serial Old（JDK 9 起废弃） |
+| `-XX:+UseParallelGC` | Parallel Scavenge + Serial Old |
+| `-XX:+UseParallelOldGC` | Parallel Scavenge + Parallel Old |
+| `-XX:+UseConcMarkSweepGC` | ParNew + CMS + Serial Old（备用）（JDK 14 移除） |
+| `-XX:+UseG1GC` | G1（JDK 9+ 默认） |
+| `-XX:+UseZGC` | ZGC（JDK 15+ 生产可用） |
+| `-XX:+UseShenandoahGC` | Shenandoah（JDK 12+） |
+
+## G1 参数
+
+| 参数 | 含义 | 默认值 | 建议值 |
+|------|------|--------|--------|
+| `-XX:MaxGCPauseMillis` | 目标最大停顿时间 | 200ms | 50~200ms |
+| `-XX:G1HeapRegionSize` | Region 大小 | 自动计算 | 1~32M（2 的幂） |
+| `-XX:InitiatingHeapOccupancyPercent` | 触发并发标记的堆占用 | 45 | 35~45 |
+| `-XX:G1NewSizePercent` | 新生代最小比例 | 5 | - |
+| `-XX:G1MaxNewSizePercent` | 新生代最大比例 | 60 | - |
+| `-XX:G1MixedGCCountTarget` | 混合回收次数目标 | 8 | - |
+| `-XX:G1ReservePercent` | 保留空间防止晋升失败 | 10 | 10~20 |
+
+## CMS 参数（JDK 14 移除）
+
+| 参数 | 含义 | 默认值 |
+|------|------|--------|
+| `-XX:CMSInitiatingOccupancyFraction` | CMS 触发阈值 | 92(JDK5)/68(JDK6+) |
+| `-XX:+UseCMSCompactAtFullCollection` | Full GC 后压缩 | 开启 |
+| `-XX:CMSFullGCsBeforeCompaction` | N 次 Full GC 后压缩 | 0 |
+| `-XX:+CMSParallelRemarkEnabled` | 并行重新标记 | - |
+| `-XX:+CMSClassUnloadingEnabled` | CMS 卸载类 | - |
+
+## GC 日志参数
+
+### JDK 8
+
+```bash
+-XX:+PrintGCDetails
+-XX:+PrintGCDateStamps
+-XX:+PrintGCTimeStamps
+-XX:+PrintGCApplicationStoppedTime
+-XX:+PrintHeapAtGC
+-Xloggc:/var/log/gc.log
+-XX:+UseGCLogFileRotation
+-XX:NumberOfGCLogFiles=10
+-XX:GCLogFileSize=50M
+```
+
+### JDK 9+
+
+```bash
+-Xlog:gc*:file=/var/log/gc.log:time,uptime,level,tags:filecount=10,filesize=50M
+```
+
+### JDK 9+ 常用日志标签
+
+```bash
+-Xlog:gc*                          # 所有 GC 日志
+-Xlog:gc+heap=debug                # 堆详细信息
+-Xlog:gc+phases=debug              # GC 阶段详情
+-Xlog:gc+ergo*=debug               # 自动调节详情
+-Xlog:safepoint                    # 安全点信息
+```
+
+## OOM 时自动 Dump
+
+| 参数 | 含义 |
+|------|------|
+| `-XX:+HeapDumpOnOutOfMemoryError` | OOM 时生成堆 dump |
+| `-XX:HeapDumpPath=/var/log/heap.hprof` | dump 文件路径 |
+| `-XX:OnOutOfMemoryError="script.sh"` | OOM 时执行脚本 |
+| `-XX:+ExitOnOutOfMemoryError` | OOM 时退出（避免半死状态） |
+| `-XX:+CrashOnOutOfMemoryError` | OOM 时崩溃生成 core dump |
+
+## JIT 编译参数
+
+| 参数 | 含义 | 默认值 |
+|------|------|--------|
+| `-XX:+TieredCompilation` | 分层编译 | JDK 8 开启 |
+| `-XX:CompileThreshold` | 方法调用次数触发编译 | 10000 |
+| `-XX:+PrintCompilation` | 打印 JIT 编译信息 | 关闭 |
+| `-XX:ReservedCodeCacheSize` | 代码缓存大小 | 240M |
+
+## 常用诊断参数
+
+| 参数 | 含义 |
+|------|------|
+| `-XX:+PrintFlagsFinal` | 打印所有 JVM 参数最终值 |
+| `-XX:+PrintFlagsInitial` | 打印所有 JVM 参数初始值 |
+| `-XX:+UnlockDiagnosticVMOptions` | 解锁诊断参数 |
+| `-XX:+PrintSafepointStatistics` | 打印安全点统计 |
+| `-XX:+NativeMemoryTracking=summary` | 启用本地内存跟踪 |
+
+## 推荐配置模板
+
+### Spring Boot 微服务（G1，JDK 11+）
+
+```bash
+java -Xms4g -Xmx4g \
+  -XX:+UseG1GC \
+  -XX:MaxGCPauseMillis=100 \
+  -XX:InitiatingHeapOccupancyPercent=35 \
+  -XX:MetaspaceSize=256m -XX:MaxMetaspaceSize=256m \
+  -XX:+HeapDumpOnOutOfMemoryError \
+  -XX:HeapDumpPath=/var/log/heap.hprof \
+  -XX:+DisableExplicitGC \
+  -Xlog:gc*:file=/var/log/gc.log:time,uptime,level,tags:filecount=10,filesize=50M \
+  -jar app.jar
+```
+
+### 大内存在线服务（ZGC，JDK 21+）
+
+```bash
+java -Xms16g -Xmx16g \
+  -XX:+UseZGC \
+  -XX:SoftMaxHeapSize=12g \
+  -XX:MetaspaceSize=512m -XX:MaxMetaspaceSize=512m \
+  -XX:+HeapDumpOnOutOfMemoryError \
+  -XX:HeapDumpPath=/var/log/heap.hprof \
+  -XX:+DisableExplicitGC \
+  -Xlog:gc*:file=/var/log/gc.log:time,uptime,level,tags:filecount=10,filesize=100M \
+  -jar app.jar
+```
+
+### 容器化部署（注意 cgroup 限制）
+
+```bash
+java -XX:+UseContainerSupport \      # JDK 10+ 默认开启
+  -XX:MaxRAMPercentage=70.0 \         # 堆占容器内存 70%
+  -XX:InitialRAMPercentage=70.0 \
+  -XX:+UseG1GC \
+  -jar app.jar
+```
+
+## 实战场景
+
+| 场景 | 调优方向 | 参数 |
+|------|---------|------|
+| Full GC 频繁 | 增大堆，降低 IHOP | `-Xmx8g -XX:InitiatingHeapOccupancyPercent=35` |
+| Young GC 频繁 | 增大新生代 | `-Xmn2g` 或 `-XX:NewRatio=2` |
+| 元空间 OOM | 增大元空间 | `-XX:MaxMetaspaceSize=512m` |
+| 接口卡顿 | 降低停顿 | `-XX:MaxGCPauseMillis=100` |
+| 容器 OOM Killed | 留出余量 | `-XX:MaxRAMPercentage=70.0` |
+
+## 深挖追问
+
+### -Xms 和 -Xmx 为什么建议设成一样？
+
+避免堆动态扩缩容的开销。堆扩容需要向 OS 申请内存并可能触发 Full GC，缩容后再次扩容又要重复。固定大小省去这些开销。配合 `-XX:+AlwaysPreTouch` 启动时预分配物理内存，减少运行时抖动。
+
+### 怎么查看 JVM 当前参数？
+
+```bash
+# 查看所有参数最终值
+java -XX:+PrintFlagsFinal -version | grep -i "G1GC\|MaxHeapSize"
+
+# 查看运行中 JVM 的参数
+jcmd <pid> VM.flags
+jinfo -flags <pid>
+```
+
+### 容器内 -Xmx 怎么设？
+
+JDK 10+ 默认开启 `-XX:+UseContainerSupport`，JVM 自动识别 cgroup 限制。推荐用 `-XX:MaxRAMPercentage=70.0` 让堆占容器内存 70%，留 30% 给元空间、直接内存、线程栈、JVM 自身。不要直接 `-Xmx` 设到容器内存上限，会被 OOM Killer 杀掉。
+
+### 怎么动态修改 JVM 参数？
+
+`jinfo` 可以动态修改部分标记为 `manageable` 的参数：
+
+```bash
+jinfo -flag +PrintGC <pid>           # 开启 GC 日志
+jinfo -flag MaxGCPauseMillis=100 <pid>  # 修改停顿目标
+```
+
+但大多数参数（如 `-Xmx`）不能动态修改，需要重启 JVM。JDK 11+ 的 JFR 和 Management API 支持更多动态配置。
+
+## 易错点
+
+- 把 `-Xms` 和 `-Xmx` 设不同，导致运行时堆扩缩容抖动。
+- 容器内 `-Xmx` 设到容器内存上限，被 OOM Killer 杀掉。
+- JDK 8 用 `-Xlog:gc*`，应改用 `-XX:+PrintGCDetails`。
+- 忘记开 `-XX:+HeapDumpOnOutOfMemoryError`，OOM 后没现场。
+- 把 `-XX:+DisableExplicitGC` 关闭，导致业务代码 `System.gc()` 触发 Full GC。
 
 ## 总结
-复习 JVM常用调参有哪些？ 时，建议把它和相邻知识点放在一起比较：相同点是什么、区别在哪里、为什么当前场景选择它而不是替代方案。能讲清楚这些内容，才算真正掌握。
+
+JVM 参数分堆、栈、元空间、GC 收集器、GC 日志、OOM 处理等几类。生产环境必设：`-Xms=-Xmx`、合理 GC、GC 日志、OOM 自动 dump、`DisableExplicitGC`。JDK 版本差异要注意：JDK 8 用 `-XX:+PrintGCDetails`，JDK 9+ 用 `-Xlog:gc*`；JDK 8+ 永久代替换为元空间；JDK 9+ G1 默认。容器化部署用 `-XX:MaxRAMPercentage=70.0` 留出余量。
+
+## 参考资料
+
+- [HotSpot JVM Options](https://www.oracle.com/java/technologies/javase/vmoptions-jsp.html)
+- [Java 17 GC Tuning Guide](https://docs.oracle.com/en/java/javase/17/gctuning/)
+- [JEP 291: Deprecate the Concurrent Mark Sweep (CMS) Garbage Collector](https://openjdk.org/jeps/291)
+
+---
+
+[← 返回故障排查目录](/01-java-core/jvm/troubleshooting/)

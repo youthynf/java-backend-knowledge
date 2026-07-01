@@ -1,54 +1,176 @@
-# ThreadPoolExecutor线程池有哪些拒绝策略？
+# ThreadPoolExecutor 线程池有哪些拒绝策略
 
-ThreadPoolExecutor线程池有哪些拒绝策略？
-四种预置的拒绝策略：
-AbortPolicy（默认策略）：直接抛出RejectedExecutionException异常，阻止系统继续运行。
-CallerRunsPolicy：由调用线程（提交任务的线程）来执行被拒绝的任务，这样做会降低新任务的提交速度，给线程池一定时间来处理积压的任务。
-DiscardOldestPolicy：丢弃任务队列中最旧的（也就是最早进入队列的）那个任务，然后尝试重新提交当前被拒绝的任务。
-DiscardPolicy：直接丢弃被拒绝的新任务，不做任何处理，也不会抛出异常。
-自定义拒绝策略：通过实现RejectedExecutionHandler接口，实现rejectedExecution()方法来自定义拒绝策略；
-
-自定义拒绝策略步骤
-实现RejectedExecutionHandler接口：该接口只有一个方法rejectedExecution(Runnable r, ThreadPoolExecutor executor)，在这个方法中定义当任务被拒绝时的具体处理逻辑；
-实现rejectedExecution()方法：可以根据业务需求进行不同的处理，比如将被拒绝的任务记录到日志中、存储到其他的备份队列等待后续处理、发送通知等操作；
-助记：四种预设策略：抛RejectedExecutionException异常、提交线程执行、抛弃最久、抛弃新任务； 自定义拒绝策略：实现RejectedExecutionHandler接口，实现rejectedExecution方法。
-
-## 面试总结
-
-围绕「ThreadPoolExecutor线程池有哪些拒绝策略？」，面试官通常不只考概念定义，更关注你能否把机制、使用场景和线上问题串起来。
-
-### 核心回答
-
-1. 线程池通过复用线程降低创建销毁成本，并用队列、拒绝策略和参数控制并发压力。
-2. 核心参数要结合任务类型、RT、吞吐、下游容量和机器资源一起评估。
-3. 线上重点关注活跃线程数、队列积压、拒绝次数、任务耗时和异常吞噬。
-
-### 高频追问
-
-- 为什么不建议直接使用 Executors 默认工厂？
-- CPU 密集型和 IO 密集型线程数如何估算？
-- 队列满、线程满、下游慢时如何降级和止血？
-
-### 实战落地
-
-- **选型前**：先判断是互斥访问、线程协作、任务编排，还是限流隔离。
-- **编码时**：控制共享变量范围，明确锁对象、超时策略、异常处理和资源释放。
-- **上线后**：观察线程数、队列长度、阻塞时间、拒绝次数和 RT 抖动，必要时用线程 Dump 验证。
-
-### 易错点
-
-- 不要使用无界队列掩盖流量问题。
-- 异步任务要显式处理异常、超时和上下文传递。
 ## 核心概念
-ThreadPoolExecutor线程池有哪些拒绝策略？ 可以放在“并发能力”这条主线里理解。复习时不要只背结论，要先说明它解决的核心问题，再解释关键机制、适用边界和代价。围绕这个知识点，重点关注：线程安全、可见性、原子性、锁竞争、线程池参数、队列选择、拒绝策略和故障隔离。如果面试官继续追问，通常会从“为什么这样设计、在什么场景会失效、线上如何排查”三个方向展开。
 
-## 面试回答与追问
-- **标准回答**：先给出 ThreadPoolExecutor线程池有哪些拒绝策略？ 的定位，再说明它依赖的核心原理，最后结合业务场景说明如何使用。回答时要把“能解决什么问题”和“会带来什么成本”一起讲清楚。
-- **常见追问**：如果数据量、并发量或调用链路继续放大，ThreadPoolExecutor线程池有哪些拒绝策略？ 的瓶颈会出现在哪里？如何观测、如何优化、如何回滚？
-- **易错点**：不要把概念和具体实现混在一起，也不要只说 API 名称。面试中更重要的是说清楚边界条件、失败场景和取舍依据。
+拒绝策略（RejectedExecutionHandler）是线程池的"最后一道防线"。当任务无法被接受时——通常是线程数达到 `maximumPoolSize` 且队列已满，或线程池已关闭——拒绝策略决定如何处理这个任务。
 
-## 实战场景与排查
-典型落地场景包括：高并发接口、异步任务、定时任务、批量处理、缓存刷新、消息消费等需要控制吞吐与稳定性的场景。实际处理线上问题时，可以按“现象确认 → 指标采集 → 假设验证 → 小步修复 → 复盘沉淀”的路径推进。先看日志、监控、链路追踪和核心指标，再判断是容量问题、配置问题、代码路径问题，还是外部依赖抖动。
+`ThreadPoolExecutor` 内置 4 种策略，全部是 `RejectedExecutionHandler` 接口的内部静态实现类。可以通过构造方法或 `setRejectedExecutionHandler` 设置，也可以自定义。
+
+## 标准回答
+
+四种内置拒绝策略：
+
+1. `AbortPolicy`（默认）：直接抛 `RejectedExecutionException`，让调用方感知到失败。
+2. `CallerRunsPolicy`：让提交任务的线程自己执行该任务，相当于"谁提交谁负责"。能起到自然限流的作用。
+3. `DiscardPolicy`：静默丢弃新任务，不抛异常。生产几乎不用，因为问题被吞掉。
+4. `DiscardOldestPolicy`：丢弃队列头部（最早入队）的任务，再尝试 `execute` 提交新任务。
+
+如果以上都不满足业务需求，实现 `RejectedExecutionHandler` 接口写自定义策略，例如持久化到数据库、推送到 MQ、降级返回默认值。
+
+## 实现原理
+
+### 拒绝策略的触发时机
+
+在 `execute` 中触发：
+
+```java
+public void execute(Runnable command) {
+    // ... 核心线程、入队都失败
+    else if (!addWorker(command, false))   // 非核心线程也创建失败
+        reject(command);                   // 触发拒绝策略
+}
+
+final void reject(Runnable command) {
+    handler.rejectedExecution(command, this);
+}
+```
+
+另外，线程池处于非 RUNNING 状态时，`execute` 也会触发拒绝策略。
+
+### 四种内置策略源码
+
+```java
+// 默认策略：抛异常
+public static class AbortPolicy implements RejectedExecutionHandler {
+    public void rejectedExecution(Runnable r, ThreadPoolExecutor e) {
+        throw new RejectedExecutionException(
+            "Task " + r.toString() + " rejected from " + e.toString());
+    }
+}
+
+// 调用者线程执行
+public static class CallerRunsPolicy implements RejectedExecutionHandler {
+    public void rejectedExecution(Runnable r, ThreadPoolExecutor e) {
+        if (!e.isShutdown()) {
+            r.run();   // 直接在提交者线程同步执行
+        }
+    }
+}
+
+// 静默丢弃
+public static class DiscardPolicy implements RejectedExecutionHandler {
+    public void rejectedExecution(Runnable r, ThreadPoolExecutor e) {
+        // 空实现，等于丢弃
+    }
+}
+
+// 丢弃队列中最老的任务，重新提交当前任务
+public static class DiscardOldestPolicy implements RejectedExecutionHandler {
+    public void rejectedExecution(Runnable r, ThreadPoolExecutor e) {
+        if (!e.isShutdown()) {
+            e.getQueue().poll();   // 丢掉队首
+            e.execute(r);          // 重新提交
+        }
+    }
+}
+```
+
+### 四种策略对比
+
+| 策略 | 行为 | 是否抛异常 | 适用场景 |
+|------|------|-----------|----------|
+| AbortPolicy | 抛 `RejectedExecutionException` | 是 | 关键业务，必须感知失败 |
+| CallerRunsPolicy | 调用者线程同步执行 | 否 | 不允许丢任务，可承受短暂变慢 |
+| DiscardPolicy | 直接丢弃新任务 | 否 | 极少用，仅限无关紧要的日志类任务 |
+| DiscardOldestPolicy | 丢队首任务，重提新任务 | 否 | 新任务比老任务更重要（如实时数据） |
+
+## 代码示例
+
+### 内置策略使用
+
+```java
+ThreadPoolExecutor executor = new ThreadPoolExecutor(
+        2, 4, 30L, TimeUnit.SECONDS,
+        new ArrayBlockingQueue<>(2),
+        Executors.defaultThreadFactory(),
+        new ThreadPoolExecutor.CallerRunsPolicy());  // 调用者线程兜底
+```
+
+### 自定义策略：持久化重试
+
+```java
+public class PersistRetryPolicy implements RejectedExecutionHandler {
+    private final TaskRepository taskRepository;
+    private final AlertService alertService;
+
+    public PersistRetryPolicy(TaskRepository repo, AlertService alert) {
+        this.taskRepository = repo;
+        this.alertService = alert;
+    }
+
+    @Override
+    public void rejectedExecution(Runnable r, ThreadPoolExecutor executor) {
+        if (executor.isShutdown()) {
+            return; // 线程池已关闭，不再处理
+        }
+        if (r instanceof IdentifiableTask) {
+            IdentifiableTask task = (IdentifiableTask) r;
+            try {
+                taskRepository.save(task.toTaskPO());
+                log.warn("任务被拒绝，已持久化待重试: taskId={}", task.getTaskId());
+            } catch (Exception e) {
+                log.error("任务持久化失败，发送告警: taskId={}", task.getTaskId(), e);
+                alertService.sendAlert("线程池拒绝且持久化失败: " + task.getTaskId());
+            }
+        } else {
+            log.error("无法识别的任务类型被拒绝: {}", r.getClass().getName());
+        }
+    }
+}
+```
+
+## 实战场景
+
+| 场景 | 用法 | 注意点 |
+|------|------|--------|
+| 订单核心链路 | AbortPolicy + 调用方 catch 后降级 | 必须显式处理异常，避免 500 |
+| 异步日志/埋点 | DiscardPolicy 或自定义采样丢弃 | 可接受少量丢失 |
+| 实时行情推送 | DiscardOldestPolicy | 旧数据无价值，只保最新 |
+| 不能丢的回调任务 | CallerRunsPolicy 或持久化重试 | CallerRunsPolicy 会让调用线程变慢，注意反压 |
+| 高优先级后台任务 | 自定义 + MQ 重投 | MQ 自身故障时还要有兜底告警 |
+
+## 深挖追问
+
+### CallerRunsPolicy 会让调用线程执行任务，会有什么副作用？
+
+调用线程在任务执行期间被阻塞，无法继续提交新任务，相当于天然的反压限流。但如果调用链上有多个线程池嵌套，且下游池也用 CallerRunsPolicy，可能造成线程互相占用、整体卡死。建议在依赖链上至少有一层用"快速失败 + 降级"。
+
+### DiscardOldestPolicy 用在什么队列上有坑？
+
+用在优先级队列 `PriorityBlockingQueue` 上时，`poll()` 取出的是优先级最高（而非最早入队）的任务，可能误丢关键任务。用在 `SynchronousQueue` 上时队列没有元素可 poll，等于直接走 `execute` 又触发拒绝，循环无意义。
+
+### 拒绝策略能恢复执行任务吗？
+
+可以。`DiscardOldestPolicy` 就是先 `poll` 再 `execute`。但要注意 `execute` 仍可能再次拒绝（极端情况），可能进入死循环——所以生产自定义策略时一般加次数限制或转持久化。
+
+### 线程池关闭后调用 execute 会走拒绝策略吗？
+
+会。`execute` 开头检查到非 RUNNING 状态会走拒绝策略（默认 AbortPolicy 抛异常）。所以优雅停机期间提交任务要 catch `RejectedExecutionException`。
+
+## 易错点
+
+- 用 `DiscardPolicy` 处理关键任务，问题被静默吞掉，线上故障排查时没日志没异常。
+- `CallerRunsPolicy` 配合调用线程极度敏感的接口（如 RPC 入口线程），把入口线程拖死。
+- 自定义策略不判断 `executor.isShutdown()`，导致线程池已关闭还在做持久化等副作用。
+- 以为有界队列 + AbortPolicy 就够，实际上"被拒绝"的处理路径必须明确（重试、降级、告警）。
 
 ## 总结
-复习 ThreadPoolExecutor线程池有哪些拒绝策略？ 时，建议把它和相邻知识点放在一起比较：相同点是什么、区别在哪里、为什么当前场景选择它而不是替代方案。能讲清楚这些内容，才算真正掌握。
+
+拒绝策略是线程池压力过载时的兜底机制。理解 4 种内置策略的行为差异和适用场景，能在配置时快速选型；生产环境更常见的是自定义策略——持久化重试、降级、采样丢弃。选型核心是回答两个问题：任务能不能丢？不能丢的话调用方能否承受被阻塞？
+
+## 参考资料
+
+- [JDK ThreadPoolExecutor 源码](https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/concurrent/ThreadPoolExecutor.java)
+- [美团技术团队 - Java 线程池实现原理及其在美团业务中的实践](https://tech.meituan.com/2020/04/02/java-pooling-pratice-in-meituan.html)
+
+---

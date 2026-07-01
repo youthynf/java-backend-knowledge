@@ -1,58 +1,258 @@
-# HTTP1.1如何对请求拆包？
+# HTTP/1.1 如何对请求拆包
 
-HTTP1.1如何对请求拆包？
-在HTTP/1.1中，请求的拆包是通过"Content-Length"头字段来进行的。该字段指示了请求正文的长度，服务器可以根据该长度来正确接收和解析请求。
+## 核心概念
 
-过程：
-当客户端发送一个HTTP请求时，会在请求头中添加Content-Length"字段，该字段的值表示请求正文的字节数。
-服务器在接收到请求后，会根据"Content-length"字段的值来确定请求的长度，并从请求中读取相应数量的字节，直到读取完整个请求内容。
+HTTP/1.1 跑在 TCP 字节流之上，TCP 不保留应用层消息边界，所以 HTTP 必须自己定义"请求边界"——这就是"拆包"。HTTP/1.1 通过三种机制确定请求体长度：Content-Length（明确字节数）、Transfer-Encoding: chunked（分块传输）、连接关闭（HTTP/1.0 风格，长连接下不用）。理解拆包机制是看懂抓包、调试接口、防范请求走私的基础。
 
-这种基于"Content-Length“字段的拆包机制可以确保服务器正确接收到完整的请求，避免了请求的丢失或截断问题。
+## 标准回答
 
-## 面试总结
-### 核心概念
+HTTP/1.1 请求解析三步：
 
-HTTP/1.1 运行在 TCP 字节流之上，TCP 只保证字节有序到达，不保留“一个请求就是一个包”的边界。因此服务端解析 HTTP 报文时必须自己判断消息边界：先读请求行和 Header，遇到空行表示头部结束；再根据 `Content-Length`、`Transfer-Encoding: chunked` 或连接关闭等规则确定 Body 的长度。
+1. **读请求行和头部**：按 `\r\n` 分行，直到空行 `\r\n\r\n` 表示头部结束
+2. **判断是否有请求体**：GET/HEAD/DELETE 通常无；POST/PUT/PATCH 通常有
+3. **确定请求体长度**：
+   - 有 Content-Length：读指定字节数
+   - 有 Transfer-Encoding: chunked：按分块格式读到 0 长度块
+   - 都没有：HTTP/1.0 风格靠连接关闭，HTTP/1.1 长连接下报 400
 
-### 面试官想考什么
+## 详细机制
 
-面试官主要想确认你是否理解 TCP 粘包/拆包与应用层协议边界的关系，而不是把“拆包”理解成 TCP 自动按 HTTP 请求切分。还会追问长连接、分块传输、Content-Length 错误导致的请求走私风险。
+### 请求行和头部解析
 
-### 标准回答
+```
+POST /api/users HTTP/1.1\r\n       ← 请求行
+Host: api.example.com\r\n           ← 头部行 1
+Content-Type: application/json\r\n  ← 头部行 2
+Content-Length: 35\r\n              ← 头部行 3
+\r\n                                ← 空行（头部结束）
+{"name":"Alice","age":30}          ← 请求体
+```
 
-HTTP/1.1 的请求解析通常分三步：第一，读取起始行和 Header，直到 `\r\n\r\n`；第二，如果没有请求体，例如 GET/HEAD，头部结束即可处理；第三，如果有请求体，优先按 `Content-Length` 读取指定字节数，或按 `Transfer-Encoding: chunked` 逐块读取直到 0 长度块。长连接下不能把“连接关闭”当成每个请求的结束标志，否则无法复用连接。
+服务端按字节读，遇到 `\r\n\r\n` 表示头部结束。
 
-### 深挖追问
+### Content-Length 拆包
 
-- `Content-Length` 和 `Transfer-Encoding: chunked` 同时出现时为什么危险？
-- HTTP/1.1 管线化下，前一个请求体没有读完整会影响什么？
-- Netty/Servlet 容器为什么需要 HTTP 编解码器，而不是直接读 Socket？
-
-### 实战场景/代码示例
+最常用方式，明确告知请求体字节数：
 
 ```http
-POST /api/order HTTP/1.1
-Host: example.com
+POST /api/users HTTP/1.1
+Host: api.example.com
 Content-Type: application/json
-Content-Length: 11
+Content-Length: 35
 
-{"id":1001}
+{"name":"Alice","age":30}
 ```
-服务端必须继续读取 11 个字节作为 Body。若只按一次 `read()` 返回内容处理，就可能读到半包；若多读了下一个请求的字节，又会污染连接上的后续请求。
 
-### 易错点/总结
+服务端读到空行后，继续读 35 字节作为请求体。读完正好是一个完整请求。
 
-HTTP 拆包是应用层解析边界，TCP 拆包是传输层分段/重组现象，二者不能混为一谈。生产中要避免手写脆弱解析器，优先使用成熟 Web 容器或框架，并限制 Header/Body 大小防止慢请求和请求走私。
-## 核心概念
-HTTP1.1如何对请求拆包？ 可以放在“网络协议能力”这条主线里理解。复习时不要只背结论，要先说明它解决的核心问题，再解释关键机制、适用边界和代价。围绕这个知识点，重点关注：连接建立、报文结构、状态码、长连接、拥塞控制、TLS、代理和超时重试。如果面试官继续追问，通常会从“为什么这样设计、在什么场景会失效、线上如何排查”三个方向展开。
+### Transfer-Encoding: chunked
 
-## 面试回答与追问
-- **标准回答**：先给出 HTTP1.1如何对请求拆包？ 的定位，再说明它依赖的核心原理，最后结合业务场景说明如何使用。回答时要把“能解决什么问题”和“会带来什么成本”一起讲清楚。
-- **常见追问**：如果数据量、并发量或调用链路继续放大，HTTP1.1如何对请求拆包？ 的瓶颈会出现在哪里？如何观测、如何优化、如何回滚？
-- **易错点**：不要把概念和具体实现混在一起，也不要只说 API 名称。面试中更重要的是说清楚边界条件、失败场景和取舍依据。
+未知总长度或流式响应时用：
 
-## 实战场景与排查
-典型落地场景包括：接口超时、连接耗尽、网关转发、上传下载、移动端弱网和跨域访问。实际处理线上问题时，可以按“现象确认 → 指标采集 → 假设验证 → 小步修复 → 复盘沉淀”的路径推进。先看日志、监控、链路追踪和核心指标，再判断是容量问题、配置问题、代码路径问题，还是外部依赖抖动。
+```http
+POST /upload HTTP/1.1
+Host: api.example.com
+Transfer-Encoding: chunked
+
+5\r\n
+Hello\r\n
+6\r\n
+ World\r\n
+0\r\n
+\r\n
+```
+
+格式：
+
+- 每块以"长度（十六进制）\r\n"开头
+- 接着是数据
+- 最后以 `0\r\n\r\n` 结束
+
+服务端逐块读，直到读到长度为 0 的块。
+
+### 没有 Content-Length 也没有 chunked
+
+HTTP/1.0：靠连接关闭确定请求体结束。
+
+```
+POST /upload HTTP/1.0
+Host: api.example.com
+
+some data...
+```
+
+服务端读到连接关闭（read 返回 0），认为请求体结束。
+
+HTTP/1.1 长连接下不能用此方式（连接不关闭），如果请求有 body 但没 Content-Length 也没 chunked，服务端通常报 400 Bad Request 或 Length Required。
+
+### 长连接下的多请求拆包
+
+HTTP/1.1 默认 keep-alive，一个 TCP 连接上可有多个请求：
+
+```
+Client → Server: 请求 1（Content-Length: 35）+ 请求 2（Content-Length: 20）+ ...
+Server: 按 Content-Length 切分，先处理请求 1，再处理请求 2
+```
+
+服务端必须严格按 Content-Length 读字节，多读会污染下一请求，少读会留下半包。
+
+### 请求走私（Request Smuggling）
+
+Content-Length 和 Transfer-Encoding 同时存在时的安全问题：
+
+```http
+POST / HTTP/1.1
+Content-Length: 6
+Transfer-Encoding: chunked
+
+0
+```
+
+不同服务器解析顺序不同：
+
+- 前端代理用 Content-Length：认为请求体 6 字节（`0\r\n\r\n`）
+- 后端用 chunked：认为请求体结束（0 长度块）
+
+前端把后续请求当成第一个请求的 body，后端却当成新请求 → 请求走私。
+
+防护：
+
+- 同时存在时拒绝（RFC 7230 要求优先 Transfer-Encoding）
+- 严格校验，不允许两者同时出现
+
+### 抓包示例
+
+```bash
+# Content-Length 拆包
+$ curl -v -d '{"name":"Alice"}' -H "Content-Type: application/json" http://example.com/api/users
+> POST /api/users HTTP/1.1
+> Content-Type: application/json
+> Content-Length: 16
+>
+> {"name":"Alice"}
+< HTTP/1.1 201 Created
+
+# chunked 拆包（流式上传）
+$ curl -v -H "Transfer-Encoding: chunked" --data-binary @- http://example.com/upload <<EOF
+> hello
+> world
+> EOF
+> POST /upload HTTP/1.1
+> Transfer-Encoding: chunked
+>
+> 6\r\nhello\n\r\n
+> 6\r\nworld\n\r\n
+> 0\r\n
+> \r\n
+```
+
+## 代码示例
+
+服务端正确解析请求体（Spring Boot）：
+
+```java
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+public class UserController {
+
+    // Spring 自动按 Content-Length 或 chunked 读取请求体
+    @PostMapping("/api/users")
+    public User create(@RequestBody User user) {
+        // @RequestBody 触发 HttpMessageConverter 解析
+        // 框架内部已处理拆包，应用层无需关心
+        return userService.create(user);
+    }
+}
+```
+
+Netty 自定义协议解析（演示拆包原理）：
+
+```java
+import io.netty.buffer.*;
+import io.netty.channel.*;
+import io.netty.handler.codec.http.*;
+
+public class HttpServerHandler extends SimpleChannelInboundHandler<HttpObject> {
+    @Override
+    protected void channelRead0(ChannelHandlerContext ctx, HttpObject msg) {
+        if (msg instanceof HttpRequest) {
+            HttpRequest req = (HttpRequest) msg;
+            // Netty 的 HttpServerCodec 已解析请求行和头部
+            System.out.println("Method: " + req.method());
+            System.out.println("URI: " + req.uri());
+        }
+        if (msg instanceof HttpContent) {
+            HttpContent content = (HttpContent) msg;
+            ByteBuf buf = content.content();
+            // 按 chunked 或 Content-Length 读到的数据
+            System.out.println("Body chunk: " + buf.toString(CharsetUtil.UTF_8));
+            if (msg instanceof LastHttpContent) {
+                // 请求体读完
+                System.out.println("Request complete");
+            }
+        }
+    }
+}
+```
+
+流式响应（chunked）：
+
+```java
+import org.springframework.web.bind.annotation.*;
+import org.springframework.http.*;
+import reactor.core.publisher.Flux;
+
+@GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+public Flux<String> stream() {
+    // Spring WebFlux 自动用 chunked 传输
+    return Flux.interval(Duration.ofSeconds(1))
+        .map(i -> "data " + i + "\n");
+}
+```
+
+## 实战场景
+
+| 场景 | 拆包方式 | 注意点 |
+|------|---------|--------|
+| 普通 POST/PUT | Content-Length | 必须正确，错会半包或污染 |
+| 文件上传 | Content-Length 或 chunked | 大文件用 chunked 流式 |
+| 流式响应（SSE） | chunked | 中间件要支持透传 chunked |
+| 长连接多请求 | Content-Length 严格切分 | 不能靠连接关闭 |
+| HTTP/2 | 帧自带长度 | 不需要 Content-Length |
+
+## 深挖追问
+
+**Q1：Content-Length 是字符数还是字节数？**
+字节数。UTF-8 中文一个字符 3 字节，Content-Length 要按字节算。
+
+**Q2：Content-Length 错会怎样？**
+- 比实际短：服务端只读一部分，后续请求污染
+- 比实际长：服务端等待不存在的数据，超时
+
+**Q3：chunked 和 Content-Length 能同时用吗？**
+RFC 7230 规定优先 Transfer-Encoding: chunked，但实际生产应避免同时出现（请求走私风险）。
+
+**Q4：HTTP/2 还需要 Content-Length 吗？**
+建议有。HTTP/2 帧自带长度，没有 Content-Length 也能正确解析，但有 Content-Length 客户端能预知大小。
+
+**Q5：服务端怎么防止慢请求攻击？**
+限制 Header 大小（Nginx `large_client_header_buffers`）、Body 大小（`client_max_body_size`）、读超时（`client_body_timeout`）。
+
+## 易错点
+
+- **"Content-Length 是字符数"** — 是字节数。
+- **"长连接靠连接关闭拆包"** — 不，长连接必须靠 Content-Length 或 chunked。
+- **"Content-Length 和 chunked 能同时用"** — 规范上 Transfer-Encoding 优先，但应避免同时出现。
+- **"HTTP/2 还要拆包"** — 帧自带长度，应用层无需拆包。
+- **"拆包 = TCP 拆包"** — 不是，HTTP 拆包是应用层消息边界，TCP 拆包是传输层分段。
 
 ## 总结
-复习 HTTP1.1如何对请求拆包？ 时，建议把它和相邻知识点放在一起比较：相同点是什么、区别在哪里、为什么当前场景选择它而不是替代方案。能讲清楚这些内容，才算真正掌握。
+
+HTTP/1.1 拆包靠 Content-Length（明确字节数）或 Transfer-Encoding: chunked（分块传输）确定请求体边界。长连接下必须用这两者之一，不能靠连接关闭。Content-Length 错误会导致半包或请求走私。HTTP/2 用帧自带长度，不需要应用层拆包。生产中用成熟 Web 框架避免手写解析器，限制 Header/Body 大小防慢请求攻击。
+
+## 参考资料
+
+- [RFC 7230 — HTTP/1.1 Message Syntax and Routing, Message Body](https://datatracker.ietf.org/doc/html/rfc7230#section-3.3)
+- [RFC 7230 — Chunked Transfer Coding](https://datatracker.ietf.org/doc/html/rfc7230#section-4.1)
+- [HTTP Request Smuggling](https://owasp.org/www-community/attacks/HTTP_Request_Smuggling)

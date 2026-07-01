@@ -1,40 +1,118 @@
-# TCP三次握手的过程是怎么样的？
+# TCP 三次握手的过程是怎么样的
+
 ## 核心概念
 
-TCP是面向连接的协议，所以使用TCP前必须先建立连接，而建立连接是通过三次握手来进行的。
+TCP 在发送数据之前必须先建立连接，建立连接的过程叫"三次握手"（Three-Way Handshake）。它的本质是双方交换各自的初始序列号（ISN），并各自确认对方收到了自己的 ISN。三次而不是两次，是因为 TCP 是**全双工**的，两个方向的数据流要分别同步。
 
-三次握手的过程：
-最开始，客户端和服务端都处于CLOSE状态。先是服务端主动监听某个端口，处于【LISTEN状态】；
-客户端会随机初始化序号（client_isn），将此序号置于TCP首部的「序列号」字段中，同时把SYN标志位置为1，表示SYN报文。接着客户端的协议栈会把第一个SYN报文发送给服务端，表示向服务端发起连接，该报文不包含应用层数据，之后客户端处于【SYN-SENT状态】。
-服务端的协议栈收到客户端的SYN报文后，和客户端进行ACK应答。首先服务端也随机初始化自己的序号（server_isn），将此序号填入TCP首部的「序列号」字段中，其次把 TCP 首部的「确认应答号」字段填入client isn +1，接着把SYN和ACK标志位置为 1。最后把该报文发给客户端，该报文也不包含应用层数据，之后服务端处于【SYN-RCVD状态】。
-客户端收到服务端报文后，还要向服务端回应最后一个应答报文，首先该应答报文TCP首部ACK标志位置为 1，其次「确认应答号」字段填入 server_isn +1，最后把报文发送给服务端，这次报文可以携带客户到服务端的数据，之后客户端处于【ESTABLISHED状态】。
-服务端收到客户端的应答报文后，也进入【ESTABLISHED状态】。
+## 标准回答
 
-从上面的过程可以发现第三次握手是可以携带数据的，前两次握手是不可以携带数据的，这也是面试常问的题。一旦完成三次握手，双方都处于 ESTABLISHED 状态，此时连接就已建立完成，客户端和服务端就可以相互发送数据
+三次握手流程：
 
-## 面试总结
-### 核心概念
+```
+Client                                              Server
+CLOSED                                              LISTEN
+  |                                                    |
+  | --- SYN, seq=x ------------------------------->   |  (1)
+SYN_SENT                                            SYN_RCVD
+  |                                                    |
+  | <== SYN+ACK, seq=y, ack=x+1 ==================    |  (2)
+  |                                                    |
+  | --- ACK, seq=x+1, ack=y+1 --------------------->  |  (3)
+ESTABLISHED                                         ESTABLISHED
+```
 
-传输层负责端到端通信。TCP 面向连接、可靠、有序、字节流，依靠三次握手、序列号、确认、重传、滑动窗口、流量控制和拥塞控制；UDP 无连接、开销小、不保证可靠。
+1. 客户端发送 SYN 报文，seq=client_isn，进入 `SYN_SENT`。
+2. 服务端回复 SYN+ACK，seq=server_isn，ack=client_isn+1，进入 `SYN_RCVD`。
+3. 客户端再发 ACK，ack=server_isn+1，进入 `ESTABLISHED`；服务端收到后也进入 `ESTABLISHED`。
 
-### 面试官想考什么
+第三次握手可以携带数据，前两次不行。
 
-面试官高频考 TCP 三次握手/四次挥手、TIME_WAIT/CLOSE_WAIT、可靠传输、粘包、拥塞控制、连接异常和性能调优。
+## 详细机制
 
-### 标准回答
+### 每一步在做什么
 
-TCP 建连通过 SYN、SYN+ACK、ACK 确认双方收发能力；断连通常四次挥手，因为双方方向的数据流要分别关闭。可靠性来自序列号、ACK、超时/快速重传、滑动窗口和校验。TIME_WAIT 保护旧报文消失并保证对端收到最后 ACK；CLOSE_WAIT 多通常是应用未主动关闭连接。UDP 适合实时音视频、DNS、QUIC 等可自定义可靠性或容忍丢包的场景。
+**第一次握手（SYN）**：客户端告诉服务端"我想建立连接，我的初始序列号是 x"。此时客户端不知道服务端是否收到了，所以处于 `SYN_SENT`，等待回应。
 
-### 深挖追问
+**第二次握手（SYN+ACK）**：服务端做两件事——确认客户端的 SYN（ack=x+1），同时发送自己的 SYN（seq=y）。一个报文同时承担两件事，所以叫 SYN+ACK。服务端进入 `SYN_RCVD`，等待客户端确认自己的 SYN。
 
-- 这个现象发生在内核 TCP 状态机、网络链路还是应用代码中？
-- 如何用 ss/netstat、tcpdump、内核计数器证明丢包、重传、半连接或 TIME_WAIT 问题？
-- 哪些 Linux 参数、连接池参数和超时设置会影响生产表现？
+**第三次握手（ACK）**：客户端确认服务端的 SYN（ack=y+1）。这次确认后双方都知道了对方的 ISN，连接建立完成。
 
-### 实战场景/示例
+### 为什么第三次可以携带数据
 
-Java 服务大量 CLOSE_WAIT，优先检查代码是否未关闭 socket/HTTP 响应流，或连接池释放逻辑异常；大量 TIME_WAIT 则看短连接、主动关闭方和连接复用。
+第三次握手时，客户端已经知道服务端的接收能力和发送能力都正常（因为收到了 SYN+ACK），所以这个 ACK 报文可以顺便携带应用数据，省一个 RTT。但服务端必须收到这个 ACK 才进入 `ESTABLISHED`，所以即使携带数据，连接仍然算"未完全建立"直到 ACK 到达。
 
-### 易错点/总结
+### 抓包示例
 
-TCP 是字节流没有消息边界，所以会有粘包/拆包；应用层必须用长度字段、分隔符或固定长度等协议解决。
+```bash
+$ tcpdump -i any -n 'tcp port 80 and tcp[tcpflags] & (tcp-syn|tcp-ack) != 0'
+10:00:01.123456 IP 10.0.0.1.54321 > 10.0.0.2.80: Flags [S], seq 1000, win 65535, options [mss 1460,nop,wscale 8], length 0
+10:00:01.123789 IP 10.0.0.2.80 > 10.0.0.1.54321: Flags [S.], seq 2000, ack 1001, win 65535, options [mss 1460,nop,wscale 8], length 0
+10:00:01.123990 IP 10.0.0.1.54321 > 10.0.0.2.80: Flags [.], ack 2001, win 512, length 0
+```
+
+`Flags [S]` 表示 SYN，`[S.]` 表示 SYN+ACK，`[.]` 表示 ACK。注意 ack 是对方 seq+1（SYN/FIN 占一个序号）。
+
+### 序列号为什么是 +1
+
+SYN 和 FIN 虽然不携带数据，但都消耗一个序号。这是因为它们是连接的关键事件，必须被确认；如果消耗 0 个序号，对方就无法区分"确认的是 SYN 本身"还是"确认的是 SYN 之后的第一字节"。
+
+## 代码示例
+
+Java 中观察三次握手最直接的方式是抓 ServerSocket.accept() 之前的内核行为：
+
+```java
+import java.net.*;
+import java.io.*;
+
+public class HandshakeDemo {
+    public static void main(String[] args) throws IOException {
+        // 服务端 listen —— 内核进入 LISTEN 状态
+        try (ServerSocket server = new ServerSocket(8080)) {
+            // accept() 返回时，三次握手已完成，连接已在全连接队列里
+            Socket client = server.accept();
+            System.out.println("Connected: " + client.getRemoteSocketAddress());
+        }
+    }
+}
+```
+
+`accept()` 是从内核的**全连接队列**（accept queue）里取出已建立的连接，并不参与握手本身。
+
+## 实战场景
+
+| 场景 | 现象 | 排查 |
+|------|------|------|
+| 客户端连不上服务端 | 大量 `SYN_SENT` 不消失 | 服务端未启动/防火墙丢包/半连接队列满 |
+| 服务端连接数暴涨 | `ss -tnl` Recv-Q 高 | 全连接队列满，accept 不及时 |
+| 跨地域建连慢 | 第一包 SYN 后等几百毫秒 | RTT 高，握手本身耗时 1.5 RTT |
+| HTTPS 首包慢 | 三次握手后还要 TLS 握手 | 启用 TCP Fast Open 或 TLS 1.3 0-RTT |
+
+## 深挖追问
+
+**Q1：第三次握手丢了怎么办？**
+客户端已进入 `ESTABLISHED`，会直接发数据；服务端还在 `SYN_RCVD`，收到数据报文时会同时确认这个 ACK（数据报文自带 ACK 标志），从而进入 `ESTABLISHED`。如果客户端不发数据，服务端会重传 SYN+ACK（默认 5 次，由 `tcp_synack_retries` 控制），超时后放弃。
+
+**Q2：ISN 为什么要随机？**
+防止**序号预测攻击**（盲注攻击）。如果 ISN 可预测，攻击者可以伪造源 IP 发包，绕过认证。RFC 6528 规定 ISN 应基于时钟和散列函数每 4 微秒变化一次。
+
+**Q3：握手期间服务端在做什么？**
+分配 sock 结构、生成 ISN、构造 SYN+ACK、加入半连接队列。**不分配文件描述符**，fd 是 accept() 时才分配。详见 `TCP握手期间服务端工作内容是什么？`。
+
+**Q4：SYN 报文里的 options 有什么用？**
+MSS 协商（必选）、窗口缩放（Window Scale，扩到 32 位）、SACK 许可、时间戳。这些都是握手期间协商好的，连接建立后不能改。
+
+## 易错点
+
+- **"三次握手 = 三次发包"** — 不准确，第二次是 SYN+ACK 合并成一个包，不是两个包。
+- **"accept() 触发握手"** — 错。accept() 是从队列里取已建立的连接，握手由内核完成。
+- **"前两次握手不能带数据"** — 严格说是 RFC 793 不允许，但 TCP Fast Open（TFO，RFC 7413）允许 SYN 携带数据。
+- **ack = 对方 seq + 1** — 只有 SYN/FIN 才 +1，普通数据报文 ack = 对方 seq + 数据长度。
+
+## 总结
+
+三次握手的本质是双向同步 ISN，每一方都要"发自己的 ISN + 确认对方的 ISN"，因为全双工所以需要第三次。第三次可以携带数据是工程优化。理解 ack 的计算规则（SYN/FIN 占一个序号）是看抓包的关键。
+
+## 参考资料
+
+- [RFC 793 — TCP, Section 3.4 Establishing a connection](https://datatracker.ietf.org/doc/html/rfc793#section-3.4)
+- [RFC 7413 — TCP Fast Open](https://datatracker.ietf.org/doc/html/rfc7413)

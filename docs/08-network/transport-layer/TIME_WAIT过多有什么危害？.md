@@ -1,65 +1,178 @@
-# TIME_WAIT过多有什么危害？
+# TIME_WAIT 过多有什么危害
+
 ## 核心概念
 
-服务端TIME_WAIT过多有什么危害？
-占用系统资源，比如文件描述符、内存资源、CPU资源、线程资源；
-占用端口资源，端口资源也是有限的，一般可以开启的端口为32768~61000，也可以通过参数指定范围。
+TIME_WAIT 是 TCP 主动关闭方的正常状态，但过多会占用资源。危害分两类：占用内存和连接表项（影响内核网络栈性能）、占用端口资源（影响本端发起新连接）。客户端和服务端受影响的维度不同。
 
-客户端和服务端TIME_WAIT过多，造成的影响是不同的。
-如果客户端（主动发起关闭连接方）的TIME_WAIT状态过多，占满了所有端口资源，那么就无法对「目的IP+目的PORT」都一样的服务端发起连接了，被使用的端口只允许与其他的服务器（其他的目的IP）发起连接。
-如果是服务端（主动发起关闭连接方）的TIME_WAIT状态过多，并不会导致端口资源受限，因为服务端之间听一个端口，不同客户端能组成不同的四元组。理论上服务端可以建立很多连接，但是TCP连接过多，会占用系统资源、文件描述符、CPU资源、线程资源。
+## 标准回答
 
-如何优化TIME_WAIT？
-方式一：打开net.ipv4.tcp_tw_reuse和net.ipv4.tcp_timestamps选项
-开启参数后，可以复用处于TIME_WAIT的socket为新的连接所使用。但是需要注意，tcp_tw_reuse功能只能用于客户端（连接发起方），因为开启了该功能，在调用connect函数时，内核会随机找一个TIME_WAIT状态超过1秒的连接给新的连接复用。而且使用这个参数选项的前提是需要同时将TCP时间戳参数配置打开。
-这个时间戳字段保存在TCP头部的「选项」里，一共8个字节表示时间戳，其中一个4字节字段用来保存发送该数据包的时间，第二个4字节字段用来保存最近一次接收方发送到达数据的时间。
+TIME_WAIT 过多的两大危害：
 
-由于引入了时间戳，前面提到的2MSL问题就不复存在了，因为重复的数据包会因为时间戳过期被自然丢去。
+1. **占用内存和内核连接表项**：每条约 1.5-3 KB，10 万条约 30 MB。哈希表查找变慢，影响所有连接的处理速度。
+2. **占用端口资源**：客户端发起连接需要本地端口，TIME_WAIT 期间端口被占。客户端端口耗尽后无法对**同一目的 IP+端口**发起新连接。
 
-方式二：调小net.ipv4.tcp_max_buckets
-这个值默认是18000，当系统中处于TIME_WAIT的连接一旦超过这个阈值时，系统就会将后面的TIME_WAIT连接状态重置，这个方法比较暴力。
-方式三：程序中使用SO_LINGER，应用强制使用RST关闭
-可以通过设置socket选项，来设置调用close关闭连接行为。如果设置为0，那么调用close后，会立即发送一个RST标志给对端，该TCP连接将会跳过四次挥手，也就跳过TIME_WAIT状态，直接关闭。
-《UNIX网络编程》一书中说道，TIME_WAIT使我们的朋友，它有助于我们的，不要试图避免这个状态，而是应该弄清楚它。
-如果服务端要避免过多的TIME_WAIT状态的连接，就永远不要主动断开连接，然客户端去断开，由分布在各处的客户端去承担TIME_WAIT。
+服务端 TIME_WAIT 多不会端口耗尽（监听同一端口，靠五元组区分），但占内存。客户端 TIME_WAIT 多会端口耗尽，无法发起新连接。
 
-服务端出现大量的TIME_WAIT有哪些原因？
-首先，TIME_WAIT状态只有主动断开连接方才有，服务端出现TIME_WAIT表明连接是服务端主动断开。问题来了，什么场景下服务端会主动断开连接呢？
-HTTP没有使用长连接；
-HTTP长连接超时；
-HTTP长连接的请求数量达到上限；
+## 详细机制
 
-第一个场景：HTTP没有使用长连接
-如果需要使用长连接，则请求和响应报文的头信息均需要添加Connection: Keep-Alive，反之添加Connection:close表示使用短连接。在HTTP/1.0中默认是关闭的，从HTTP/1.1开始默认是开启了Keep-Alive。在RFC文档中，并没有明确由谁来关闭连接，请求和响应的双方都可以主动关闭TCP连接，不过，根据大多数Web服务的实现，不管哪一方禁用了HTTP Keep-Alive，都是由服务端主动关闭连接，那么此时服务端上就会出现TIME_WAIT状态的连接。
-第二个场景：HTTP长连接超时
-HTTP长连接的特点是，只要任意一端没有明确提出断开连接，则保持TCP连接状态。为了避免资源浪费的情况，web服务软件一般都会提供一个参数，用来指定HTTP长连接的超时时间，比如nginx提供的keepalive timeout参数，在指定时间内都没有再发起新的请求，定时器的时间一到，nginx 就会触发回调函数来关闭该连接，那么此时服务端上就会出现TIME_WAIT状态的连接，当服务端出现大量TIME_WAIT状态的连接时，可以往网络问题的方向排查，比如是否是因为网络问题，导致客户端发送的数据一直没有被服务端接收到，以至于HTTP 长连接超时。
+### 端口资源限制
 
-第三个场景：HTTP 长连接的请求数量达到上限
-Web 服务端通常会有个参数，来定义一条HTTP长连接上最大能处理的请求数量，当超过最大限制时，就会主动关闭连接。比如nginx的keepalive_reguests这个参数，这个参数是指一个HTTP长连接建立之后，nginx就会为这个连接设置一个计数器，记录这个HTTP长连接上已经接收并处理的客户端请求的数量。如果达到这个参数设置的最大值时，则nginx会主动关闭这个长连接，那么此时服务端上就会出现TIME_WAIT 状态的连接。针对这个场景下，解决的方式也很简单，调大nginx的keepalive_requests参数就行
+Linux 临时端口范围默认 32768-60999（约 28000 个）：
 
-## 面试总结
-### 核心概念
+```bash
+$ sysctl net.ipv4.ip_local_port_range
+net.ipv4.ip_local_port_range = 32768  60999
+```
 
-传输层负责端到端通信。TCP 面向连接、可靠、有序、字节流，依靠三次握手、序列号、确认、重传、滑动窗口、流量控制和拥塞控制；UDP 无连接、开销小、不保证可靠。
+客户端发起到同一目的 IP+端口的连接，每个连接需要一个本地端口。如果该目的端有 28000 个 TIME_WAIT，本地端口耗尽，新连接报 `Cannot assign requested address`。
 
-### 面试官想考什么
+但发起到**不同目的 IP 或端口**的连接不受影响，因为五元组不同。
 
-面试官高频考 TCP 三次握手/四次挥手、TIME_WAIT/CLOSE_WAIT、可靠传输、粘包、拥塞控制、连接异常和性能调优。
+### 内存和连接表项
 
-### 标准回答
+每个 TIME_WAIT 项在内核中保留：
+- sock 结构（约 1.5-3 KB，含五元组、序号等）
+- 哈希表项（用于查找）
+- 计时器
 
-TCP 建连通过 SYN、SYN+ACK、ACK 确认双方收发能力；断连通常四次挥手，因为双方方向的数据流要分别关闭。可靠性来自序列号、ACK、超时/快速重传、滑动窗口和校验。TIME_WAIT 保护旧报文消失并保证对端收到最后 ACK；CLOSE_WAIT 多通常是应用未主动关闭连接。UDP 适合实时音视频、DNS、QUIC 等可自定义可靠性或容忍丢包的场景。
+```bash
+# 查看 TIME_WAIT 数量
+$ ss -tan state time-wait | wc -l
+12345
 
-### 深挖追问
+# 内核计数器
+$ cat /proc/net/netstat | grep -i TW
+```
 
-- 这个现象发生在内核 TCP 状态机、网络链路还是应用代码中？
-- 如何用 ss/netstat、tcpdump、内核计数器证明丢包、重传、半连接或 TIME_WAIT 问题？
-- 哪些 Linux 参数、连接池参数和超时设置会影响生产表现？
+### 客户端 vs 服务端
 
-### 实战场景/示例
+**客户端 TIME_WAIT 多**：端口耗尽，无法连接同一目的服务。常见于压测客户端、爬虫、短连接服务调用方。
 
-Java 服务大量 CLOSE_WAIT，优先检查代码是否未关闭 socket/HTTP 响应流，或连接池释放逻辑异常；大量 TIME_WAIT 则看短连接、主动关闭方和连接复用。
+**服务端 TIME_WAIT 多**：不耗端口（监听同一端口），但占内存和连接表项。常见于服务端主动关闭短连接（如 HTTP 1.0、健康检查、限流后断开）。
 
-### 易错点/总结
+### 服务端 TIME_WAIT 增多的常见原因
 
-TCP 是字节流没有消息边界，所以会有粘包/拆包；应用层必须用长度字段、分隔符或固定长度等协议解决。
+1. **HTTP 没用长连接**：HTTP 1.0 默认短连接，每次请求都新建+关闭 TCP，服务端主动关闭后产生 TIME_WAIT。
+2. **HTTP 长连接超时**：Nginx `keepalive_timeout` 到期主动关闭，产生 TIME_WAIT。
+3. **HTTP 长连接请求数达到上限**：Nginx `keepalive_requests` 达到阈值主动关闭。
+4. **限流/熔断后主动断开**：服务端拒绝请求后主动 close。
+
+## 解决方案
+
+### 方案 1：启用 `tcp_tw_reuse`
+
+```bash
+$ sysctl net.ipv4.tcp_tw_reuse=1
+$ sysctl net.ipv4.tcp_timestamps=1  # 前提条件，默认已开
+```
+
+允许新连接复用 TIME_WAIT 状态的端口（仅客户端发起 connect 时生效，依赖 timestamps 防止旧报文复活）。这是最安全的优化方式。
+
+### 方案 2：调大本地端口范围
+
+```bash
+$ sysctl net.ipv4.ip_local_port_range="10000 65535"
+```
+
+把临时端口从 28000 个扩到 55000 个，缓解客户端端口耗尽。
+
+### 方案 3：让客户端主动关闭
+
+服务端不主动 close，由客户端发起关闭，TIME_WAIT 转移到客户端。HTTP 1.1 默认 keep-alive 就是这个思路。
+
+### 方案 4：使用 SO_LINGER 强制 RST
+
+```java
+Socket socket = new Socket();
+socket.setSoLinger(true, 0);  // close 时发 RST 而非 FIN，跳过 TIME_WAIT
+```
+
+代价是接收方收到 `Connection reset by peer`，不是优雅关闭。仅在压测等场景使用，生产慎用。
+
+### 方案 5：调小 `tcp_max_tw_buckets`
+
+```bash
+$ sysctl net.ipv4.tcp_max_tw_buckets=5000
+```
+
+超过阈值后强制清除 TIME_WAIT。比较暴力，但能防内存暴涨。默认值 18000（不同发行版可能不同）。
+
+### 不推荐：`tcp_tw_recycle`
+
+Linux 4.12 起已移除该选项。在 NAT 环境下会因 timestamp 不一致导致连接被错误丢弃，不要再开启。
+
+## 代码示例
+
+Java 客户端压测时启用端口复用：
+
+```java
+import java.net.*;
+
+public class Client {
+    public static void main(String[] args) throws Exception {
+        for (int i = 0; i < 100000; i++) {
+            Socket socket = new Socket();
+            // 不直接生效（tcp_tw_reuse 是内核参数），但 SO_REUSEADDR 是相关概念
+            socket.setReuseAddress(true);
+            socket.connect(new InetSocketAddress("example.com", 80));
+            socket.close();
+        }
+    }
+}
+```
+
+实际生效要靠内核 `tcp_tw_reuse=1`：
+
+```bash
+# 永久生效
+$ cat >> /etc/sysctl.conf <<EOF
+net.ipv4.tcp_tw_reuse = 1
+net.ipv4.ip_local_port_range = 10000 65535
+EOF
+$ sysctl -p
+```
+
+## 实战场景
+
+| 场景 | 现象 | 处理 |
+|------|------|------|
+| 压测客户端端口耗尽 | `Cannot assign requested address` | 调大 port_range + tw_reuse |
+| 服务端 TIME_WAIT 暴涨 | `ss -tan state time-wait` 数万 | 改长连接，让客户端主动关闭 |
+| Nginx 后端 TIME_WAIT 多 | Nginx 主动关上游连接 | 启用 upstream keepalive |
+| 短连接 API 服务 | 服务端 TIME_WAIT 多 | 改 HTTP 1.1 长连接 |
+| 跨网关大量 TIME_WAIT | 网关主动断连 | 评估是否能改后端主动关闭 |
+
+## 深挖追问
+
+**Q1：TIME_WAIT 占 fd 吗？**
+不占。TIME_WAIT 不持有文件描述符，只占内核连接表项和少量内存。
+
+**Q2：`tcp_tw_reuse` 在服务端有用吗？**
+对服务端 accept 新连接没用（服务端不主动 connect）。但如果服务端也作为客户端连别的服务（如反向代理），那部分连接的 TIME_WAIT 可以被复用。
+
+**Q3：调大 `tcp_max_tw_buckets` 有风险吗？**
+有。允许更多 TIME_WAIT 意味着更多内存占用。每个 TIME_WAIT 1.5-3 KB，10 万条 30 MB，可控；百万条就 300 MB，需要评估。
+
+**Q4：为什么 `tcp_tw_recycle` 被移除？**
+它在 NAT 环境下用 timestamp 判断报文是否来自同一连接，但 NAT 后多台机器 timestamp 不一致，导致部分连接被错误丢弃。Linux 4.12 起彻底移除。
+
+**Q5：BBR 能减少 TIME_WAIT 吗？**
+不能。BBR 是拥塞控制算法，和连接关闭无关。TIME_WAIT 是连接关闭后的状态，不受拥塞算法影响。
+
+## 易错点
+
+- **"服务端 TIME_WAIT 会端口耗尽"** — 不会，服务端监听固定端口，靠五元组区分连接。
+- **"`tcp_tw_recycle` 还能用"** — 4.12 起已移除，不要再开。
+- **"调短 TIME_WAIT 时长就好"** — Linux 中 TIME_WAIT 时长固定 60 秒，不可调。
+- **"TIME_WAIT 占用 fd"** — 不占。
+- **"开 `tcp_tw_reuse` 就万事大吉"** — 仅对客户端 connect 生效，且依赖 timestamps。
+
+## 总结
+
+TIME_WAIT 过多的危害分客户端和服务端：客户端端口耗尽影响发起新连接，服务端占内存影响内核性能。治本是改长连接让客户端主动关闭，治标是开 `tcp_tw_reuse` 和调大端口范围。`tcp_tw_recycle` 已废弃，`SO_LINGER` 强制 RST 是压测才用的非常手段。
+
+## 参考资料
+
+- [RFC 1337 — TIME-WAIT State Hazards](https://datatracker.ietf.org/doc/html/rfc1337)
+- [Linux tcp_tw_reuse 文档](https://www.kernel.org/doc/Documentation/networking/ip-sysctl.txt)
+- [Linux 4.12 移除 tcp_tw_recycle](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=4396e46187ca)

@@ -1,162 +1,273 @@
-# Java 中有哪些集合是线程安全的？
+# Java 中有哪些集合是线程安全的
 
 ## 核心概念
 
-Java 中线程安全集合可以分成三类：
+Java 线程安全集合分三代：**早期同步容器**（Vector、Hashtable，方法级 synchronized）、**Collections 包装类**（`synchronizedList` / `synchronizedMap` 等，粗粒度同步包装）、**并发容器**（`java.util.concurrent` 包下的 ConcurrentHashMap、CopyOnWriteArrayList、BlockingQueue 等）。
 
-1. **早期同步容器**：如 `Vector`、`Hashtable`，方法级别加 `synchronized`。
-2. **Collections 包装类**：如 `Collections.synchronizedList()`，给普通集合套一层同步包装。
-3. **并发容器**：如 `ConcurrentHashMap`、`CopyOnWriteArrayList`、`BlockingQueue`，针对并发场景做了专门设计。
-
-实际开发中，优先考虑 `java.util.concurrent` 包下的并发容器，而不是直接使用 `Vector`、`Hashtable`。
-
-## 面试官想考什么
-
-这个问题表面是在问“有哪些类”，实际是在考：
-
-- 你能不能区分“线程安全”和“高并发性能好”。
-- 你是否知道同步容器和并发容器的区别。
-- 你是否能根据读多写多、生产消费、去重缓存等场景选择合适集合。
-- 你是否知道复合操作仍然可能需要额外同步。
+实际开发中，优先用 `java.util.concurrent` 下的并发容器，**Vector 和 Hashtable 已经被淘汰**，只在维护老代码时才会遇到。
 
 ## 标准回答
 
-Java 常见线程安全集合包括：
+一句话结论：**Java 线程安全集合分三类——早期同步容器（Vector、Hashtable，方法级 synchronized，性能差）、Collections 同步包装（synchronizedList/Map，粗粒度锁）、并发容器（ConcurrentHashMap、CopyOnWriteArrayList、BlockingQueue，专门为并发设计）。新代码一律用并发容器。**
 
-### 1. Vector
+常见线程安全集合清单：
 
-`Vector` 是早期线程安全 List，很多方法使用 `synchronized` 修饰。它能保证单个方法调用的线程安全，但锁粒度大，并发性能一般，现在较少作为首选。
+| 类别 | 类 | 特点 |
+|------|----|----|
+| 同步容器 | `Vector` | List，方法级 synchronized，扩容 2 倍 |
+| 同步容器 | `Hashtable` | Map，方法级 synchronized，不允 null |
+| 同步包装 | `Collections.synchronizedList` | 任意 List 套同步包装 |
+| 同步包装 | `Collections.synchronizedMap` | 任意 Map 套同步包装 |
+| 并发容器 | `ConcurrentHashMap` | 高并发 Map，JDK 8 用 CAS + 桶级 synchronized |
+| 并发容器 | `CopyOnWriteArrayList` | 读多写少 List，写时复制 |
+| 并发容器 | `CopyOnWriteArraySet` | 基于 CopyOnWriteArrayList 的 Set |
+| 并发容器 | `ConcurrentLinkedQueue` | CAS 无界非阻塞队列 |
+| 并发容器 | `ConcurrentLinkedDeque` | CAS 双端队列 |
+| 并发容器 | `ArrayBlockingQueue` | 有界阻塞队列 |
+| 并发容器 | `LinkedBlockingQueue` | 链表阻塞队列 |
+| 并发容器 | `PriorityBlockingQueue` | 优先级阻塞队列 |
+| 并发容器 | `DelayQueue` | 延迟队列 |
+| 并发容器 | `SynchronousQueue` | 直接传递，无容量 |
+| 并发容器 | `ConcurrentSkipListMap` | 跳表实现的并发有序 Map |
+| 并发容器 | `ConcurrentSkipListSet` | 跳表实现的并发有序 Set |
 
-### 2. Hashtable
+## 实现原理
 
-`Hashtable` 是早期线程安全 Map，也通过方法级 `synchronized` 保证线程安全。它不允许 null key 和 null value。现代并发场景通常用 `ConcurrentHashMap` 替代。
-
-### 3. Collections.synchronizedXxx
-
-`Collections` 可以把普通集合包装成同步集合：
+### 1. 同步容器：Vector / Hashtable
 
 ```java
-List<String> list = Collections.synchronizedList(new ArrayList<>());
-Map<String, String> map = Collections.synchronizedMap(new HashMap<>());
+// Vector.add
+public synchronized boolean add(E e) { ... }
+
+// Hashtable.put
+public synchronized V put(K key, V value) { ... }
 ```
 
-它的原理是在每个方法外层加同一把锁，简单但锁竞争较重。遍历时仍需要手动加锁。
+特点：每个方法 `synchronized` 锁住整个对象，所有操作竞争同一把锁，并发吞吐量差。复合操作（如 `containsKey + put`）仍不原子。
 
-### 4. ConcurrentHashMap
-
-`ConcurrentHashMap` 是高并发 Map。JDK 1.8 中主要通过 CAS + synchronized + Node 数组 + 链表/红黑树实现，降低了锁粒度，适合高并发读写缓存、计数、状态表等场景。
-
-### 5. CopyOnWriteArrayList
-
-`CopyOnWriteArrayList` 适合读多写少场景。写操作会复制底层数组，修改副本后再替换引用；读操作通常不加锁，遍历时看到的是快照。
-
-典型场景：配置监听器列表、黑白名单快照、读多写少的订阅者列表。
-
-### 6. BlockingQueue
-
-`BlockingQueue` 是线程安全队列，常用于生产者消费者模型。例如：
-
-- `ArrayBlockingQueue`
-- `LinkedBlockingQueue`
-- `PriorityBlockingQueue`
-- `DelayQueue`
-- `SynchronousQueue`
-
-线程池中的任务队列就大量使用了阻塞队列。
-
-### 7. ConcurrentLinkedQueue / ConcurrentLinkedDeque
-
-这是基于非阻塞算法的并发队列/双端队列，适合高并发无界队列场景，不提供阻塞等待能力。
-
-## 深挖追问
-
-### 1. 线程安全集合是否所有操作都安全？
-
-单个方法调用通常安全，但复合操作不一定安全。例如：
+### 2. Collections 同步包装
 
 ```java
-if (!list.contains("A")) {
-    list.add("A");
+public static <T> List<T> synchronizedList(List<T> list) {
+    return (list instanceof RandomAccess
+            ? new SynchronizedRandomAccessList<>(list)
+            : new SynchronizedList<>(list));
+}
+
+static class SynchronizedList<E> extends SynchronizedCollection<E> implements List<E> {
+    public void add(int index, E element) {
+        synchronized (mutex) {list.add(index, element);}
+    }
+    // ...
 }
 ```
 
-即使 `list` 是 synchronizedList，上面这两步之间也可能被其他线程插入，导致重复添加。需要额外同步，或选择支持原子复合操作的数据结构。
-
-### 2. synchronizedList 遍历为什么还要手动加锁？
-
-因为迭代器遍历是多次方法调用组成的复合过程。官方推荐：
+特点：内部用 `mutex` 对象锁，每个方法包装一层 `synchronized`。本质和 Vector 一样是粗粒度锁。迭代时必须手动加锁：
 
 ```java
 List<String> list = Collections.synchronizedList(new ArrayList<>());
+synchronized (list) {                        // 遍历必须手动加锁
+    for (String s : list) { ... }
+}
+```
 
-synchronized (list) {
-    Iterator<String> it = list.iterator();
-    while (it.hasNext()) {
-        System.out.println(it.next());
+### 3. 并发容器
+
+#### ConcurrentHashMap
+
+JDK 7：分段锁 `Segment[]`，每个 Segment 是一个独立的小 HashMap，默认 16 个段，并发度 16。
+
+JDK 8：抛弃 Segment，改用 `Node[]` + CAS + 桶级 synchronized。读完全无锁（volatile 读 Node 的 val 和 next），写时只锁住桶头节点，并发度等于桶数。
+
+```java
+// 简化的 putVal 逻辑
+final V putVal(K key, V value, boolean onlyIfAbsent) {
+    int hash = spread(key.hashCode());
+    for (Node<K,V>[] tab = table;;) {
+        Node<K,V> f; int n, i, fh;
+        if (tab == null || (n = tab.length) == 0)
+            tab = initTable();
+        else if ((f = tabAt(tab, i = (n - 1) & hash)) == null) {
+            // 桶空，CAS 直接放入
+            if (casTabAt(tab, i, null, new Node<>(hash, key, value, null)))
+                break;
+        } else if ((fh = f.hash) == MOVED) {
+            // 正在扩容，帮忙迁移
+            tab = helpTransfer(tab, f);
+        } else {
+            synchronized (f) {              // 锁住桶头节点
+                if (tabAt(tab, i) == f) {
+                    // 链表或红黑树插入
+                }
+            }
+        }
     }
 }
 ```
 
-否则遍历过程中其他线程修改集合，仍可能抛出 `ConcurrentModificationException` 或读到不一致状态。
+#### CopyOnWriteArrayList
 
-### 3. ConcurrentHashMap 为什么不能完全替代 HashMap？
+读无锁，写时复制整个数组后用 `volatile` 替换引用。详见 [CopyOnWriteArrayList 底层实现原理](CopyOnWriteArrayList底层实现原理是怎么样的？.md)。
 
-`ConcurrentHashMap` 为并发付出了额外成本，单线程或局部变量场景没必要使用。并且它不允许 null key/null value，这和 HashMap 不同。普通非并发场景使用 HashMap 更简单。
-
-### 4. CopyOnWriteArrayList 为什么适合读多写少？
-
-因为每次写入都会复制数组，写成本是 O(n)，内存开销也较高。但读操作无需加锁，遍历是稳定快照，所以读多写少时收益明显。
-
-## 实战场景
-
-### 场景 1：本地缓存表
-
-多线程读写用户状态缓存，可以使用 `ConcurrentHashMap`：
+#### BlockingQueue 系列
 
 ```java
-ConcurrentHashMap<Long, String> statusMap = new ConcurrentHashMap<>();
+// ArrayBlockingQueue.put / take
+public void put(E e) throws InterruptedException {
+    final ReentrantLock lock = this.lock;
+    lock.lockInterruptibly();
+    try {
+        while (count == items.length)        // 队列满，等待
+            notFull.await();
+        enqueue(e);
+    } finally { lock.unlock(); }
+}
 
-statusMap.put(userId, "ONLINE");
-String status = statusMap.get(userId);
-```
-
-如果要“没有就初始化”，不要写成 `containsKey + put`，推荐：
-
-```java
-UserProfile profile = cache.computeIfAbsent(userId, id -> loadProfile(id));
-```
-
-### 场景 2：生产者消费者
-
-```java
-BlockingQueue<Runnable> queue = new LinkedBlockingQueue<>(1000);
-
-queue.put(task);   // 队列满时阻塞
-Runnable task = queue.take(); // 队列空时阻塞
-```
-
-这种场景不应该用 synchronizedList 硬凑，因为队列的阻塞语义和容量控制更重要。
-
-### 场景 3：监听器列表
-
-```java
-CopyOnWriteArrayList<Listener> listeners = new CopyOnWriteArrayList<>();
-
-for (Listener listener : listeners) {
-    listener.onEvent(event);
+public E take() throws InterruptedException {
+    final ReentrantLock lock = this.lock;
+    lock.lockInterruptibly();
+    try {
+        while (count == 0)                   // 队列空，等待
+            notEmpty.await();
+        return dequeue();
+    } finally { lock.unlock(); }
 }
 ```
 
-监听器通常注册少、通知多，CopyOnWriteArrayList 很合适。
+用 `ReentrantLock + 两个 Condition` 实现阻塞语义，是线程池任务队列的基础。
+
+#### ConcurrentLinkedQueue
+
+基于 Michael & Scott 算法的无锁链表队列，全 CAS 操作，无阻塞等待。适合高并发无界队列，不适用于生产者-消费者（无阻塞等待）。
+
+## 代码示例
+
+### 高并发 Map
+
+```java
+ConcurrentHashMap<Long, UserProfile> cache = new ConcurrentHashMap<>();
+
+// 原子复合操作
+cache.computeIfAbsent(userId, this::loadFromDb);
+
+// 原子累加
+cache.merge(userId, 1, Integer::sum);
+```
+
+### 生产者-消费者
+
+```java
+BlockingQueue<Task> queue = new LinkedBlockingQueue<>(1000);
+
+// 生产者
+new Thread(() -> {
+    while (true) {
+        Task t = generate();
+        queue.put(t);              // 队列满自动阻塞
+    }
+}).start();
+
+// 消费者
+new Thread(() -> {
+    while (true) {
+        Task t = queue.take();     // 队列空自动阻塞
+        process(t);
+    }
+}).start();
+```
+
+### 监听器列表
+
+```java
+CopyOnWriteArrayList<Listener> listeners = new CopyOnWriteArrayList<>();
+listeners.add(new Listener());      // 写少
+for (Listener l : listeners) {      // 读多，无锁遍历
+    l.on(event);
+}
+```
+
+### 不允 null 的注意点
+
+```java
+ConcurrentHashMap<String, String> map = new ConcurrentHashMap<>();
+map.put("k", null);   // 抛 NullPointerException
+// 从 HashMap 迁移数据时要先过滤 null
+```
+
+## 实战场景
+
+| 场景 | 推荐方案 | 注意点 |
+|------|---------|--------|
+| 高并发读写缓存 | `ConcurrentHashMap` | 不允 null，复合操作用 `computeIfAbsent` |
+| 监听器 / 订阅者列表 | `CopyOnWriteArrayList` | 读多写少，写少且数据量小 |
+| 线程池任务队列 | `LinkedBlockingQueue` / `ArrayBlockingQueue` | 必须设容量，默认 `Integer.MAX_VALUE` 易 OOM |
+| 延迟任务调度 | `DelayQueue` | 任务实现 `Delayed` 接口 |
+| 优先级出队 | `PriorityBlockingQueue` | 不保证遍历有序，只保证队首最优 |
+| 高并发无界队列 | `ConcurrentLinkedQueue` | 无阻塞等待，不能用于生产者-消费者 |
+| 并发有序 Map | `ConcurrentSkipListMap` | 跳表实现，`O(log n)` |
+| 静态配置只读 | 普通 `HashMap` + `final` 引用 | 安全发布即可，无需并发容器 |
+
+## 深挖追问
+
+### 线程安全集合所有操作都安全吗？
+
+不全是。单方法调用通常安全，但**复合操作不一定安全**：
+
+```java
+// 即使 list 是 synchronizedList，下面两步之间也可能被插入
+if (!list.contains("A")) {
+    list.add("A");              // 可能多个线程同时通过判断，重复添加
+}
+```
+
+要保证原子性，必须额外加锁或用支持原子复合操作的容器（如 `ConcurrentHashMap.computeIfAbsent`）。
+
+### synchronizedList 遍历为什么还要手动加锁？
+
+迭代器是多次 `next()` 调用组成的复合过程。如果遍历期间其他线程修改集合，可能抛 `ConcurrentModificationException` 或读到不一致状态。官方推荐：
+
+```java
+synchronized (list) {
+    Iterator<String> it = list.iterator();
+    while (it.hasNext()) { it.next(); }
+}
+```
+
+### ConcurrentHashMap 为什么不能完全替代 HashMap？
+
+- 不允许 null key/value，业务有 null 时需先过滤。
+- 单线程场景下并发容器的 CAS、volatile 等有额外开销，没必要。
+- ConcurrentHashMap 弱一致（迭代时看到的是某时刻快照），有些场景需要强一致。
+
+### ConcurrentHashMap 的 size 准确吗？
+
+JDK 8 的 `size()` 是近似值。它把 `baseCount` + 所有 `CounterCell` 的值相加，并发下可能略小于真实值（部分计数还没合并）。如果需要精确值，要在外部加锁。
+
+### CopyOnWriteArrayList 为什么适合读多写少？
+
+每次写复制整个数组，写成本 `O(n)`；读完全无锁，性能与 ArrayList 相当。读多写少时，写偶发的 `O(n)` 成本被读的零开销抵消。但写多时复制成本会拖垮系统。
+
+### Vector / Hashtable 为什么被淘汰？
+
+- 锁粒度太粗，所有方法竞争同一把锁，并发吞吐量差。
+- API 设计陈旧（Vector 继承 AbstractList 但实现 Stack 子类，Hashtable 继承 Dictionary）。
+- 缺少现代 Map 的扩展（如 computeIfAbsent、merge）。
+- ConcurrentHashMap / CopyOnWriteArrayList 已经覆盖了它们的场景且性能更好。
 
 ## 易错点
 
-- `Vector`、`Hashtable` 线程安全但不代表性能好。
-- synchronized 包装集合遍历时仍要手动加锁。
-- `ConcurrentHashMap` 不允许 null key/null value。
-- 线程安全集合只能保证自身结构安全，不能自动保证业务操作的原子性。
-- 写多场景慎用 `CopyOnWriteArrayList`，否则复制成本很高。
+- "线程安全"不等于"高并发性能好"，Vector 线程安全但并发差。
+- synchronizedList 迭代时仍要手动加锁，否则抛 CME。
+- `ConcurrentHashMap` 不允许 null key/value，从 HashMap 迁移要过滤 null。
+- `LinkedBlockingQueue` 不指定容量时默认 `Integer.MAX_VALUE`，生产环境必设容量。
+- `CopyOnWriteArrayList` 不要用于写多场景，复制成本会拖垮系统。
+- `PriorityBlockingQueue` 出队有序，遍历无序，不要用 for-each 假定顺序。
 
 ## 总结
 
-面试回答可以按“同步容器、同步包装类、并发容器”三类展开。实际选型时更重要的是场景：Map 高并发读写选 `ConcurrentHashMap`，读多写少 List 选 `CopyOnWriteArrayList`，生产消费选 `BlockingQueue`，普通单线程场景不要过度使用线程安全集合。
+记忆三类：早期同步容器（Vector/Hashtable，淘汰）、同步包装（synchronizedXxx，粗粒度锁）、并发容器（j.u.c 包，新代码首选）。选型看场景：高并发 Map 选 ConcurrentHashMap，读多写少 List 选 CopyOnWriteArrayList，生产消费选 BlockingQueue，并发有序选 ConcurrentSkipListMap。Vector 和 Hashtable 只在维护老代码时遇到，新代码不要写。
+
+## 参考资料
+
+- [Java Concurrency in Practice - Chapter 5 Building Blocks](https://jcip.net/)
+- [OpenJDK java.util.concurrent 包](https://github.com/openjdk/jdk/tree/jdk8u/jdk/src/share/classes/java/util/concurrent)

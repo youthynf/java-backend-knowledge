@@ -1,55 +1,202 @@
-# ThreadPoolExecutor线程池任务执行流程是怎么样的？
+# ThreadPoolExecutor 线程池任务执行流程是怎么样的
 
-ThreadPoolExecutor线程池任务执行流程是怎么样的？
-ThreadPoolExecutor提供了有返回值和无返回值的执行任务的方法：
-void execute(Runnable command)：无返回值的任务提交
-Future submit(Runnable task)：提交Runnable任务，获取执行结果
-Future submit(Runnable task, T result)：提交Runnable任务并指定执行结果
-Future submit(Callabletask)：提交Callable任务
-其中submit实际上最终还是调用execute方法，只是增加返回一个Future对象，用来获取任务执行结果。
-
-execute(Runnable command)方法执行步骤：
-提交Runnable时，不管当前线程是否存在空闲线程，只要线程数量小于核心线程数，则创建新的线程，否则加入等待队列；
-如果等待队列已满，则判断当前线程数是否小于最大线程数，如果是则创建新的线程执行，并将当前Runnable作为线程的第一个执行任务；
-如果线程数大于等于最大线程数，且等待队列已满，则新增的Runnable任务将会执行指定的拒绝策略。
-助记：优先创建核心线程，不管线程是否空闲，直到达到核心线程数；其次加入阻塞队列，直到队列已满；再次创建线程，直到达到最大线程数；最后执行拒绝策略。
-
-## 面试总结
-
-围绕「ThreadPoolExecutor线程池任务执行流程是怎么样的？」，面试官通常不只考概念定义，更关注你能否把机制、使用场景和线上问题串起来。
-
-### 核心回答
-
-1. 线程池通过复用线程降低创建销毁成本，并用队列、拒绝策略和参数控制并发压力。
-2. 核心参数要结合任务类型、RT、吞吐、下游容量和机器资源一起评估。
-3. 线上重点关注活跃线程数、队列积压、拒绝次数、任务耗时和异常吞噬。
-
-### 高频追问
-
-- 为什么不建议直接使用 Executors 默认工厂？
-- CPU 密集型和 IO 密集型线程数如何估算？
-- 队列满、线程满、下游慢时如何降级和止血？
-
-### 实战落地
-
-- **选型前**：先判断是互斥访问、线程协作、任务编排，还是限流隔离。
-- **编码时**：控制共享变量范围，明确锁对象、超时策略、异常处理和资源释放。
-- **上线后**：观察线程数、队列长度、阻塞时间、拒绝次数和 RT 抖动，必要时用线程 Dump 验证。
-
-### 易错点
-
-- 不要使用无界队列掩盖流量问题。
-- 异步任务要显式处理异常、超时和上下文传递。
 ## 核心概念
-ThreadPoolExecutor线程池任务执行流程是怎么样的？ 可以放在“并发能力”这条主线里理解。复习时不要只背结论，要先说明它解决的核心问题，再解释关键机制、适用边界和代价。围绕这个知识点，重点关注：线程安全、可见性、原子性、锁竞争、线程池参数、队列选择、拒绝策略和故障隔离。如果面试官继续追问，通常会从“为什么这样设计、在什么场景会失效、线上如何排查”三个方向展开。
 
-## 面试回答与追问
-- **标准回答**：先给出 ThreadPoolExecutor线程池任务执行流程是怎么样的？ 的定位，再说明它依赖的核心原理，最后结合业务场景说明如何使用。回答时要把“能解决什么问题”和“会带来什么成本”一起讲清楚。
-- **常见追问**：如果数据量、并发量或调用链路继续放大，ThreadPoolExecutor线程池任务执行流程是怎么样的？ 的瓶颈会出现在哪里？如何观测、如何优化、如何回滚？
-- **易错点**：不要把概念和具体实现混在一起，也不要只说 API 名称。面试中更重要的是说清楚边界条件、失败场景和取舍依据。
+`ThreadPoolExecutor` 是 Java 线程池的核心实现。提交任务后，它按"核心线程 → 阻塞队列 → 非核心线程 → 拒绝策略"四步顺序处理。这个顺序是它和很多其他线程池实现（如 Tomcat）最大的区别：核心线程满后**先入队**，而不是直接扩容到最大线程数。
 
-## 实战场景与排查
-典型落地场景包括：高并发接口、异步任务、定时任务、批量处理、缓存刷新、消息消费等需要控制吞吐与稳定性的场景。实际处理线上问题时，可以按“现象确认 → 指标采集 → 假设验证 → 小步修复 → 复盘沉淀”的路径推进。先看日志、监控、链路追踪和核心指标，再判断是容量问题、配置问题、代码路径问题，还是外部依赖抖动。
+任务提交入口有两个：`execute(Runnable)` 无返回值，`submit(Callable/Runnable)` 有返回值。`submit` 内部最终也会调用 `execute`，只是额外把任务包装成 `FutureTask` 用于返回结果。
+
+## 标准回答
+
+`execute(Runnable command)` 的执行流程可以浓缩为四步：
+
+1. 工作线程数 `< corePoolSize`：创建新的核心线程执行任务（即使有空闲线程也新建）。
+2. 工作线程数 `≥ corePoolSize`：尝试把任务放入阻塞队列。
+3. 队列已满且线程数 `< maximumPoolSize`：创建非核心线程执行任务。
+4. 队列已满且线程数 `≥ maximumPoolSize`：执行拒绝策略。
+
+助记口诀：**核心满 → 入队列 → 队列满 → 扩到 max → 再满 → 拒绝**。
+
+## 实现原理
+
+### execute 方法源码骨架
+
+```java
+public void execute(Runnable command) {
+    if (command == null) throw new NullPointerException();
+    int c = ctl.get();
+
+    // 步骤 1：少于核心线程，新增 worker
+    if (workerCountOf(c) < corePoolSize) {
+        if (addWorker(command, true))   // true 表示核心线程
+            return;
+        c = ctl.get();
+    }
+
+    // 步骤 2：进入 RUNNING 状态且成功入队
+    if (isRunning(c) && workQueue.offer(command)) {
+        int recheck = ctl.get();
+        // 二次校验：入队后线程池可能被关闭，需移除并执行拒绝策略
+        if (!isRunning(recheck) && remove(command))
+            reject(command);
+        else if (workerCountOf(recheck) == 0)
+            addWorker(null, false);      // 兜底：保证至少有一个线程消费队列
+    }
+    // 步骤 3：队列满，尝试创建非核心线程
+    else if (!addWorker(command, false))
+        // 步骤 4：达到 maximumPoolSize，执行拒绝策略
+        reject(command);
+}
+```
+
+### addWorker 的关键逻辑
+
+`addWorker(Runnable firstTask, boolean core)` 做两件事：
+
+1. CAS 增加 `ctl` 中的 worker 计数（`core=true` 上限是 `corePoolSize`，`false` 上限是 `maximumPoolSize`）。
+2. 加锁创建 `Worker` 对象，构造 `Thread` 并 `start()`。`firstTask` 作为这个线程的第一个任务，避免新线程再去队列里抢任务。
+
+### Worker 的运行循环
+
+`Worker` 实现了 `Runnable`，被线程 `start` 后进入 `runWorker`：
+
+```java
+final void runWorker(Worker w) {
+    Thread wt = Thread.currentThread();
+    Runnable task = w.firstTask;
+    w.firstTask = null;
+    w.unlock(); // 允许中断
+    try {
+        while (task != null || (task = getTask()) != null) {
+            w.lock();
+            // 状态检查：STOP 状态需要中断当前线程
+            if (runStateAtLeast(ctl.get(), STOP) &&
+                (Thread.interrupted() || runStateAtLeast(ctl.get(), STOP)))
+                wt.interrupt();
+            try {
+                beforeExecute(wt, task);
+                task.run();           // 真正执行任务
+                afterExecute(task, null);
+            } catch (Throwable ex) {
+                afterExecute(task, ex);
+            } finally {
+                task = null;
+                w.completedTasks++;
+                w.unlock();
+            }
+        }
+    } finally {
+        processWorkerExit(w, false);   // 线程退出处理
+    }
+}
+```
+
+### getTask 与线程回收
+
+`getTask()` 是工作线程从队列取任务的入口，也是非核心线程超时回收的触发点：
+
+```java
+private Runnable getTask() {
+    boolean timedOut = false;
+    for (;;) {
+        int c = ctl.get();
+        // SHUTDOWN 且队列空 → 返回 null，线程退出
+        // STOP → 返回 null，线程退出
+        // ...
+        int wc = workerCountOf(c);
+        // allowCoreThreadTimeOut=true 或当前是非核心线程 → timed=true
+        boolean timed = allowCoreThreadTimeOut || wc > corePoolSize;
+
+        // 超时且还能减线程 → 返回 null 让线程退出
+        if ((wc > maximumPoolSize || (timed && timedOut))
+            && (wc > 1 || workQueue.isEmpty())) {
+            return null;
+        }
+        try {
+            Runnable r = timed ?
+                workQueue.poll(keepAliveTime, TimeUnit.NANOSECONDS) :
+                workQueue.take();      // 核心线程阻塞等待
+            if (r != null) return r;
+            timedOut = true;
+        } catch (InterruptedException retry) {
+            timedOut = false;
+        }
+    }
+}
+```
+
+关键点：核心线程调用 `take()` 无限期阻塞；非核心线程调用 `poll(keepAliveTime)`，超时未拿到任务返回 null，工作线程随之退出。
+
+## 代码示例
+
+```java
+ThreadPoolExecutor executor = new ThreadPoolExecutor(
+        2,                                  // corePoolSize
+        4,                                  // maximumPoolSize
+        30L, TimeUnit.SECONDS,              // 非核心线程空闲存活时间
+        new ArrayBlockingQueue<>(2),        // 容量 2 的有界队列
+        Executors.defaultThreadFactory(),
+        new ThreadPoolExecutor.AbortPolicy());
+
+// 依次提交 7 个任务，观察步骤
+for (int i = 1; i <= 7; i++) {
+    final int idx = i;
+    try {
+        executor.execute(() -> {
+            System.out.println("任务 " + idx + " 由 " + Thread.currentThread().getName() + " 执行");
+            try { TimeUnit.SECONDS.sleep(2); } catch (InterruptedException ignored) {}
+        });
+        System.out.println("任务 " + idx + " 提交成功，队列大小=" + executor.getQueue().size());
+    } catch (RejectedExecutionException e) {
+        System.out.println("任务 " + idx + " 被拒绝");
+    }
+}
+```
+
+执行结果：任务 1、2 创建核心线程；任务 3、4 入队；任务 5、6 触发非核心线程创建到 4；任务 7 队列满且线程到 max，触发 AbortPolicy 拒绝。
+
+## 实战场景
+
+| 场景 | 用法 | 注意点 |
+|------|------|--------|
+| 限流削峰 | 大流量接口 + 有界队列 + 拒绝策略 | 队列不能无界，否则 OOM |
+| 突发流量应对 | 较小核心 + 较大 max + 较小队列 | 队列小才会触发扩容到 max |
+| 低延迟快速失败 | 小队列 + AbortPolicy | 任务被拒绝时通过降级返回默认值 |
+| 串行消费 | core=max=1 + LinkedBlockingQueue | 单线程顺序处理 |
+
+## 深挖追问
+
+### 为什么核心线程满后先入队，而不是直接创建到 max？
+
+复用已有线程成本远低于新建线程；同时避免瞬时流量导致线程数过早膨胀。详见 [为什么核心线程池满了之后是先加入阻塞队列而不是直接创建线程？](为什么核心线程池满了之后是先加入阻塞队列而不是直接创建线程？.md)。
+
+### 核心线程有空闲时还会创建新核心线程吗？
+
+会。只要工作线程数 `< corePoolSize`，即使有空闲线程也直接创建。这是源码 `workerCountOf(c) < corePoolSize` 分支决定的，不检查空闲状态。
+
+### prestartAllCoreThreads 是干什么的？
+
+`prestartAllCoreThreads()` 提前创建所有核心线程并让它们阻塞在队列上，避免冷启动时第一批任务被串行创建线程的延迟影响。
+
+### submit 和 execute 的区别？
+
+`submit` 把 `Runnable/Callable` 包装成 `FutureTask` 后调用 `execute`；返回 `Future` 用于获取结果或捕获异常。`execute` 直接执行 `Runnable`，异常会冒到 `UncaughtExceptionHandler`。
+
+## 易错点
+
+- 误以为"有空闲线程就复用，否则新建"。前 `corePoolSize` 个任务无论空闲与否都会新建线程。
+- 用了无界队列（如默认 `LinkedBlockingQueue`），`maximumPoolSize` 永远不会触发，相当于固定大小线程池。
+- `submit` 提交的任务抛异常时不会打印到控制台，必须 `future.get()` 才能看到。
+- `allowCoreThreadTimeOut(true)` 后核心线程也会被回收，可能让"常态有核心线程兜底"的假设失效。
 
 ## 总结
-复习 ThreadPoolExecutor线程池任务执行流程是怎么样的？ 时，建议把它和相邻知识点放在一起比较：相同点是什么、区别在哪里、为什么当前场景选择它而不是替代方案。能讲清楚这些内容，才算真正掌握。
+
+`execute` 的四步流程是线程池最核心的面试点，关键在于理解"先入队再扩容"的设计动机。结合 `Worker.runWorker` 的取任务循环、`getTask` 中 `take` 与 `poll` 的差异，可以解释线程复用、空闲回收、优雅关闭等一系列行为。
+
+## 参考资料
+
+- [JDK ThreadPoolExecutor 源码](https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/concurrent/ThreadPoolExecutor.java)
+- [Java 并发编程的艺术](https://book.douban.com/subject/26591326/)
+- [美团技术团队 - Java 线程池实现原理及其在美团业务中的实践](https://tech.meituan.com/2020/04/02/java-pooling-pratice-in-meituan.html)
+
+---
